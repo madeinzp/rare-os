@@ -218,6 +218,20 @@ if touch "$LOG" 2>/dev/null; then
     exec > >(tee -a "$LOG") 2>&1
 fi
 
+# Whatever happens from here on, the script puts back what it changed for the switch (SELinux mode,
+# temporary files), also when it stops on an error, Ctrl-C or a closed SSH session.
+KEY_FILE="" SWITCH_OUT="" SELINUX_RELAXED=0
+selinux_back() {
+    if (( SELINUX_RELAXED )); then { echo 1 > /sys/fs/selinux/enforce; } 2>/dev/null || true; SELINUX_RELAXED=0; fi
+}
+cleanup() {
+    selinux_back
+    if [[ -n "$KEY_FILE" ]]; then rm -f "$KEY_FILE"; fi
+    if [[ -n "$SWITCH_OUT" ]]; then rm -f "$SWITCH_OUT"; fi
+}
+trap cleanup EXIT
+trap 'exit 130' INT TERM HUP
+
 # ------------------------------------------------------------------ 1. device
 
 step "Checking this device"
@@ -243,7 +257,7 @@ if [[ "$BOOTED" == *"$REG/$REPO"* && "${RARE_FORCE:-0}" != 1 ]]; then
     exit 0
 fi
 
-SB="$(sb_state)" MOK_NEEDED=0 KEY_FILE=""
+SB="$(sb_state)" MOK_NEEDED=0
 if [[ $SB == off ]]; then
     ok "Secure Boot is off, so no extra step at the next start"
 else
@@ -251,7 +265,6 @@ else
         "Turn Secure Boot off in the firmware settings (Security > Secure Boot > Disabled, then Save)" \
         "and run the command again."
     KEY_FILE="$(mktemp /tmp/rare-os-key.XXXXXX.der)"
-    trap 'rm -f "$KEY_FILE"' EXIT
     printf '%s' "$UBLUE_KEY_B64" | base64 -d > "$KEY_FILE"
     case "$(key_state "$KEY_FILE")" in
         enrolled) ok "Secure Boot is on and Rare OS's start-up key is already trusted" ;;
@@ -354,12 +367,46 @@ ask "Download Rare OS now? Your files and games stay." || { printf '\n  Stopped.
 # on its first boot.
 note "Downloading about 8 GB. On good Wi-Fi this takes 10 to 30 minutes; keep the device awake and plugged in."
 note "If it stops halfway, run the same command again: it keeps what it already downloaded."
+
+# SELinux: the switch writes Rare OS's files with Rare OS's own SELinux labels, from Rare OS's
+# policy, which has types the running system's may not (Fedora 43's, which GameOS 43 is built
+# on, has no steamos_manager_*, waydroid_* or mysqld_unit_file_t, for example). Under Enforcing
+# the kernel refuses an unknown label unless the writer has mac_admin. bootc started from a terminal runs as install_t, which
+# has it; started from a systemd-run job (the phone route) it stays in the job's initrc_t, which
+# does not: "fsetxattr(security.selinux): Invalid argument" once everything is downloaded. So
+# SELinux is permissive while the switch writes; it is enforcing again right after, on any exit
+# (cleanup), and at the next start in any case.
+SELINUX_ENFORCE=/sys/fs/selinux/enforce
+if [[ "$(cat "$SELINUX_ENFORCE" 2>/dev/null)" == 1 ]] && { echo 0 > "$SELINUX_ENFORCE"; } 2>/dev/null; then
+    SELINUX_RELAXED=1
+    note "SELinux is permissive while Rare OS is written to disk, and enforcing again right after."
+fi
+
+SWITCH_OUT="$(mktemp /tmp/rare-os-switch.XXXXXX.log)"
+set +e
 if [[ $TOOL == bootc ]]; then
-    bootc switch --transport registry "$IMAGE" \
-        || fail "The download did not finish." "Your current system is untouched. Check Wi-Fi and run the command again."
+    bootc switch --transport registry "$IMAGE" 2>&1 | tee "$SWITCH_OUT"
 else
-    rpm-ostree rebase "ostree-unverified-registry:${IMAGE}" \
-        || fail "The download did not finish." "Your current system is untouched. Check Wi-Fi and run the command again."
+    rpm-ostree rebase "ostree-unverified-registry:${IMAGE}" 2>&1 | tee "$SWITCH_OUT"
+fi
+rc=${PIPESTATUS[0]}
+set -e
+selinux_back
+if (( rc != 0 )); then
+    if grep -q 'GetLayerInfo' "$SWITCH_OUT"; then
+        fail "This system's image tools are too old to read this Rare OS download (GetLayerInfo)." \
+             "Install your current system's latest update first (on a SuiPlay: GameOS's own system" \
+             "update), restart, then run the command again. Your current system is untouched."
+    elif grep -q 'security.selinux' "$SWITCH_OUT"; then
+        fail "SELinux refused Rare OS's files." \
+             "Run  sudo setenforce 0  and then the command again (SELinux is enforcing again at the next start)." \
+             "Your current system is untouched."
+    elif grep -qi 'no space left' "$SWITCH_OUT"; then
+        fail "The system drive ran out of space during the download." \
+             "Uninstall a game or two to make room, then run the command again. Your current system is untouched."
+    fi
+    fail "The switch did not finish (the error is just above)." \
+         "Your current system is untouched. Check Wi-Fi and run the command again: it keeps what it already downloaded."
 fi
 
 drop_staged() {

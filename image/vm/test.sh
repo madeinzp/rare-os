@@ -128,9 +128,14 @@ rebase() {
 
     echo "::group::switch with get-rare-os.sh"
     to_guest "$REPO/tools/get-rare-os.sh" /root/get-rare-os.sh
-    $H ssh --timeout 5400 --cmd "RARE_IMAGE=10.0.2.2:5000/rare-os:test RARE_YES=1 RARE_INSECURE_REGISTRY=1 bash /root/get-rare-os.sh 2>&1 | tail -n 40"
-    $H ssh --cmd "bootc status"
+    # The phone route (rare.market/os, as a SuiPlay owner runs it): a systemd-run job with SELinux enforcing. bootc
+    # then runs in the job's domain, not install_t as from a terminal, so it can't set labels the stock OS's policy
+    # doesn't know unless the script handles it (GitHub issue 2, "fsetxattr(security.selinux): Invalid argument").
+    $H ssh --cmd "getenforce"
+    $H ssh --timeout 5400 --cmd "systemd-run --quiet --wait --pipe --collect --unit=rare-os-get -E RARE_IMAGE=10.0.2.2:5000/rare-os:test -E RARE_YES=1 -E RARE_INSECURE_REGISTRY=1 bash /root/get-rare-os.sh 2>&1 | tail -n 40"
+    $H ssh --cmd "bootc status; echo SELinux: \$(getenforce)" | tee "$OUT/rebase-0-switch.txt"
     podman rm -f rare-registry; rm -rf "$WORK/registry"
+    if ! grep -q 'SELinux: Enforcing' "$OUT/rebase-0-switch.txt"; then echo "SELinux is not enforcing again after the switch"; $H stop; return 1; fi
     echo "::endgroup::"
 
     echo "::group::boot Rare OS after the switch"
