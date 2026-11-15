@@ -480,6 +480,7 @@ fn open_spec(game_id: &str, title: &str, url: &str, profile: Option<Value>, any_
         wallet,
         user_agent: profile.get("userAgent").and_then(Value::as_str).map(str::to_string),
         stream: profile.get("stream").and_then(Value::as_bool).unwrap_or(false),
+        gl: profile.get("gpu").and_then(Value::as_str) == Some("gl"),
     };
     engine.open(&spec, Arc::new(Events { gen, on_rare }))?;
     rare_overlay::gamescope::claim(LABEL);
@@ -744,6 +745,16 @@ mod tests {
         assert_eq!(spec.user_agent.as_deref(), Some("UA Edg/1"));
         assert!(spec.stream && !spec.wallet);
         assert!(spec.init_script.contains("\"input\":\"native\""));
+        close();
+
+        // A game whose profile asks for GL (ACT's, from profiles.json) gets the GL engine; others don't.
+        open("web:act", "ACT", "https://play.actuniverse.com/").unwrap();
+        let (spec, _) = fake.open.lock().unwrap().clone().unwrap();
+        assert!(spec.gl && spec.wallet && !spec.stream);
+        close();
+        open_with("web:x", "X", "https://x.example/", Some(json!({ "input": "keys" }))).unwrap();
+        let (spec, _) = fake.open.lock().unwrap().clone().unwrap();
+        assert!(!spec.gl);
         close();
     }
 

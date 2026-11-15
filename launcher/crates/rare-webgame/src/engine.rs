@@ -29,6 +29,9 @@ pub struct OpenSpec {
     pub user_agent: Option<String>,
     /// A cloud game stream: the engine decodes video on the GPU (VA-API) and skips WebGPU.
     pub stream: bool,
+    /// The page draws on GL instead of Vulkan (the profile's `"gpu": "gl"`): WebGL on ANGLE's GL
+    /// backend and no WebGPU. Streams always draw on GL.
+    pub gl: bool,
 }
 
 /// What the engine reports back.

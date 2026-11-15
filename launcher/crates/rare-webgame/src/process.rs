@@ -18,7 +18,7 @@
 //! A host that exits counts as the window closing.
 //!
 //! [`Spawner`] starts a fresh host process for every window (`rare-webgame-host --socket <path>
-//! --data-dir <dir> [--user-agent=<ua>] [--rare-stream]`, Chromium through CEF,
+//! --data-dir <dir> [--user-agent=<ua>] [--rare-stream] [--rare-gl]`, Chromium through CEF,
 //! launcher/native/webhost) and drives it through a [`ProcessEngine`]; a closed window ends its
 //! process.
 
@@ -199,6 +199,9 @@ impl Spawner {
         if spec.stream {
             cmd.arg("--rare-stream");
         }
+        if spec.gl {
+            cmd.arg("--rare-gl");
+        }
         let mut child = cmd
             .envs(self.env.iter().map(|(k, v)| (k.as_str(), v.as_str())))
             .stdin(Stdio::null())
@@ -324,7 +327,7 @@ mod tests {
     }
 
     fn spec() -> OpenSpec {
-        OpenSpec { label: "webgame", title: "G".into(), url: "https://g.example/".into(), init_script: "window.x=1".into(), data_dir: None, wallet: false, user_agent: None, stream: false }
+        OpenSpec { label: "webgame", title: "G".into(), url: "https://g.example/".into(), init_script: "window.x=1".into(), data_dir: None, wallet: false, user_agent: None, stream: false, gl: false }
     }
 
     #[test]

@@ -12,8 +12,9 @@
 //! profile, Local API grant, webgame.js) runs in the main frame before the page's own scripts,
 //! wallet requests are `rare-wallet:` navigations the launcher takes, and controller input arrives
 //! as scripts the launcher evaluates. WebGPU is on (Vulkan), with GPU rasterisation and zero-copy.
-//! `--rare-stream` (cloud gaming) trades WebGPU for VA-API video decode on GL; `--user-agent=<ua>`
-//! is Chromium's own switch. A pop-up (a sign-in) in an app-mode window gets the same init script,
+//! `--rare-stream` (cloud gaming) trades WebGPU for VA-API video decode on GL; `--rare-gl` (a game
+//! whose profile says `"gpu": "gl"`) draws on ANGLE's GL backend with GL compositing, the path the
+//! streams already take on the device, instead of Vulkan; `--user-agent=<ua>` is Chromium's own switch. A pop-up (a sign-in) in an app-mode window gets the same init script,
 //! and launcher scripts (controller input) go to it while it is open.
 //!
 //! Env: `RARE_CEF_DIR` the CEF runtime's resources (default: next to this binary, `cef/`),
@@ -410,8 +411,17 @@ wrap_request_handler! {
             (!ask_navigation(&url)) as i32
         }
 
-        fn on_render_process_terminated(&self, _browser: Option<&mut Browser>, status: TerminationStatus, error_code: i32, error_string: Option<&CefString>) {
+        fn on_render_process_terminated(&self, browser: Option<&mut Browser>, status: TerminationStatus, error_code: i32, error_string: Option<&CefString>) {
             log(&format!("the page's process ended ({status:?}, {error_code}): {}", error_string.map(|e| e.to_string()).unwrap_or_default()));
+            // A page whose process died is a blank window until something loads it again: reload it,
+            // a few times at most, so a crash or an out-of-memory kill doesn't leave the game white.
+            static RELOADS: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+            if let Some(b) = browser {
+                if RELOADS.fetch_add(1, Ordering::Relaxed) < 3 {
+                    log("reloading the page");
+                    b.reload();
+                }
+            }
         }
     }
 }
@@ -609,14 +619,20 @@ fn stream_mode() -> bool {
     std::env::args().any(|a| a == "--rare-stream")
 }
 
+/// The game draws on GL instead of Vulkan (`--rare-gl`): no WebGPU, WebGL on ANGLE's GL backend and
+/// the compositor on GL. For WebGL games whose page stays white on the Vulkan path.
+fn gl_mode() -> bool {
+    stream_mode() || std::env::args().any(|a| a == "--rare-gl")
+}
+
 /// VA-API video decode (and encode) on the 780M's VCN. Chromium's Linux decoder runs through GL, so
 /// a stream's window uses ANGLE on GL; the cloud services send H.264 or H.264, H.265 and AV1
 /// (GeForce NOW), and this CEF build has no software H.264, so the GPU decodes them.
 const VAAPI_FEATURES: &str = "AcceleratedVideoDecodeLinuxGL,AcceleratedVideoDecodeLinuxZeroCopyGL,AcceleratedVideoEncoder,VaapiVideoDecoder,VaapiIgnoreDriverChecks";
 
 /// Chromium's switches for a game: WebGPU on Vulkan, GPU rasterisation, zero-copy, X11 (gamescope's
-/// Xwayland), sound without a click first, no keyring and no browser background traffic. A cloud
-/// game stream: ANGLE on GL with VA-API decode instead of WebGPU on Vulkan.
+/// Xwayland), sound without a click first, no keyring and no browser background traffic. GL mode:
+/// ANGLE on GL instead of WebGPU on Vulkan; a cloud game stream adds VA-API decode to it.
 fn game_switches() -> Vec<(String, Option<String>)> {
     let mut v: Vec<(String, Option<String>)> = vec![
         // Cookies are encrypted with a key from the desktop keyring (Secret Service over D-Bus)
@@ -639,9 +655,11 @@ fn game_switches() -> Vec<(String, Option<String>)> {
         ("disable-renderer-backgrounding".into(), None),
         ("hide-scrollbars".into(), None),
     ];
-    if stream_mode() {
+    if gl_mode() {
         v.retain(|(k, _)| !matches!(k.as_str(), "enable-unsafe-webgpu" | "enable-features" | "use-angle" | "use-vulkan"));
         v.push(("use-angle".into(), Some("gl".into())));
+    }
+    if stream_mode() {
         v.push(("enable-features".into(), Some(VAAPI_FEATURES.into())));
     }
     if let Ok(extra) = std::env::var("RARE_WEBHOST_FLAGS") {

@@ -1,5 +1,5 @@
 {
-  "$comment": "Per-game data the rare.market catalog does not carry: where a web game actually plays, how the controller maps, and where native builds come from. Keyed by the catalog slug. Read by the UI (src/games) and compiled into the native side (src-tauri/src/library/profiles.rs). input: gamepad = the page reads the standard Gamepad API, Rare exposes a virtual pad with analog sticks and sends no keys; keys = buttons become keyboard events, the right stick drives a pointer. browser: chrome = the page needs features WebKitGTK lacks, open it in a Chromium browser.",
+  "$comment": "Per-game data the rare.market catalog does not carry: where a web game actually plays, how the controller maps, and where native builds come from. Keyed by the catalog slug. Read by the UI (src/games) and compiled into the native side (src-tauri/src/library/profiles.rs). input: gamepad = the page reads the standard Gamepad API, Rare exposes a virtual pad with analog sticks and sends no keys; keys = buttons become keyboard events, the right stick drives a pointer. browser: chrome = the page needs features WebKitGTK lacks, open it in a Chromium browser. gpu: gl = the web game window draws on GL (ANGLE's GL backend, no WebGPU) instead of Vulkan, for WebGL games that stay white on the Vulkan path.",
   "games": {
     "act": {
       "playUrl": "https://play.actuniverse.com/",
@@ -9,6 +9,7 @@
       ],
       "input": "gamepad",
       "pointer": false,
+      "gpu": "gl",
       "controls": "Left stick moves, right stick aims, triggers fire and aim. Buttons can be rebound in ACT's settings.",
       "builtin": true
     },
