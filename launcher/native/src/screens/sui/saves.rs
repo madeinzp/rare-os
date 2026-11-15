@@ -44,11 +44,11 @@ pub fn fmt_sui_mist(mist: u128) -> String {
 pub fn fmt_bytes(b: u64) -> String {
     let f = b as f64;
     if f >= 1e9 {
-        format!("{} GB", crate::screens::wallet::fmt::to_fixed(f / 1e9, 1))
+        crate::kit::format::in_gb(crate::screens::wallet::fmt::to_fixed(f / 1e9, 1))
     } else if f >= 1e6 {
-        format!("{} MB", crate::screens::wallet::fmt::to_fixed(f / 1e6, 1))
+        crate::kit::format::in_mb(crate::screens::wallet::fmt::to_fixed(f / 1e6, 1))
     } else {
-        format!("{} KB", (f / 1e3).round().max(1.0))
+        crate::kit::format::in_kb((f / 1e3).round().max(1.0))
     }
 }
 

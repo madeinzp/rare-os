@@ -397,9 +397,42 @@ pub fn time_ago(t_ms: Option<f64>, now_ms: f64) -> String {
 pub fn fmt_size(b: Option<f64>) -> String {
     match b.filter(|b| *b > 0.0) {
         None => String::new(),
-        Some(b) if b >= 1e9 => rare_i18n::trf!(rare_i18n::tr().common.unit_gb, n = format!("{:.1}", b / 1e9)),
-        Some(b) => rare_i18n::trf!(rare_i18n::tr().common.unit_mb, n = ((b / 1e6).round() as i64).max(1)),
+        Some(b) if b >= 1e9 => in_gb(format!("{:.1}", b / 1e9)),
+        Some(b) => in_mb(((b / 1e6).round() as i64).max(1)),
     }
+}
+
+/// "12.3 GB" for a size in bytes, as `rare_stores::fmt_bytes` writes it, in the UI language.
+pub fn fmt_bytes(b: u64) -> String {
+    let b = b as f64;
+    if b >= 1e12 {
+        in_tb(format!("{:.1}", b / 1e12))
+    } else if b >= 1e9 {
+        in_gb(format!("{:.1}", b / 1e9))
+    } else if b >= 1e6 {
+        in_mb(format!("{:.0}", b / 1e6))
+    } else {
+        in_kb(format!("{:.0}", (b / 1e3).max(1.0)))
+    }
+}
+
+/// A number already written for its unit, with the unit in the UI language.
+pub fn in_tb(n: impl std::fmt::Display) -> String {
+    trf!(tr().common.unit_tb, n = n)
+}
+pub fn in_gb(n: impl std::fmt::Display) -> String {
+    trf!(tr().common.unit_gb, n = n)
+}
+pub fn in_mb(n: impl std::fmt::Display) -> String {
+    trf!(tr().common.unit_mb, n = n)
+}
+pub fn in_kb(n: impl std::fmt::Display) -> String {
+    trf!(tr().common.unit_kb, n = n)
+}
+
+/// "15 W" in the UI language.
+pub fn watts(w: f32) -> String {
+    trf!(tr().common.watts, n = w.round() as i64)
 }
 
 #[cfg(test)]

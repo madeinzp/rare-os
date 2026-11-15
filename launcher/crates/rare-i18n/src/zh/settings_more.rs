@@ -495,4 +495,5 @@ translate! { settings_more {
     sto_left_over: "Left over",
     sto_leftover_steam: "Leftover saves, Steam game {appid}",
     sto_leftover_named: "Leftover saves, {what}",
+    sto_prefix_files: "{game}: saves and Windows files",
 }}

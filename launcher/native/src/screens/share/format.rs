@@ -441,11 +441,11 @@ pub fn fmt_sui_mist(mist: u128) -> String {
 pub fn fmt_bytes(b: u64) -> String {
     let b = b as f64;
     if b >= 1e9 {
-        format!("{:.1} GB", b / 1e9)
+        crate::kit::format::in_gb(format!("{:.1}", b / 1e9))
     } else if b >= 1e6 {
-        format!("{:.1} MB", b / 1e6)
+        crate::kit::format::in_mb(format!("{:.1}", b / 1e6))
     } else {
-        format!("{} KB", js_round(b / 1e3).max(1.0))
+        crate::kit::format::in_kb(js_round(b / 1e3).max(1.0))
     }
 }
 

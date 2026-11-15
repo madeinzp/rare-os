@@ -328,7 +328,7 @@ impl Page for QuickSettings {
                 .bg(if on { tok::FG } else { tok::L2 })
                 .radius(ui.r(0.5))
                 .child(name)
-                .child(ui.text(format!("{} W", watts.round()), T::new(Ty::Label).tab().c(if on { tok::BG.alpha(0.7) } else { tok::MUTED })).focus_color(tok::BG.alpha(0.7)));
+                .child(ui.text(crate::kit::format::watts(watts), T::new(Ty::Label).tab().c(if on { tok::BG.alpha(0.7) } else { tok::MUTED })).focus_color(tok::BG.alpha(0.7)));
             let fl = b.look.clone().bg(tok::FG).scale(1.04);
             profs = profs.child(kit::nav(b.focus_look(fl), tag, None, None, false).key(key(id)));
         }
@@ -353,7 +353,7 @@ impl Page for QuickSettings {
             let mut m = ui.bx(s().col().gap(0.6));
             if let Some(p) = &q.perf {
                 let tag = acts.tag(Act::Local(TDP));
-                m = m.child(slider(ui, tr().quick.power_limit, "zap", p.tdp.unwrap_or(15.0), p.tdp_min, p.tdp_max, " W", tag, false));
+                m = m.child(slider(ui, tr().quick.power_limit, "zap", p.tdp.unwrap_or(15.0), p.tdp_min, p.tdp_max, tr().common.watts.trim_start_matches("{n}"), tag, false));
                 if let Some(b) = p.cpu_boost {
                     let tag = acts.tag(Act::Local(BOOST));
                     m = m.child(switch_row(ui, tr().quick.cpu_boost, tr().quick.cpu_boost_sub, b, tag));

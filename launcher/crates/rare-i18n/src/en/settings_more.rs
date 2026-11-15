@@ -673,4 +673,6 @@ strings! {
     sto_leftover_steam: "Leftover saves, Steam game {appid}",
     /// Storage: leftover saves of something named; what is a folder name
     sto_leftover_named: "Leftover saves, {what}",
+    /// A game's Wine prefix in Storage; game is its title
+    sto_prefix_files: "{game}: saves and Windows files",
 }

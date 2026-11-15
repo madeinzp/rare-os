@@ -62,7 +62,7 @@ fn profile_name(p: &str) -> &'static str {
 pub fn perf_sub(d: &MenuData) -> Option<String> {
     let mut parts: Vec<String> = Vec::new();
     if let Some(p) = &d.perf {
-        let tdp = p.tdp.filter(|t| *t > 0.0).map(|t| format!(" · {} W", t.round() as i64)).unwrap_or_default();
+        let tdp = p.tdp.filter(|t| *t > 0.0).map(|t| format!(" · {}", crate::kit::format::watts(t))).unwrap_or_default();
         parts.push(format!("{}{}", profile_name(&p.profile), tdp));
     }
     if d.power_saved {

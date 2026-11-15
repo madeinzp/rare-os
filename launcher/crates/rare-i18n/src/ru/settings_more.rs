@@ -114,7 +114,7 @@ translate! { settings_more {
     pw_cpu_boost: "Ускорение CPU",
     pw_cpu_boost_body: "CPU быстрее, но больше нагрев и расход батареи.",
     pw_fan: "Вентилятор",
-    pw_fan_body: "«Тихий» держит низкие обороты примерно до 65 C. «Макс.» раскручивается раньше. «Свой» открывает редактор кривой.",
+    pw_fan_body: "«Тихий» держит низкие обороты примерно до 65 °C. «Макс.» раскручивается раньше. «Свой» открывает редактор кривой.",
     pw_fan_now: "Сейчас {now}. {what}",
     pw_performance_title: "Производительность",
     pw_no_control: "Это устройство не позволяет Rare OS менять ограничения мощности.",
@@ -496,4 +496,5 @@ translate! { settings_more {
     sto_left_over: "Остатки",
     sto_leftover_steam: "Остатки сохранений, игра Steam {appid}",
     sto_leftover_named: "Остатки сохранений, {what}",
+    sto_prefix_files: "{game}: сохранения и файлы Windows",
 }}

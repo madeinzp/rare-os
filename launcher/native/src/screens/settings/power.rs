@@ -194,7 +194,7 @@ impl PowerSection {
                 let labels = profile_labels();
                 let cur = PROFILES.iter().position(|k| *k == perf.profile);
                 rows.choice(cx, nav, p1, "profile", t.pw_profile, Some(&body), &labels, cur, true);
-                rows.slider(cx, nav, p1, "tdp", t.pw_limit, Some(t.pw_limit_body), perf.tdp.unwrap_or(15.0), perf.tdp_min, perf.tdp_max, 1.0, " W", false);
+                rows.slider(cx, nav, p1, "tdp", t.pw_limit, Some(t.pw_limit_body), perf.tdp.unwrap_or(15.0), perf.tdp_min, perf.tdp_max, 1.0, tr().common.watts.trim_start_matches("{n}"), false);
                 if let Some(b) = perf.cpu_boost {
                     rows.switch(cx, nav, p1, "cpu-boost", t.pw_cpu_boost, t.pw_cpu_boost_body, b, false);
                 }

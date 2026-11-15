@@ -113,7 +113,7 @@ fn now_of(p: &GamePerf) -> (GamePower, Upscale) {
 
 fn rows(p: &GamePerf) -> Vec<Row> {
     let (g, u) = now_of(p);
-    let w = |x: f32| format!("{} W", x.round());
+    let w = crate::kit::format::watts;
     let mut power = vec![trf!(tr().game.power_quiet_w, watts = w(p.watts[0])), trf!(tr().game.power_balanced_w, watts = w(p.watts[1])), trf!(tr().game.power_performance_w, watts = w(p.watts[2]))];
     let power_on = match g.profile {
         Profile::Quiet => Some(0),

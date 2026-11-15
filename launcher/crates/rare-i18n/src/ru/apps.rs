@@ -17,7 +17,7 @@ translate! { apps {
     install_blizzard: "Rare скачает {name} у Blizzard и настроит его, пароль не нужен. Затем войдите в аккаунт Blizzard в его окне.",
     install_flathub_full: "{name}: полное настольное приложение. Устанавливается из Flathub только для вас, пароль не нужен.",
     install_flathub_in: "{app} открывается в {browser}. Устанавливается из Flathub только для вас, пароль не нужен.",
-    proton_note: "В первый раз Rare также скачает Proton (до 1 GB). Окно Blizzard откроется, когда всё будет готово.",
+    proton_note: "В первый раз Rare также скачает Proton (до 1 ГБ). Окно Blizzard откроется, когда всё будет готово.",
     desktop_mode_terminal: "Или в режиме рабочего стола, в терминале:",
     controls: "Управление",
     come_back_note: "Нажмите кнопку Rare, чтобы вернуться в Rare, затем продолжите или закройте приложение.",
