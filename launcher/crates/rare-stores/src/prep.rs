@@ -127,20 +127,26 @@ pub fn prepare(id: &str, started: &mut dyn FnMut(u32), line: &mut dyn FnMut(&str
         },
     );
     done.store(true, std::sync::atomic::Ordering::Relaxed);
-    if stalled.load(std::sync::atomic::Ordering::Relaxed) {
-        text.push_str("ERROR: Nothing downloaded for 10 minutes. Check Wi-Fi and try again\n");
-    }
-    let done = format!("Rare: umu-run ended after {:.1} s\n", t0.elapsed().as_secs_f64());
+    let stalled = stalled.load(std::sync::atomic::Ordering::Relaxed);
+    let done = format!("Rare: umu-run ended after {:.1} s{}\n", t0.elapsed().as_secs_f64(), if stalled { " (stopped: nothing downloaded or printed for 10 minutes)" } else { "" });
     if let Some(f) = log.as_mut() {
         let _ = f.write_all(done.as_bytes());
     }
     log::info!("prep {id}: {}", done.trim());
+    // Stopped by Rare (no progress, or the cap): say that, not a line umu printed on the way
+    // (before each download it logs "CRITICAL: Could not find sniper_platform_*", which is normal).
+    if stalled {
+        return Err(format!("Couldn't set up Proton: nothing downloaded for 10 minutes. Check Wi-Fi and try again. {}", log_note(id)));
+    }
+    // Done is what is on disk. umu-run 1.4.4's createprefix makes the prefix (and with STORE=egs
+    // its protonfixes install vcrun2022 into it), then Proton tries to start the empty program
+    // ("ShellExecuteEx failed: File not found") and umu-run exits 1 every time; it can also end
+    // well and leave nothing behind (no Proton found offline).
     match r {
-        Err(e) => Err(error_text(&text, &e, id)),
+        Err(e) => Err(format!("Couldn't set up Proton: {e} {}", log_note(id))),
+        Ok(_) if !needed(id) => Ok(()),
         Ok(out) if !out.ok => Err(error_text(&text, "umu-run stopped with an error.", id)),
-        // umu-run can end well and still leave nothing behind (no Proton found offline).
-        Ok(_) if needed(id) => Err(error_text(&text, "the prefix wasn't made.", id)),
-        Ok(_) => Ok(()),
+        Ok(_) => Err(error_text(&text, "the prefix wasn't made.", id)),
     }
 }
 
@@ -152,7 +158,11 @@ mod tests {
         let e = super::error_text(offline, "x", "epic:Fortnite");
         assert!(e.starts_with("Couldn't set up Proton: Proton couldn't be downloaded. Check Wi-Fi. Details: "), "{e}");
         assert!(e.ends_with("rare/epic/Fortnite.log"), "{e}");
-        let e = super::error_text("INFO: fine\n", "umu-run took too long. Try again.", "gog:1");
-        assert!(e.contains("umu-run took too long. Try again. Details: "), "{e}");
+        let e = super::error_text("INFO: fine\n", "umu-run stopped with an error.", "gog:1");
+        assert!(e.contains("umu-run stopped with an error. Details: "), "{e}");
+        // umu-run 1.4.4 cold, killed mid-download of steamrt3 (the build machine, 2026-11-15): the line it
+        // printed before the download is not the reason when umu itself fails later.
+        let cold = "INFO: Using UMU-Proton-10.0-4\nCRITICAL: steamrt3 validation failed\nCRITICAL: Could not find sniper_platform_* in '/h/.local/share/umu/steamrt3'\nINFO: Downloading steamrt3 (3.0.20261110.268881), please wait...\nERROR: Aborting steamrt install due to network error\n";
+        assert!(super::error_text(cold, "x", "epic:A").contains("Aborting steamrt install due to network error."));
     }
 }
