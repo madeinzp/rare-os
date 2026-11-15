@@ -308,6 +308,12 @@ pub fn pin_bar(view: &rare_render::view::View, scene: &mut rare_render::Scene, n
     }
 }
 
+/// A line that may not fit its row (tags, a long name): cut at the box edge, and while the
+/// element around it has focus, gliding to its end and back (`Scene::run_marquees`).
+pub fn marquee(ui: &Ui, line: El) -> El {
+    ui.bx(s().row().min0().shrink()).clip().marquee().child(line)
+}
+
 /// The active tab's name in its view (`follow_tabs` keeps it in sight).
 pub const TAB_ON: &str = "tab-on";
 

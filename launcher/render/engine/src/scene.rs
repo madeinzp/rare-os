@@ -374,6 +374,10 @@ pub struct Scene {
     layers: Vec<(i16, Id)>,
     /// A focus-follow waiting for the next layout (`follow_focus` on a tree that changed).
     follow: Option<(Id, bool)>,
+    /// Boxes made with `El::marquee` (`run_marquees`); removed ones are dropped as it runs.
+    marquees: Vec<Id>,
+    /// The node whose focus ring is on (`View` marks it as focus moves).
+    pub focus_ring: Option<Id>,
 }
 
 fn rect_isect(a: [f32; 4], b: [f32; 4]) -> [f32; 4] {
@@ -476,7 +480,7 @@ impl Scene {
         let root = tree
             .new_leaf_with_context(Style { size: Size { width: length(w), height: length(h) }, position: taffy::style::Position::Relative, ..Default::default() }, Node::default())
             .unwrap();
-        Scene { tree, root, w, h, rem, dirty: true, ring_gap_color: Color::BLACK, ring_color: Color::WHITE, ring_hidden: false, layouts: 0, layers: Vec::new(), follow: None }
+        Scene { tree, root, w, h, rem, dirty: true, ring_gap_color: Color::BLACK, ring_color: Color::WHITE, ring_hidden: false, layouts: 0, layers: Vec::new(), follow: None, marquees: Vec::new(), focus_ring: None }
     }
 
     pub fn resize(&mut self, w: f32, h: f32, rem: f32) {
@@ -578,6 +582,52 @@ impl Scene {
         r.2 = radius;
         if r.0.update(Some(text), Some(value), now, true) {
             self.dirty = true;
+        }
+    }
+
+    /// `run_marquees` drives `id` from now on.
+    pub fn watch_marquee(&mut self, id: Id) {
+        if !self.marquees.contains(&id) {
+            self.marquees.push(id);
+        }
+    }
+
+    /// Every frame: a marquee box inside the focused element (the node with the focus ring; the
+    /// ring may sit on a box drawn over the row, so it counts by area, not by ancestry) moves its
+    /// line, when wider than the room it is shown in, to the end and back (`anim::MARQUEE`);
+    /// every other one rests at its start.
+    pub fn run_marquees(&mut self, now: f64) {
+        self.marquees.retain(|&id| self.tree.get_node_context(id).is_some());
+        let focus = self.focus_ring.filter(|&f| self.alive(f)).map(|f| self.rect(f));
+        for i in 0..self.marquees.len() {
+            let bx = self.marquees[i];
+            let Some(line) = self.tree.child_ids(bx).next() else { continue };
+            let r = self.rect(bx);
+            // The room the line is shown in: the box, cut by every clipping box above it.
+            let mut right = r[0] + r[2];
+            let mut p = self.tree.parent(bx);
+            while let Some(id) = p {
+                if self.tree.get_node_context(id).is_some_and(|n| n.clip) {
+                    let a = self.rect(id);
+                    right = right.min(a[0] + a[2]);
+                }
+                p = self.tree.parent(id);
+            }
+            let room = (right - r[0]).max(0.0);
+            // The line's own width from its shaping: layout may have squeezed or stretched its box.
+            let natural = self.tree.get_node_context(line).and_then(|n| n.text.as_ref()).map(|t| t.buf.layout_runs().map(|l| l.line_w).fold(0.0f32, f32::max)).unwrap_or(0.0);
+            let over = natural - room;
+            let focused = focus.is_some_and(|f| r[0] >= f[0] - 1.0 && r[1] >= f[1] - 1.0 && r[1] + r[3] <= f[1] + f[3] + 1.0 && r[0] <= f[0] + f[2]);
+            let n = self.n(line);
+            if focused && over > 1.0 {
+                let to = -over;
+                if n.tx.loop_scale().map_or(true, |s| (s - to).abs() > 0.5) {
+                    // 40 px a second each way, plus the rests at both ends.
+                    n.tx.start_loop_by(&crate::anim::MARQUEE, 2.4 + 2.0 * over / 40.0, to, now);
+                }
+            } else if n.tx.loop_scale().is_some() || n.tx.get(now) != 0.0 {
+                n.tx.snap(0.0);
+            }
         }
     }
 

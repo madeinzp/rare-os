@@ -108,6 +108,10 @@ impl Keys {
     }
 }
 
+/// A marquee: rests at the start, glides to the end (1), rests, glides back. Times the overflow
+/// (negative, in px) it moves text that does not fit its box from one end to the other.
+pub static MARQUEE: Keys = Keys { frames: &[(0.0, 0.0), (0.18, 0.0), (0.5, 1.0), (0.68, 1.0), (1.0, 0.0)], ease: Ease::EASE_IN_OUT };
+
 /// app.css `.breathe`: opacity 1 -> 0.35 -> 1 over 2.4 s, ease-in-out.
 pub static BREATHE: Keys = Keys { frames: &[(0.0, 1.0), (0.5, 0.35), (1.0, 1.0)], ease: Ease::EASE_IN_OUT };
 
@@ -119,8 +123,9 @@ pub enum Curve {
     /// Damped spring: natural angular frequency `omega` (rad/s) and damping ratio `zeta`
     /// (1 = critically damped, below 1 overshoots).
     Spring { omega: f32, zeta: f32 },
-    /// Repeats `Keys` every `dur` seconds until the next `set`/`snap`.
-    Loop(&'static Keys),
+    /// Repeats `Keys` every `dur` seconds until the next `set`/`snap`, each value times the scale
+    /// (1 for keys in their own units; a distance for keys from 0 to 1, like `MARQUEE`).
+    Loop(&'static Keys, f32),
 }
 
 impl Curve {
@@ -185,9 +190,9 @@ impl Anim {
         }
         let t = (now - self.t0).max(0.0) as f32;
         match self.curve {
-            Curve::Loop(k) => {
+            Curve::Loop(k, scale) => {
                 let p = (t / self.dur).fract();
-                k.at(p)
+                k.at(p) * scale
             }
             _ if t >= self.dur => self.to,
             Curve::Tween(e) => self.from + (self.to - self.from) * e.y(t / self.dur),
@@ -202,7 +207,7 @@ impl Anim {
             return 0.0;
         }
         let t = (now - self.t0).max(0.0) as f32;
-        if t >= self.dur && !matches!(self.curve, Curve::Loop(_)) {
+        if t >= self.dur && !matches!(self.curve, Curve::Loop(..)) {
             return 0.0;
         }
         match self.curve {
@@ -249,7 +254,7 @@ impl Anim {
     pub fn set_curve(&mut self, v: f32, now: f64, curve: Curve, dur: f32) {
         match curve {
             Curve::Tween(e) => self.set_ease(v, now, dur, e),
-            Curve::Loop(_) => {
+            Curve::Loop(..) => {
                 self.from = v;
                 self.to = v;
                 self.t0 = now;
@@ -335,12 +340,25 @@ impl Anim {
 
     /// Starts a forever loop of `keys` with `period` seconds (stop it with `set` or `snap`).
     pub fn looping(&self) -> bool {
-        matches!(self.curve, Curve::Loop(_)) && self.dur > 0.0
+        matches!(self.curve, Curve::Loop(..)) && self.dur > 0.0
     }
 
     pub fn start_loop(&mut self, keys: &'static Keys, period: f32, now: f64) {
-        let rest = keys.frames.first().map(|f| f.1).unwrap_or(self.to);
-        self.set_curve(rest, now, Curve::Loop(keys), period)
+        self.start_loop_by(keys, period, 1.0, now)
+    }
+
+    /// `start_loop` with every key value times `scale` (keys from 0 to 1 over a distance).
+    pub fn start_loop_by(&mut self, keys: &'static Keys, period: f32, scale: f32, now: f64) {
+        let rest = keys.frames.first().map(|f| f.1 * scale).unwrap_or(self.to);
+        self.set_curve(rest, now, Curve::Loop(keys, scale), period)
+    }
+
+    /// The scale of the loop running now (`start_loop_by`), if one is.
+    pub fn loop_scale(&self) -> Option<f32> {
+        match self.curve {
+            Curve::Loop(_, s) if self.dur > 0.0 => Some(s),
+            _ => None,
+        }
     }
 
     pub fn snap(&mut self, v: f32) {
@@ -447,6 +465,19 @@ impl CAnim {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn scaled_loop_runs_keys_over_a_distance() {
+        let mut a = Anim::new(0.0);
+        a.start_loop_by(&MARQUEE, 10.0, -120.0, 0.0);
+        assert_eq!(a.get(0.0), 0.0, "rests at the start");
+        assert!((a.get(5.0) + 120.0).abs() < 0.01, "at the far end half way through");
+        assert_eq!(a.loop_scale(), Some(-120.0));
+        assert!(a.active(50.0));
+        a.snap(0.0);
+        assert_eq!(a.loop_scale(), None);
+        assert_eq!(a.get(51.0), 0.0);
+    }
+
     use super::*;
 
     #[test]

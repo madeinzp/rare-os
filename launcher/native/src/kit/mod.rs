@@ -20,7 +20,7 @@ pub use title_fit::{fit_title, title_cover};
 pub use art::{art, ArtFit, Arts};
 pub use charts::{mini_curve, spark};
 pub use controls::{
-    button, card_row, cell, dot, empty, focus_icon, follow_tabs, group, pin_bar, PIN_BAR, head_row, info_card, nav, panel, rail, row, row_look, section_head, segmented, tabs, tile, toggle, Btn, BtnIcon, DotTone, Size, TabItem, Variant,
+    button, card_row, cell, dot, empty, focus_icon, follow_tabs, group, pin_bar, PIN_BAR, marquee, head_row, info_card, nav, panel, rail, row, row_look, section_head, segmented, tabs, tile, toggle, Btn, BtnIcon, DotTone, Size, TabItem, Variant,
 };
 pub use format::{NumKind, NumOptions};
 pub use glyph::{glyph, hint, GSize, Pb};
