@@ -90,4 +90,7 @@ translate! { common {
     days_ago: "{n}일 전",
     games_n: "게임 {n}개",
     items_n: "아이템 {n}개",
+    unit_gb: "{n} GB",
+    unit_mb: "{n} MB",
+    secs: "{n} s",
 }}

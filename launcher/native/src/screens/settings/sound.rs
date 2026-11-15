@@ -65,7 +65,7 @@ impl SoundSection {
                 let refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
                 let cur = a.outputs.iter().position(|d| d.default);
                 let body = match cur.map(|i| &a.outputs[i]) {
-                    Some(d) => trf!(t.snd_playing_on, name = d.label),
+                    Some(d) => trf!(t.snd_playing_on, name = device_label(d)),
                     None => t.snd_pick_output.to_string(),
                 };
                 if a.outputs.len() == 1 && cur == Some(0) {
@@ -84,7 +84,7 @@ impl SoundSection {
             }
             match a.mic_muted {
                 Some(muted) => {
-                    let body = a.default_input().map(|d| d.label.clone()).unwrap_or_else(|| t.snd_microphone.into());
+                    let body = a.default_input().map(|d| device_label(d).to_string()).unwrap_or_else(|| t.snd_microphone.into());
                     rows.switch(cx, nav, p, "mic", t.snd_microphone, &trf!(t.snd_mic_body, name = body), !muted, first);
                     if let Some(l) = a.mic_level {
                         rows.slider(cx, nav, p, "mic-level", t.snd_mic_level, Some(t.snd_mic_level_body), l as f32, 0.0, 100.0, 5.0, "%", false);
@@ -127,5 +127,18 @@ impl SectionView for SoundSection {
             None if nav.current().is_some_and(|f| self.rows.is_slider(&f.sid)) => SectionOut::None,
             None => SectionOut::Pass,
         }
+    }
+}
+
+/// A device's name in the UI language: the built-in and wired ones rare-system names in English;
+/// Bluetooth, HDMI and USB devices keep their own names.
+pub fn device_label(d: &Device) -> &str {
+    let t = &tr().settings_more;
+    match d.label.as_str() {
+        "Speaker" => t.snd_dev_speaker,
+        "Built-in mic" => t.snd_dev_builtin_mic,
+        "Headphones" => t.snd_dev_headphones,
+        "Headset mic" => t.snd_dev_headset_mic,
+        other => other,
     }
 }

@@ -100,4 +100,10 @@ strings! {
     /// Counts
     games_n: "{n} game|{n} games",
     items_n: "{n} item|{n} items",
+    /// A size in gigabytes; n is a number like 4.5
+    unit_gb: "{n} GB",
+    /// A size in megabytes; n is a whole number
+    unit_mb: "{n} MB",
+    /// A short duration in seconds; n is a number
+    secs: "{n} s",
 }

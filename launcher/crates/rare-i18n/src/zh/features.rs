@@ -405,4 +405,6 @@ translate! { features {
     emu_earned_of: "{earned} / {total}",
     emu_console_earned_of: "{console} \u{b7} {earned} / {total}",
     emu_play_to_show: "从“游戏库 > 模拟”中玩一款游戏，其奖杯会显示在这里。",
+    fan_temp: "{t} C",
+    fan_rpm: "{n} rpm",
 }}

@@ -489,4 +489,11 @@ translate! { settings_more {
     lv_bt_pairing_hint: "Переведите его в режим сопряжения и повторите попытку.",
 
     lv_check_wifi_hint: "Проверьте Wi-Fi и повторите попытку.",
+    snd_dev_speaker: "Динамики",
+    snd_dev_builtin_mic: "Встроенный микрофон",
+    snd_dev_headphones: "Наушники",
+    snd_dev_headset_mic: "Микрофон гарнитуры",
+    sto_left_over: "Остатки",
+    sto_leftover_steam: "Остатки сохранений, игра Steam {appid}",
+    sto_leftover_named: "Остатки сохранений, {what}",
 }}

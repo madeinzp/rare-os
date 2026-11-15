@@ -488,4 +488,11 @@ translate! { settings_more {
     lv_bt_connect_failed: "{name} に接続できませんでした。",
     lv_bt_pairing_hint: "ペアリングモードにして、もう一度お試しください。",
     lv_check_wifi_hint: "Wi-Fi を確認して、もう一度お試しください。",
+    snd_dev_speaker: "Speaker",
+    snd_dev_builtin_mic: "Built-in mic",
+    snd_dev_headphones: "Headphones",
+    snd_dev_headset_mic: "Headset mic",
+    sto_left_over: "Left over",
+    sto_leftover_steam: "Leftover saves, Steam game {appid}",
+    sto_leftover_named: "Leftover saves, {what}",
 }}

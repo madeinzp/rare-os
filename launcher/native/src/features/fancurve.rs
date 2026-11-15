@@ -106,10 +106,10 @@ fn preset_index(name: &str) -> usize {
 pub fn now_line(f: &FanStatus) -> String {
     let mut parts = Vec::new();
     if let Some(t) = f.temp {
-        parts.push(format!("{} C", t.round() as i64));
+        parts.push(trf!(tr().features.fan_temp, t = t.round() as i64));
     }
     if let Some(r) = f.rpm {
-        parts.push(format!("{} rpm", crate::kit::format::grouped(r as f64, 0, 0)));
+        parts.push(trf!(tr().features.fan_rpm, n = crate::kit::format::grouped(r as f64, 0, 0)));
     }
     if let Some(d) = f.duty {
         parts.push(trf!(tr().features.fan_duty, n = d));
@@ -207,7 +207,7 @@ impl Page for FanCurvePage {
                 .radius(ui.r(0.4))
                 .clip()
                 .child(ui.bx(s().wp(1.0).h(BAR_H * d as f32 / 100.0)).bg(if editing { tok::fg(0.85) } else { tok::fg(0.45) }));
-            let label = ui.text(format!("{t} C"), T::new(Ty::Small).tab().c(if near == Some(i) { tok::FG } else { tok::MUTED }));
+            let label = ui.text(trf!(tr().features.fan_temp, t = t), T::new(Ty::Small).tab().c(if near == Some(i) { tok::FG } else { tok::MUTED }));
             let marker = ui.text(if near == Some(i) { tr().features.fan_now } else { " " }, T::new(Ty::Label).w(600).c(tok::FG));
             let col = ui
                 .bx(s().col().items_center().gap(0.4).grow().min_w(4.0).py(0.5).px(0.4))

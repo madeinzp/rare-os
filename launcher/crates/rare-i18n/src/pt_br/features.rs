@@ -405,4 +405,6 @@ translate! { features {
     emu_earned_of: "{earned} de {total}",
     emu_console_earned_of: "{console} \u{b7} {earned} de {total}",
     emu_play_to_show: "Jogue um jogo de Biblioteca, Emulação e os troféus dele aparecem aqui.",
+    fan_temp: "{t} C",
+    fan_rpm: "{n} rpm",
 }}

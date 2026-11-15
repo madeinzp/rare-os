@@ -269,7 +269,7 @@ fn fixture_snap() -> Snap {
 }
 
 fn drive_name(item: &Item, drives: &[Drive]) -> String {
-    item.path.as_deref().and_then(|p| rare_library::storage::drive_of(p, drives)).map(|d| d.label.clone()).unwrap_or_default()
+    item.path.as_deref().and_then(|p| rare_library::storage::drive_of(p, drives)).map(|d| drive_label(d).to_string()).unwrap_or_default()
 }
 
 impl StorageSection {
@@ -304,7 +304,7 @@ impl StorageSection {
             first = false;
         }
         for d in snap.drives.iter().filter(|d| d.kind == DriveKind::Internal) {
-            drive_row(cx, p, &d.label, &free_line(d), used_frac(d), first);
+            drive_row(cx, p, drive_label(d), &free_line(d), used_frac(d), first);
             first = false;
         }
         if snap.read {
@@ -334,7 +334,7 @@ impl StorageSection {
             }
             first = false;
             for d in snap.drives.iter().filter(|d| d.kind == DriveKind::Usb) {
-                drive_row(cx, p, &d.label, &free_line(d), used_frac(d), first);
+                drive_row(cx, p, drive_label(d), &free_line(d), used_frac(d), first);
             }
         }
         // Games and apps by size.
@@ -371,8 +371,9 @@ impl StorageSection {
             let row = cx.scene.add(p, s().row().items_center().gap(1.0 * r).min_h(4.0 * r).wp(1.0).px(1.4 * r).py(0.7 * r).done(), Node::default());
             edge(cx, row, 0, tok::HAIR);
             let col = cx.scene.add(row, s().col().grow().done(), Node::default());
-            cx.scene.add_text(cx.t, col, s().done(), &it.title, ts(r, ty::BODY.0, ty::BODY.1, 600).truncate(), tok::FG);
-            let sub = if here.is_empty() { it.source.clone() } else { format!("{}, {}", it.source, here) };
+            cx.scene.add_text(cx.t, col, s().done(), &item_title(&it.title), ts(r, ty::BODY.0, ty::BODY.1, 600).truncate(), tok::FG);
+            let source = if it.source == "Left over" { tr().settings_more.sto_left_over.to_string() } else { it.source.clone() };
+            let sub = if here.is_empty() { source } else { format!("{source}, {here}") };
             cx.scene.add_text(cx.t, col, s().done(), &sub, ts(r, ty::SMALL.0, ty::SMALL.1, 400).truncate(), tok::MUTED);
             let size_line = match (&job, moving) {
                 (Some(Job::ClosingSteam { .. }), true) => t.sto_closing_steam.to_string(),
@@ -585,5 +586,21 @@ mod tests {
         assert_eq!(steam_start_idx(&c), 0);
         let c = Config { steam_start: Some("demand".into()), ..Default::default() };
         assert_eq!(steam_start_idx(&c), 2);
+    }
+}
+
+/// A drive's name in the UI language: rare-library calls the internal one "This device".
+fn drive_label(d: &Drive) -> &str {
+    if d.label == "This device" { tr().game.this_device } else { &d.label }
+}
+
+/// An item's title in the UI language: rare-library writes leftover saves' titles in English.
+fn item_title(title: &str) -> String {
+    match title.strip_prefix("Leftover saves, ") {
+        Some(rest) => match rest.strip_prefix("Steam game ") {
+            Some(appid) => trf!(tr().settings_more.sto_leftover_steam, appid = appid),
+            None => trf!(tr().settings_more.sto_leftover_named, what = rest),
+        },
+        None => title.to_string(),
     }
 }

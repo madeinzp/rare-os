@@ -489,4 +489,11 @@ translate! { settings_more {
     lv_bt_pairing_hint: "Coloque-o no modo de pareamento e tente de novo.",
 
     lv_check_wifi_hint: "Verifique seu Wi-Fi e tente de novo.",
+    snd_dev_speaker: "Speaker",
+    snd_dev_builtin_mic: "Built-in mic",
+    snd_dev_headphones: "Headphones",
+    snd_dev_headset_mic: "Headset mic",
+    sto_left_over: "Left over",
+    sto_leftover_steam: "Leftover saves, Steam game {appid}",
+    sto_leftover_named: "Leftover saves, {what}",
 }}

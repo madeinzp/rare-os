@@ -30,6 +30,47 @@ pub fn class_note(c: NoticeClass) -> &'static str {
     }
 }
 
+/// A notice group's heading in the UI language.
+pub fn class_label(c: NoticeClass) -> &'static str {
+    let n = &tr().notify;
+    match c {
+        NoticeClass::Money => n.class_money,
+        NoticeClass::Invites => n.class_invites,
+        NoticeClass::Messages => n.class_messages,
+        NoticeClass::Trophies => n.class_trophies,
+        NoticeClass::Social => n.class_social,
+        NoticeClass::System => n.class_system,
+        NoticeClass::Battery => n.class_battery,
+    }
+}
+
+/// A kind of notice's switch title and description in the UI language, by its wire name;
+/// a kind this list does not name keeps rare-notify's English.
+pub fn kind_text(wire: &str, title: &'static str, body: &'static str) -> (&'static str, &'static str) {
+    let n = &tr().notify;
+    match wire {
+        "sold" => (n.kind_sold, n.kind_sold_body),
+        "bought" => (n.kind_bought, n.kind_bought_body),
+        "offer_received" => (n.kind_offer_received, n.kind_offer_received_body),
+        "coin_received" => (n.kind_coin_received, n.kind_coin_received_body),
+        "nft_received" => (n.kind_nft_received, n.kind_nft_received_body),
+        "airdrop" => (n.kind_airdrop, n.kind_airdrop_body),
+        "perp_liquidation" => (n.kind_perp_liquidation, n.kind_perp_liquidation_body),
+        "price_alert" => (n.kind_price_alert, n.kind_price_alert_body),
+        "followed_trade" => (n.kind_followed_trade, n.kind_followed_trade_body),
+        "friend_request" => (n.kind_friend_request, n.kind_friend_request_body),
+        "friend_online" => (n.kind_friend_online, n.kind_friend_online_body),
+        "party_invite" => (n.kind_party_invite, n.kind_party_invite_body),
+        "direct_message" => (n.kind_direct_message, n.kind_direct_message_body),
+        "party_message" => (n.kind_party_message, n.kind_party_message_body),
+        "os_update" => (n.kind_os_update, n.kind_os_update_body),
+        "download_done" => (n.kind_download_done, n.kind_download_done_body),
+        "emu_update" => (n.kind_emu_update, n.kind_emu_update_body),
+        "trophy" => (n.kind_trophy, n.kind_trophy_body),
+        _ => (title, body),
+    }
+}
+
 /// The body line of the "Your price alerts" row.
 pub fn alerts_body(list: Option<&[PriceAlert]>, error: Option<&str>) -> &'static str {
     match list {
@@ -91,9 +132,10 @@ impl NotificationsSection {
                 continue;
             }
             let p = panel(cx, col);
-            setting_row(cx, p, c.label(), Some(class_note(c)), true);
+            setting_row(cx, p, class_label(c), Some(class_note(c)), true);
             for k in list {
-                rows.switch(cx, nav, p, &format!("notif-{}", k.kind), k.title, k.body, prefs.kind_on(&k.kind), false);
+                let (title, body) = kind_text(k.kind.as_str(), k.title, k.body);
+                rows.switch(cx, nav, p, &format!("notif-{}", k.kind), title, body, prefs.kind_on(&k.kind), false);
             }
         }
         let panel_ = panel(cx, col);
@@ -212,6 +254,15 @@ impl Screen for NotificationsPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_switch_kind_has_its_own_words() {
+        for k in kinds() {
+            let (t, b) = kind_text(k.kind.as_str(), "", "");
+            assert!(!t.is_empty() && !b.is_empty(), "{} has no catalog entry", k.kind.as_str());
+        }
+        assert_eq!(kind_text("newer_kind", "Newer", "From a newer server"), ("Newer", "From a newer server"));
+    }
 
     fn a(id: &str, active: bool) -> PriceAlert {
         PriceAlert { id: id.into(), active, ..Default::default() }

@@ -811,4 +811,8 @@ emu_earned_of: "{earned} of {total}",
 emu_console_earned_of: "{console} \u{b7} {earned} of {total}",
 /// Retro trophies page: empty text; Library, Emulation is the Library tab named Emulation
 emu_play_to_show: "Play a game from Library, Emulation and its trophies show here.",
+    /// Fan: a temperature; t is whole degrees Celsius
+    fan_temp: "{t} C",
+    /// Fan: its speed; n is a grouped number like 2,898
+    fan_rpm: "{n} rpm",
 }
