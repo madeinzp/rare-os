@@ -308,9 +308,7 @@ impl Page for Library {
         // The sticky filter bar: h-[3.5rem] border-b border-hair bg-bg, flush under the top bar.
         let bar = ui
             .bx(s().row().items_stretch().gap(1.1).h(3.5).mb(1.0).mx(-2.5).px(2.5))
-            .look(rare_render::Look::default().bg(tok::BG).z(4))
-            .sticky()
-            .name(kit::PIN_BAR)
+            .look(rare_render::Look::default().bg(tok::BG))
             .child(ui.bx(s().row().items_center()).child(lt))
             .child(tabs)
             .child(ui.bx(s().row().items_center()).child(rt))
@@ -358,7 +356,16 @@ impl Page for Library {
             .child(ui.text_s(s().shrink().min0(), played, T::new(Ty::Small).c(tok::MUTED).trunc()))
             .maybe(crumb.map(|c| c.key(key("crumb"))))
             .child(ui.text_s(count_s, count, T::new(Ty::Small).c(tok::MUTED)).key(key("count")));
-        let mut page = ui.bx(s().col().full().px(2.5).pb(2.5).pt(1.0)).scrolls_y(key("library")).child(bar).child(head);
+        // The bar and the focused game's row stick together under the top bar, so the name of the
+        // game in focus stays in sight however far the grid scrolls.
+        let pinned = ui
+            .bx(s().col())
+            .look(rare_render::Look::default().bg(tok::BG).z(4))
+            .sticky()
+            .name(kit::PIN_BAR)
+            .child(bar)
+            .child(head);
+        let mut page = ui.bx(s().col().full().px(2.5).pb(2.5).pt(1.0)).scrolls_y(key("library")).child(pinned);
 
         // Steam waits for a sign-in behind Rare: its games start once it has one.
         if st.steam_sign_in && games_view && filter != "android" && filter != "emu" {
