@@ -405,4 +405,6 @@ translate! { features {
     emu_earned_of: "{earned}/{total}",
     emu_console_earned_of: "{console} \u{b7} {earned}/{total}",
     emu_play_to_show: "라이브러리 > 에뮬레이션에서 게임을 플레이하면 트로피가 여기에 표시됩니다.",
+    fan_temp: "{t} C",
+    fan_rpm: "{n} rpm",
 }}

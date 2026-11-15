@@ -222,7 +222,7 @@ impl DisplaySection {
             let body = if level < 10.0 { t.night_dim } else { t.left_right };
             rows.slider(cx, nav, p, "brightness", t.row_brightness, Some(body), level, 0.0, 100.0, 5.0, "%", false);
             if let Some(d) = info.dim_idle {
-                rows.choice(cx, nav, p, "dim-idle", t.row_dim_idle, Some(t.dim_idle_body), &[tr().common.off, "60 s"], Some(d as usize), false);
+                rows.choice(cx, nav, p, "dim-idle", t.row_dim_idle, Some(t.dim_idle_body), &[tr().common.off, &trf!(tr().common.secs, n = 60)], Some(d as usize), false);
             }
         } else if info.brightness.is_none() {
             setting_row(cx, p, t.row_screen, Some(t.no_brightness), false);

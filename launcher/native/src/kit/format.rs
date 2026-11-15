@@ -397,8 +397,8 @@ pub fn time_ago(t_ms: Option<f64>, now_ms: f64) -> String {
 pub fn fmt_size(b: Option<f64>) -> String {
     match b.filter(|b| *b > 0.0) {
         None => String::new(),
-        Some(b) if b >= 1e9 => format!("{:.1} GB", b / 1e9),
-        Some(b) => format!("{} MB", ((b / 1e6).round() as i64).max(1)),
+        Some(b) if b >= 1e9 => rare_i18n::trf!(rare_i18n::tr().common.unit_gb, n = format!("{:.1}", b / 1e9)),
+        Some(b) => rare_i18n::trf!(rare_i18n::tr().common.unit_mb, n = ((b / 1e6).round() as i64).max(1)),
     }
 }
 

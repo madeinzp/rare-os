@@ -659,4 +659,18 @@ strings! {
     lv_bt_pairing_hint: "Put it in pairing mode and try again.",
 
     lv_check_wifi_hint: "Check your Wi-Fi and try again.",
+    /// Sound: the built-in output device
+    snd_dev_speaker: "Speaker",
+    /// Sound: the built-in input device
+    snd_dev_builtin_mic: "Built-in mic",
+    /// Sound: wired headphones as output
+    snd_dev_headphones: "Headphones",
+    /// Sound: a wired headset's microphone
+    snd_dev_headset_mic: "Headset mic",
+    /// Storage: the source line of files a removed game left behind
+    sto_left_over: "Left over",
+    /// Storage: a removed Steam game's leftover saves; appid is its Steam app id
+    sto_leftover_steam: "Leftover saves, Steam game {appid}",
+    /// Storage: leftover saves of something named; what is a folder name
+    sto_leftover_named: "Leftover saves, {what}",
 }

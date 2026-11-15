@@ -405,4 +405,6 @@ translate! { features {
     emu_earned_of: "{earned} из {total}",
     emu_console_earned_of: "{console} \u{b7} {earned} из {total}",
     emu_play_to_show: "Запустите игру из раздела «Библиотека > Эмуляция», и её трофеи появятся здесь.",
+    fan_temp: "{t} °C",
+    fan_rpm: "{n} об/мин",
 }}

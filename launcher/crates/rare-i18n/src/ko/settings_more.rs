@@ -488,4 +488,11 @@ translate! { settings_more {
     lv_bt_connect_failed: "{name}에 연결할 수 없습니다.",
     lv_bt_pairing_hint: "페어링 모드로 설정하고 다시 시도하세요.",
     lv_check_wifi_hint: "Wi-Fi를 확인하고 다시 시도하세요.",
+    snd_dev_speaker: "Speaker",
+    snd_dev_builtin_mic: "Built-in mic",
+    snd_dev_headphones: "Headphones",
+    snd_dev_headset_mic: "Headset mic",
+    sto_left_over: "Left over",
+    sto_leftover_steam: "Leftover saves, Steam game {appid}",
+    sto_leftover_named: "Leftover saves, {what}",
 }}

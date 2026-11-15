@@ -93,4 +93,67 @@ strings! {
     hit: "Hit",
     /// Hint on a price alert row
     delete_alert: "Delete alert",
+    // ---- the switch rows per kind of notice (rare-notify keeps the English) and their groups
+    /// Notification settings switch: a kind of notice, and its description
+    kind_sold: "Sold",
+    kind_sold_body: "One of your items sold, or someone took your listing.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_bought: "Bought",
+    kind_bought_body: "You bought an item, or your offer was accepted.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_offer_received: "Offers",
+    kind_offer_received_body: "A new offer on an item or collection you hold.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_coin_received: "Coins received",
+    kind_coin_received_body: "Someone sent you coins, above $1.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_nft_received: "NFTs received",
+    kind_nft_received_body: "Someone sent you an item from a collection on rare.market.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_airdrop: "Airdrops",
+    kind_airdrop_body: "An item minted straight to you.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_perp_liquidation: "Perps liquidation",
+    kind_perp_liquidation_body: "A perps position is near its liquidation price.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_price_alert: "Price alerts",
+    kind_price_alert_body: "A price alert you set was hit.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_followed_trade: "Followed traders",
+    kind_followed_trade_body: "A trader you follow made a trade.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_friend_request: "Friend requests",
+    kind_friend_request_body: "Someone wants to be your friend.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_friend_online: "Friends online",
+    kind_friend_online_body: "A friend came online or started a game.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_party_invite: "Party invites",
+    kind_party_invite_body: "A friend invited you to their party.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_direct_message: "Messages",
+    kind_direct_message_body: "A friend sent you a message.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_party_message: "Party messages",
+    kind_party_message_body: "A new message in your party chat.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_os_update: "Rare OS updates",
+    kind_os_update_body: "An update is ready and installs when you restart.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_download_done: "Downloads",
+    kind_download_done_body: "A Steam download finished.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_emu_update: "Emulator updates",
+    kind_emu_update_body: "A newer version of an emulator is available.",
+    /// Notification settings switch: a kind of notice, and its description
+    kind_trophy: "Trophies",
+    kind_trophy_body: "A trophy was earned.",
+    /// Notification settings: group headings
+    class_money: "Money",
+    class_invites: "Invites",
+    class_messages: "Messages",
+    class_trophies: "Trophies",
+    class_social: "Social",
+    class_system: "System",
+    class_battery: "Battery",
 }
