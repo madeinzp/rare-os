@@ -274,7 +274,8 @@ pub fn section(ui: &mut Ui, d: &TradersData, win: Window, sort: Sort) -> El {
             name_line = name_line.child(dot(ui, s(), DotTone::Primary, false));
         }
         let sub = if !words.is_empty() {
-            ui.text(words.join(", "), T::new(Ty::Label).c(tok::MUTED).trunc())
+            // Translations run longer than the English: the focused row's tags glide into view.
+            crate::kit::marquee(ui, ui.text(words.join(", "), T::new(Ty::Label).c(tok::MUTED)))
         } else {
             top_coins(ui, r)
         };

@@ -2942,6 +2942,8 @@ impl App {
         self.touch_frame(now);
         // Sticky bars follow their page's scroll every frame (no lag behind a glide).
         crate::kit::pin_bar(&self.page.view, &mut self.scene, now);
+        // A focused row's line that does not fit glides to its end and back, on any screen.
+        self.scene.run_marquees(now);
         self.scene.animating(now) || self.nav.scrolling() || self.touch_busy()
     }
 

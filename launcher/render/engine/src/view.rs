@@ -296,6 +296,9 @@ pub struct El {
     pub scrolls: Option<(Axis, u64)>,
     /// `[data-sticky]`: a header that stays on top of its page; reveal keeps rows below it.
     pub sticky: bool,
+    /// A box whose one line may not fit: while an ancestor has focus, the line glides to its
+    /// end and back (`Scene::run_marquees`).
+    pub marquee: bool,
     /// Look the node up with `View::id(name)` after an update.
     pub name: Option<&'static str>,
     /// Mount into the full-window layer at this z (`scene::layer`), like `position: fixed`.
@@ -470,6 +473,11 @@ impl El {
     }
     pub fn sticky(mut self) -> El {
         self.sticky = true;
+        self
+    }
+    /// See `marquee`: clip the box and give it one child, the line.
+    pub fn marquee(mut self) -> El {
+        self.marquee = true;
         self
     }
     pub fn name(mut self, n: &'static str) -> El {
@@ -867,6 +875,9 @@ impl Cx<'_> {
             _ => {}
         }
         self.edits.created += 1;
+        if el.marquee {
+            self.scene.watch_marquee(id);
+        }
         if let Some(m) = el.enter {
             self.enters.push((id, m));
         }
@@ -999,6 +1010,11 @@ impl Cx<'_> {
     }
 
     fn apply_focus_marks(&mut self, id: Id, look: &Look, focused: bool) {
+        if focused {
+            self.scene.focus_ring = Some(id);
+        } else if self.scene.focus_ring == Some(id) {
+            self.scene.focus_ring = None;
+        }
         let n = self.scene.n(id);
         let (ring, z) = if focused { (1.0, look.z.max(2)) } else { (0.0, look.z) };
         if n.ring.target() != ring {
