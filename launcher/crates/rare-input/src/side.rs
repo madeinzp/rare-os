@@ -9,6 +9,9 @@
 //! the front end hands to `press`. This module decides what a press and a hold mean, including the
 //! Settings > Controls choice (a press action set to "none" also turns that button's hold off);
 //! the front end runs the action.
+//!
+//! A button set to a key shortcut (`shortcut`, shortcut.rs) has no tap or hold: the front end
+//! holds the keys down for exactly as long as the button is down, and never calls `press`.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -30,6 +33,8 @@ pub enum Action {
     Keyboard,
     Perf,
     Nothing,
+    /// Holds the button's key shortcut (`lcShortcut` / `rcShortcut`) while the button is held.
+    Shortcut,
 }
 
 pub fn action(k: Key, configured: Option<&str>) -> Action {
@@ -38,6 +43,7 @@ pub fn action(k: Key, configured: Option<&str>) -> Action {
         Some("keyboard") => Action::Keyboard,
         Some("perf") => Action::Perf,
         Some("none") => Action::Nothing,
+        Some("shortcut") => Action::Shortcut,
         _ => match k {
             Key::Lc => Action::Capture,
             Key::Rc => Action::Keyboard,
@@ -46,7 +52,7 @@ pub fn action(k: Key, configured: Option<&str>) -> Action {
 }
 
 /// What a hold does: LC saves the last 30 seconds, RC steps the performance overlay. Off when the
-/// press action is "none".
+/// press action is "none" or a key shortcut (the shortcut is held instead).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum HoldAction {
     Clip,
@@ -54,7 +60,7 @@ pub enum HoldAction {
 }
 
 pub fn hold_action(k: Key, configured: Option<&str>) -> Option<HoldAction> {
-    if configured == Some("none") {
+    if matches!(configured, Some("none") | Some("shortcut")) {
         return None;
     }
     Some(match k {
@@ -117,6 +123,7 @@ mod tests {
         assert_eq!(action(Key::Rc, Some("none")), Action::Nothing);
         assert_eq!(action(Key::Rc, Some("capture")), Action::Capture);
         assert_eq!(action(Key::Lc, Some("something new")), Action::Capture);
+        assert_eq!(action(Key::Rc, Some("shortcut")), Action::Shortcut);
     }
 
     #[test]
@@ -124,6 +131,7 @@ mod tests {
         assert_eq!(hold_action(Key::Lc, None), Some(HoldAction::Clip));
         assert_eq!(hold_action(Key::Rc, Some("capture")), Some(HoldAction::Perf));
         assert_eq!(hold_action(Key::Lc, Some("none")), None);
+        assert_eq!(hold_action(Key::Rc, Some("shortcut")), None);
     }
 
     #[test]

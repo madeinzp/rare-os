@@ -38,10 +38,35 @@ The SuiPlay0X1's own buttons (Rare, Quick, LC, RC) reach the launcher through In
 | **Touch** | Tap focuses and selects; a game never starts from a touch | Game | Tap selects, tap outside closes | Tap selects | Nothing |
 | **View + Menu** hold 0.6 s | Switcher (silent rescue) | Switcher | Switcher | Nothing | Nothing |
 
-- **Remapping.** LC and RC presses can be set to Capture, Keyboard, Performance overlay or Nothing in Settings > Controls (`lcAction`, `rcAction` in the launcher config). Their holds, Rare and Quick are fixed. The SuiPlay has no back paddles. In games, LC and RC do nothing until picked (`lcGameAction`, `rcGameAction`), except that a button set to Keyboard in the launcher is the keyboard in games too.
+- **Remapping.** LC and RC presses can be set to Capture, Keyboard, Performance overlay, Key shortcut or Nothing in Settings > Controls (`lcAction`, `rcAction` in the launcher config). Their holds, Rare and Quick are fixed. The SuiPlay has no back paddles. In games, LC and RC do nothing until picked (`lcGameAction`, `rcGameAction`), except that a button set to Keyboard in the launcher is the keyboard in games too.
+- **Key shortcut.** LC or RC set to Key shortcut holds a key combination down for exactly as long as the button is held (key down on press, key up on release, no tap or hold action), so push-to-talk apps such as dictation tools can use it. The keys are picked in a sheet (Settings > Controls > LC / RC key shortcut > Change, or by picking Key shortcut on a row): pressed on any keyboard the launcher's window gets keys from, or picked with the pad (Ctrl, Alt, Shift, Super, then one key, or modifiers alone). Saved as `lcShortcut` / `rcShortcut` (`ctrl+alt+space`, `rare_input::shortcut`). The keys go out on `Rare shortcut keyboard` on /dev/uinput (`rare_launch::apps::pointer::hold_keys`) to the window with keyboard focus: in Rare's session, over games, and in Desktop mode.
 - **The keyboard over a game or app.** Rare + X, a Keyboard press of LC or RC, Quick Settings > Keyboard, or Y in an app the pad drives as a mouse. It is drawn in Rare's HUD window, which gamescope paints on the overlay plane like Steam's own keyboard, so the game or app keeps focus, and each key goes out at once on Rare's virtual keyboard (`Rare keyboard` on /dev/uinput, US layout) into whatever has focus: Steam's sign-in and Steam Guard, a game's name field, Chrome. While it is up InputPlumber intercepts the pad, so the app gets no pad input. D-pad moves, A types, X deletes, Y is Shift, Menu is Enter, View is Tab, LB and RB move the cursor, B closes; Rare and Quick close it and do what they always do. LT switches to the symbols (`?123`, then Y for `#+=`; every ASCII symbol is on one of the two pages) and back. A held X keeps deleting and a held A keeps typing the key (420 ms, then 14 a second). In a web address field (the Browser's address bar or a new tab) `.` `/` `:` `-` sit on the letters and there is a `.com` key; email fields get `@` and `.com`. The launcher's own keyboard and the one in web games and Rare's web window have the same pages and keys (`features/kblayout.rs`, checked against `webgame.js` by a test), and a finger held on a key repeats it there too.
 - **Intercept.** While a game or app has the screen, InputPlumber's intercept mode is `Pass`: everything goes to the game except Rare and Quick, which go only to Rare over D-Bus. While a Rare surface is open it is `All`, so the game sees nothing. The launcher in front is `Pass`.
 - **Sticks, gyro, rumble.** Deadzones, vertical invert, gyro on or off with its sensitivity, "Gyro in Steam games" and rumble strength are in Settings > Controls. The gyro is read through InputPlumber; Steam games see the pad as a Steam Deck while they run.
+
+## Desktop mode
+
+KDE Plasma has no idea what a gamepad is, so Rare runs its own controller there: `rare-launcher-native --desktop-controls` (`launcher/native/src/features/desktop.rs`), started by Plasma's autostart (`/etc/xdg/autostart/rare-desktop-controls.desktop`, `/usr/libexec/rare/desktop-controls`, log in `~/.local/state/rare/desktop.log`). It puts InputPlumber back to the Xbox pad and intercept mode `Pass` (Rare's session can leave either), listens to Rare, Quick, LC and RC over D-Bus, and reads every pad.
+
+| Control | Desktop controls (default) | Gamepad (a full screen window or a Steam game in front) |
+| --- | --- | --- |
+| **Right stick** | Pointer | Game |
+| **Left stick** | Scroll (both ways) | Game |
+| **A / RT** | Left click (held: drag) | Game |
+| **B / LT** | Right click | Game |
+| **X** | Space | Game |
+| **Y** | Plasma's on-screen keyboard, up or down | Game |
+| **D-pad** | Arrow keys | Game |
+| **LB / RB** | Shift+Tab / Tab | Game |
+| **Menu / View** | Enter / Esc | Game |
+| **R3** | Middle click | Game |
+| **Rare** press | Plasma's app menu | Same |
+| **Quick** press | Switch to gamepad, with an on-screen note | Switch to desktop controls |
+| **LC / RC** | As Settings > Controls > LC / RC: Keyboard toggles Plasma's on-screen keyboard, Capture takes a screenshot (Spectacle), Key shortcut holds its keys | As LC / RC in games |
+
+- **Which mode.** A KWin script the controller loads (`market.rare.Desktop.Window`) reports the active window: full screen, or a Steam game window (`steam_app_*`), gets the controller as a normal gamepad (the grab is let go); everything else gets desktop controls (every pad is grabbed with EVIOCGRAB, so no app sees it as a gamepad, and it drives `Rare desktop controller` on /dev/uinput). Quick switches by hand until another window comes to the front.
+- **Return to Rare** is the desktop's Return to Rare, as before.
+- **On-screen keyboard.** Plasma's own (KWin's virtual keyboard). It types into Wayland apps; apps on Xwayland that don't take input methods don't get its text.
 
 ## Shoulder buttons in the launcher
 

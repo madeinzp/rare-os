@@ -18,6 +18,7 @@ pub mod ossheets;
 pub mod parental;
 pub mod power;
 pub mod remap;
+pub mod shortcut;
 pub mod remote;
 pub mod rows;
 pub mod search;
@@ -530,6 +531,9 @@ pub fn fixture(name: &str, cx: &mut Cx, now: f64) -> Option<Box<dyn Screen>> {
         return Some(f);
     }
     if let Some(f) = remap::fixture(name, cx, now) {
+        return Some(f);
+    }
+    if let Some(f) = shortcut::fixture(name, cx, now) {
         return Some(f);
     }
     if let Some(f) = supportsheets::fixture(name, cx, now) {

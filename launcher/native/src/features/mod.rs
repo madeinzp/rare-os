@@ -25,6 +25,9 @@ pub mod firstrun;
 pub mod gamemgmt;
 pub mod ingame;
 pub mod kblayout;
+pub mod keycapture;
+#[cfg(target_os = "linux")]
+pub mod desktop;
 pub mod kbrepeat;
 pub mod localapi;
 pub mod parental;

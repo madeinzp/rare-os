@@ -121,6 +121,10 @@ pub fn share_host() -> Arc<dyn ShareHost> {
 /// Starts the clip recorder supervisor (it records only while a game runs and instant replay is
 /// on), Discord, the Sunshine host and the network announcement.
 pub fn start_share() {
+    // The shortcut keyboard is made before the first press, so the compositor knows it by then.
+    if uses_shortcut() {
+        std::thread::spawn(rare_launch::apps::pointer::prepare_keys);
+    }
     rare_share::set_host_env(|cmd| {
         rare_system::host::env(cmd);
     });
@@ -211,6 +215,33 @@ pub fn tap_action(k: Key) -> Action {
     rare_input::side::action(k, side_setting(k).as_deref())
 }
 
+/// The keys LC's or RC's Key shortcut holds (Settings > Controls), if one is picked.
+pub fn shortcut_of(k: Key) -> Option<rare_input::shortcut::Shortcut> {
+    let c = config();
+    let saved = match k {
+        Key::Lc => c.lc_shortcut,
+        Key::Rc => c.rc_shortcut,
+    };
+    saved.as_deref().and_then(rare_input::shortcut::Shortcut::parse)
+}
+
+/// Some setting (launcher, in games, a game's own) sets LC or RC to a key shortcut.
+pub fn uses_shortcut() -> bool {
+    let c = config();
+    [&c.lc_action, &c.rc_action, &c.lc_game_action, &c.rc_game_action].iter().any(|a| a.as_deref() == Some("shortcut"))
+}
+
+/// The keys LC and RC hold down right now: let go on the button's release, whatever the setting
+/// or the window in front is by then.
+static HELD: Mutex<[Option<Vec<u16>>; 2]> = Mutex::new([None, None]);
+
+fn held_idx(k: Key) -> usize {
+    match k {
+        Key::Lc => 0,
+        Key::Rc => 1,
+    }
+}
+
 /// What holding LC or RC does, if anything.
 pub fn hold_action(k: Key) -> Option<HoldAction> {
     rare_input::side::hold_action(k, side_setting(k).as_deref())
@@ -221,7 +252,8 @@ fn tap(k: Key) {
         Action::Capture => capture(false),
         Action::Keyboard => push(Req::Keyboard),
         Action::Perf => perf_next(),
-        Action::Nothing => {}
+        // Held in `press`, never a tap.
+        Action::Nothing | Action::Shortcut => {}
     }
 }
 
@@ -241,6 +273,26 @@ fn hold(k: Key) {
 pub fn press(k: Key, down: bool) {
     if k == Key::Rc && !down {
         crate::features::agent::rc_released();
+    }
+    // A key shortcut: down with the button, up with it (push-to-talk), no tap and no hold.
+    let i = held_idx(k);
+    if down {
+        if tap_action(k) == Action::Shortcut {
+            match shortcut_of(k) {
+                Some(s) => {
+                    let keys = s.keys().to_vec();
+                    rare_launch::apps::pointer::hold_keys(&keys, true);
+                    if let Ok(mut h) = HELD.lock() {
+                        h[i] = Some(keys);
+                    }
+                }
+                None => toast("Pick the keys for this button in Settings > Controls.", false),
+            }
+            return;
+        }
+    } else if let Some(keys) = HELD.lock().ok().and_then(|mut h| h[i].take()) {
+        rare_launch::apps::pointer::hold_keys(&keys, false);
+        return;
     }
     rare_input::side::press(
         k,

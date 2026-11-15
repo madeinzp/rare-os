@@ -555,6 +555,17 @@ impl ApplicationHandler<UserEv> for Main {
                 self.wake();
             }
             WindowEvent::KeyboardInput { event, .. } => {
+                // A sheet records keys (Settings > Controls > Key shortcut): every key goes to it.
+                if rare_native::features::keycapture::active() {
+                    use winit::platform::scancode::PhysicalKeyExtScancode;
+                    if let Some(code) = event.physical_key.to_scancode() {
+                        if !event.repeat {
+                            rare_native::features::keycapture::push(code as u16, event.state == ElementState::Pressed);
+                        }
+                        self.wake();
+                        return;
+                    }
+                }
                 if event.state != ElementState::Pressed {
                     return;
                 }
@@ -655,6 +666,11 @@ fn main() {
     // legendary, gogdl and umu-run Rare ships (rare-native/bin, the image's stores folder) on PATH,
     // before any thread starts.
     rare_stores::tools::add_to_path();
+    // Desktop mode's controller (features/desktop.rs): no window, runs until the desktop ends.
+    #[cfg(target_os = "linux")]
+    if std::env::args().nth(1).as_deref() == Some("--desktop-controls") {
+        std::process::exit(rare_native::features::desktop::run());
+    }
     if let Ok(shot) = std::env::var("RR_SHOT") {
         headless(shot);
         return;

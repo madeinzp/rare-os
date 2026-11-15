@@ -63,7 +63,8 @@ fn tap(app: &tauri::AppHandle, k: Key) {
         Action::Capture => crate::share::chord(app, crate::share::Chord::Screenshot),
         Action::Keyboard => keyboard(app),
         Action::Perf => perf_next(app),
-        Action::Nothing => {}
+        // Key shortcuts are the native launcher's (side.rs); this launcher has no setting for them.
+        Action::Nothing | Action::Shortcut => {}
     }
 }
 

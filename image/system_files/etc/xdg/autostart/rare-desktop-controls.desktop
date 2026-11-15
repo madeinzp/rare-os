@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Rare controller
+Comment=The controller as a mouse and keyboard in Desktop mode
+Exec=/usr/libexec/rare/desktop-controls
+Icon=rare-logo
+OnlyShowIn=KDE;
+NoDisplay=true
+X-KDE-autostart-phase=1
+X-GNOME-Autostart-enabled=true

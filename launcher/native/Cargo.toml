@@ -99,6 +99,9 @@ rare-attest = { path = "../crates/rare-attest" }
 rare-perks = { path = "../crates/rare-perks" }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+# Desktop mode's controller (features/desktop.rs): pads read and grabbed, KWin and Plasma over D-Bus.
+evdev = "0.13"
+dbus = "0.9"
 gstreamer = { version = "0.24", optional = true }
 gstreamer-app = { version = "0.24", optional = true }
 gstreamer-video = { version = "0.24", optional = true }

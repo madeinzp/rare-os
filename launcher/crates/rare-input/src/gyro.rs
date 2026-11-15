@@ -272,6 +272,20 @@ mod bus {
     }
 }
 
+/// Sets the composite device's targets now (blocking), outside the watcher: Desktop mode puts the
+/// Xbox pad back, so its reader finds an evdev pad (a Deck target left from Rare's session is
+/// hidraw only).
+#[cfg(target_os = "linux")]
+pub fn set_target_now(t: Target) -> Result<(), String> {
+    bus::set_target(t)
+}
+
+/// The composite device's target ids now, if InputPlumber answers.
+#[cfg(target_os = "linux")]
+pub fn targets_now() -> Result<Vec<String>, String> {
+    bus::status().map(|(_, t)| t)
+}
+
 /// The sampling_frequency of the trigger InputPlumber reads the bmi323 with, if any.
 #[cfg(target_os = "linux")]
 fn imu_trigger_hz() -> Option<f64> {

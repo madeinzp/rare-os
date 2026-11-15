@@ -328,6 +328,12 @@ mod imp {
         Ok(())
     }
 
+    /// Puts the intercept mode back to Pass now (Desktop mode: nothing of Rare's is up there, and a
+    /// mode left at Always by the session Rare ran in kept the virtual pad silent). Blocking.
+    pub fn pass_now() -> Result<(), String> {
+        set_mode(MODE_PASS)
+    }
+
     /// A Rare surface came up over a game (true) or went away (false). Applied off the caller's
     /// thread; the latest call wins.
     pub fn surface(up: bool) {
@@ -472,7 +478,12 @@ pub fn controls_support() -> Vec<ControlSupport> {
 }
 
 #[cfg(target_os = "linux")]
-pub use imp::{capture, divert, set_divert_sink, start, surface};
+pub use imp::{capture, divert, pass_now, set_divert_sink, start, surface};
+
+#[cfg(not(target_os = "linux"))]
+pub fn pass_now() -> Result<(), String> {
+    Ok(())
+}
 
 #[cfg(not(target_os = "linux"))]
 pub fn divert(_on: bool) {}

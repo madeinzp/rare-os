@@ -1,0 +1,35 @@
+#!/usr/bin/bash
+# Desktop mode's controller (launcher/native/src/features/desktop.rs): the SuiPlay's sticks and
+# buttons as a mouse and keyboard in KDE Plasma, a normal controller for games in full screen,
+# and Rare, Quick, LC and RC as in Rare. Started by /etc/xdg/autostart/rare-desktop-controls.desktop
+# in Plasma only; it ends with the desktop session.
+#
+# It is the native launcher's binary run with --desktop-controls: the build the game mode session
+# runs (a test build in ~/rare-native that ~/.config/rare/launcher-bin points at), else the image's.
+# A crash starts it again, up to 5 times a minute.
+bin=/usr/libexec/rare/native/rare-launcher-native
+for f in "${XDG_CONFIG_HOME:-$HOME/.config}/rare/launcher-bin" "${XDG_RUNTIME_DIR:-/tmp}/rare-launcher-bin"; do
+    test_bin=""
+    [[ -r $f ]] && read -r test_bin _ <"$f" || continue
+    cand="$(dirname -- "$test_bin")/rare-launcher-native"
+    [[ -x $cand ]] && bin=$cand
+done
+log=${XDG_STATE_HOME:-$HOME/.local/state}/rare/desktop.log
+mkdir -p "${log%/*}"
+[[ -s $log && $(stat -c %s "$log") -gt 1048576 ]] && mv -f "$log" "$log.prev"
+starts=()
+while :; do
+    echo "[$(date +%T)] starting $bin --desktop-controls" >>"$log"
+    "$bin" --desktop-controls >>"$log" 2>&1
+    rc=$?
+    case $rc in 0 | 130 | 143) exit 0 ;; esac
+    now=$(date +%s)
+    starts=("${starts[@]}" "$now")
+    recent=0
+    for t in "${starts[@]}"; do (( now - t < 60 )) && recent=$((recent + 1)); done
+    if (( recent >= 5 )); then
+        echo "[$(date +%T)] exited $rc five times in a minute: stopped" >>"$log"
+        exit "$rc"
+    fi
+    sleep 1
+done

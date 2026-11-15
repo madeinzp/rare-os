@@ -11,6 +11,7 @@
 //! - [`ip`]: the SuiPlay's Rare, Quick, LC and RC buttons as InputPlumber D-Bus actions, and the
 //!   intercept mode while a Rare surface is over a game.
 //! - [`side`]: what LC and RC do on press and hold.
+//! - [`shortcut`]: a key shortcut LC or RC holds down while held (push-to-talk dictation).
 //! - [`volume`]: volume keys, Rare + volume for brightness.
 //! - [`power`]: the power button (press sleeps, hold opens the power menu).
 //! - [`remap`]: the button layout, an InputPlumber device profile Rare writes and loads.
@@ -36,6 +37,7 @@ pub mod remap;
 pub mod remote;
 pub mod reset;
 pub mod rumble;
+pub mod shortcut;
 pub mod side;
 pub mod volume;
 

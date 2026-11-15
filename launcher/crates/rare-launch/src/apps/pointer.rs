@@ -331,6 +331,60 @@ pub fn combo(keys: &[u16]) {
     });
 }
 
+/// The virtual keyboard key shortcuts go out on (Settings > Controls > Key shortcut): every
+/// ordinary key code, so any shortcut can be held. Its own device, not the pointer's, whose key set
+/// is fixed.
+static SHORTCUT_DEV: Mutex<(Option<uinput::Device>, bool)> = Mutex::new((None, false));
+
+/// Every keyboard key code up to KEY_MICMUTE (248), Esc to the F13-F24 block and the media keys.
+pub const SHORTCUT_RANGE: std::ops::RangeInclusive<u16> = 1..=248;
+
+fn with_shortcut_dev<F: FnOnce(&mut uinput::Device)>(f: F) {
+    let mut g = SHORTCUT_DEV.lock().unwrap_or_else(|e| e.into_inner());
+    if g.0.is_none() && !g.1 {
+        let keys: Vec<u16> = SHORTCUT_RANGE.collect();
+        match uinput::Device::open_keys("Rare shortcut keyboard", &keys) {
+            Ok(d) => {
+                g.0 = Some(d);
+                // The compositor picks a new device up within a moment; keys sent before that are
+                // lost (a first press with no prepare_keys before it).
+                std::thread::sleep(std::time::Duration::from_millis(300));
+            }
+            Err(e) => {
+                eprintln!("[apps] no shortcut keyboard ({e}); is /dev/uinput writable?");
+                g.1 = true;
+            }
+        }
+    }
+    if let Some(d) = g.0.as_mut() {
+        f(d);
+    }
+}
+
+/// Opens the shortcut keyboard ahead of time, so the compositor has picked it up by the first
+/// press (a key sent on a device it hasn't seen yet is lost).
+pub fn prepare_keys() {
+    with_shortcut_dev(|_| {});
+}
+
+/// Holds `keys` down (`down`, in order) or lets them go (in reverse) on the shortcut keyboard: a
+/// button set to a key shortcut sends the down when it goes down and the up when it comes up.
+pub fn hold_keys(keys: &[u16], down: bool) {
+    with_shortcut_dev(|d| {
+        if down {
+            for k in keys {
+                d.key(*k, true);
+                d.syn();
+            }
+        } else {
+            for k in keys.iter().rev() {
+                d.key(*k, false);
+                d.syn();
+            }
+        }
+    });
+}
+
 /// Called by the input thread every pass (about 60 times a second) while pointer mode is on.
 pub fn analog(axes: &[f32; 4]) {
     let mut m = MAPPER.lock().unwrap_or_else(|e| e.into_inner());

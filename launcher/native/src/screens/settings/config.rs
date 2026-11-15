@@ -26,6 +26,9 @@ pub struct Config {
     /// LC and RC while a game has the screen (none until picked).
     pub lc_game_action: Option<String>,
     pub rc_game_action: Option<String>,
+    /// The keys LC and RC hold when set to Key shortcut (rare_input::shortcut, `ctrl+alt+space`).
+    pub lc_shortcut: Option<String>,
+    pub rc_shortcut: Option<String>,
     pub sleep_idle_battery: Option<f32>,
     pub sleep_idle_ac: Option<f32>,
     pub ui_scale: Option<String>,
@@ -56,6 +59,11 @@ pub struct Config {
 /// The config of a fresh device, the one the web launcher's mock shows.
 pub fn fixture() -> Config {
     let mut c = Config { game_folders: vec!["/home/rare/Games".into()], ..Default::default() };
+    if std::env::var("RR_SHORTCUT_MOCK").is_ok() {
+        // RC on a key shortcut (shots of Settings > Controls).
+        c.rc_action = Some("shortcut".into());
+        c.rc_shortcut = Some("ctrl+alt+space".into());
+    }
     if std::env::var("RR_ASK_MOCK").is_ok() {
         // Ask Rare set up (shots).
         c.agent_provider = Some("claude".into());
@@ -106,6 +114,8 @@ impl Config {
             rc_action: str_of(v, "rcAction"),
             lc_game_action: str_of(v, "lcGameAction"),
             rc_game_action: str_of(v, "rcGameAction"),
+            lc_shortcut: str_of(v, "lcShortcut"),
+            rc_shortcut: str_of(v, "rcShortcut"),
             sleep_idle_battery: num_of(v, "sleepIdleBattery"),
             sleep_idle_ac: num_of(v, "sleepIdleAc"),
             ui_scale: str_of(v, "uiScale"),
@@ -161,6 +171,8 @@ impl Config {
             ("rcAction", s(&self.rc_action)),
             ("lcGameAction", s(&self.lc_game_action)),
             ("rcGameAction", s(&self.rc_game_action)),
+            ("lcShortcut", s(&self.lc_shortcut)),
+            ("rcShortcut", s(&self.rc_shortcut)),
             ("sleepIdleBattery", n(&self.sleep_idle_battery)),
             ("sleepIdleAc", n(&self.sleep_idle_ac)),
             ("uiScale", s(&self.ui_scale)),

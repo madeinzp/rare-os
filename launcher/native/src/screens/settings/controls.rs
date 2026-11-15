@@ -13,7 +13,32 @@ pub struct PadStatus {
     pub motion: bool,
 }
 
-pub const ACTIONS: [(&str, &str); 4] = [("capture", "Capture"), ("keyboard", "Keyboard"), ("perf", "Performance overlay"), ("none", "Nothing")];
+pub const ACTIONS: [(&str, &str); 5] = [("capture", "Capture"), ("keyboard", "Keyboard"), ("perf", "Performance overlay"), ("shortcut", "Key shortcut"), ("none", "Nothing")];
+
+/// LC or RC is set to Key shortcut in one of its rows (Settings or in games).
+fn uses_shortcut(cfg: &Config, lc: bool) -> bool {
+    let (a, g) = if lc { (&cfg.lc_action, &cfg.lc_game_action) } else { (&cfg.rc_action, &cfg.rc_game_action) };
+    a.as_deref() == Some("shortcut") || g.as_deref() == Some("shortcut")
+}
+
+/// The button's saved shortcut, as people read it.
+fn shortcut_label(cfg: &Config, lc: bool) -> Option<String> {
+    let s = if lc { &cfg.lc_shortcut } else { &cfg.rc_shortcut };
+    s.as_deref().and_then(rare_input::shortcut::Shortcut::parse).map(|s| s.label())
+}
+
+/// The Key shortcut row for LC or RC: the keys, and Change for the sheet (screens/settings/shortcut.rs).
+fn shortcut_row(cfg: &Config, cx: &mut Cx, nav: &mut Nav, parent: Id, lc: bool) {
+    let name = if lc { "LC" } else { "RC" };
+    let body = match shortcut_label(cfg, lc) {
+        Some(l) => format!("{l}. Held down for as long as you hold {name}, in Rare, games and Desktop mode."),
+        None => "No keys picked yet.".to_string(),
+    };
+    let row = setting_row(cx, parent, &format!("{name} key shortcut"), Some(&body), false);
+    let sid = if lc { "shortcut-lc" } else { "shortcut-rc" };
+    let b = button(cx, row.right, "Change", Variant::Secondary, Sz::Md, false).sid(sid).hint("Change").tag(3);
+    nav.add(b.group(10));
+}
 
 fn action_idx(v: &str) -> Option<usize> {
     ACTIONS.iter().position(|(k, _)| *k == v)
@@ -46,9 +71,14 @@ impl ControlsSection {
         setting_row(cx, p1, "Quick", Some("Quick Settings. Fixed."), false);
         rows.choice(cx, nav, p1, "btn-lc", "LC", Some("The small button at the top left. Press."), &labels, action_idx(cfg.lc_action.as_deref().unwrap_or("capture")), false);
         rows.choice(cx, nav, p1, "btn-rc", "RC", Some("The small button at the top right. Press."), &labels, action_idx(cfg.rc_action.as_deref().unwrap_or("keyboard")), false);
+        for lc in [true, false] {
+            if uses_shortcut(cfg, lc) {
+                shortcut_row(cfg, cx, nav, p1, lc);
+            }
+        }
         layout_row(cx, nav, p1);
         setting_row(cx, p1, "Back paddles", Some("This device has none."), false);
-        setting_row(cx, p1, "Holds", Some("Holding LC saves the last 30 seconds and holding RC changes the performance overlay, unless the button is set to Nothing. In games both do nothing until you pick something below, except the keyboard: a button set to Keyboard opens it over games and apps too. Inside Steam Game Mode Steam keeps Rare and Quick."), false);
+        setting_row(cx, p1, "Holds", Some("Holding LC saves the last 30 seconds and holding RC changes the performance overlay, unless the button is set to Nothing or a key shortcut. A key shortcut holds its keys down while you hold the button, for push-to-talk apps like dictation. In games both do nothing until you pick something below, except the keyboard: a button set to Keyboard opens it over games and apps too. Inside Steam Game Mode Steam keeps Rare and Quick."), false);
 
         // In games: the standard map (features/gamebuttons.rs), and LC and RC there (nothing until picked).
         let pg = panel(cx, col);
@@ -57,6 +87,11 @@ impl ControlsSection {
         nav.add(b.group(10));
         rows.choice(cx, nav, pg, "btn-lc-game", "LC in games", Some("Press, while a game has the screen. A game's own page can pick its own."), &labels, action_idx(cfg.lc_game_action.as_deref().unwrap_or(crate::side::game_default(rare_input::side::Key::Lc, cfg.lc_action.as_deref()))), false);
         rows.choice(cx, nav, pg, "btn-rc-game", "RC in games", Some("Press, while a game or app has the screen. Keyboard types into it, Steam's sign-in too."), &labels, action_idx(cfg.rc_game_action.as_deref().unwrap_or(crate::side::game_default(rare_input::side::Key::Rc, cfg.rc_action.as_deref()))), false);
+
+        // Desktop mode (features/desktop.rs): what the controller does there. Nothing to set.
+        let pd = panel(cx, col);
+        setting_row(cx, pd, "In Desktop mode", Some("The right stick moves the pointer and the left stick scrolls. A clicks, B right-clicks, Y opens the keyboard, the d-pad is the arrow keys. Rare opens the app menu. LC and RC do what you picked above."), true);
+        setting_row(cx, pd, "Games in Desktop mode", Some("A game or app in full screen gets the controller as a normal controller. Press Quick to switch between the two yourself."), false);
 
         // Rows InputPlumber can't apply yet are left out (rare_input::ip::controls_support), so
         // nothing here saves a value that does nothing.
@@ -127,6 +162,10 @@ impl SectionView for ControlsSection {
         if nav.current().is_some_and(|f| f.sid == "game-buttons") {
             return SectionOut::Act("open:game-buttons".into());
         }
+        if let Some(f) = nav.current().filter(|f| f.sid == "shortcut-lc" || f.sid == "shortcut-rc") {
+            let k = if f.sid == "shortcut-lc" { "lc" } else { "rc" };
+            return SectionOut::Act(format!("controls:shortcut:{k}:"));
+        }
         match self.rows.press(cx, nav, now) {
             Some((sid, Val::Bool(v))) => {
                 match sid.as_str() {
@@ -141,6 +180,13 @@ impl SectionView for ControlsSection {
             }
             Some((sid, Val::Idx(i))) => {
                 let v = Some(ACTIONS[i].0.to_string());
+                // Key shortcut with no keys picked yet: the sheet picks them and saves both.
+                if ACTIONS[i].0 == "shortcut" {
+                    let lc = sid.starts_with("btn-lc");
+                    if shortcut_label(cfg, lc).is_none() {
+                        return SectionOut::Act(format!("controls:shortcut:{}:{sid}", if lc { "lc" } else { "rc" }));
+                    }
+                }
                 match sid.as_str() {
                     "btn-lc" => cfg.lc_action = v,
                     "btn-rc" => cfg.rc_action = v,

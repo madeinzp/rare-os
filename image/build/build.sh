@@ -48,6 +48,22 @@ if [[ -x /usr/bin/gsr-kms-server ]]; then
 fi
 # Node.js runs arRPC (Discord Rich Presence for Discord on the web, /usr/libexec/rare/arrpc).
 dnf5 -y install --setopt=install_weak_deps=False nodejs || echo "nodejs not installed: Discord on the web shows no game"
+# Desktop mode's on-screen keyboard (Y or a Keyboard LC / RC there, /usr/libexec/rare/desktop-controls):
+# KWin's virtual keyboard, Maliit, set as KWin's input method for every user. KWin shows it by itself
+# only after a touch, so a keyboard and mouse never see it.
+rpm -q maliit-keyboard >/dev/null || dnf5 -y install --setopt=install_weak_deps=False maliit-keyboard \
+    || echo "maliit-keyboard not installed: no on-screen keyboard in Desktop mode"
+if [[ -f /usr/share/applications/com.github.maliit.keyboard.desktop ]]; then
+    mkdir -p /etc/xdg
+    touch /etc/xdg/kwinrc
+    if ! grep -q '^InputMethod' /etc/xdg/kwinrc; then
+        if grep -q '^\[Wayland\]' /etc/xdg/kwinrc; then
+            sed -i '/^\[Wayland\]/a InputMethod[$e]=/usr/share/applications/com.github.maliit.keyboard.desktop' /etc/xdg/kwinrc
+        else
+            printf '\n[Wayland]\nInputMethod[$e]=/usr/share/applications/com.github.maliit.keyboard.desktop\n' >> /etc/xdg/kwinrc
+        fi
+    fi
+fi
 # tpm2-tools: the launcher's device attestation (rare-attest; Device Pass, verified trophies). The base
 # ships it today; installed here so a base change can't drop it.
 rpm -q tpm2-tools >/dev/null || dnf5 -y install --setopt=install_weak_deps=False tpm2-tools
