@@ -326,15 +326,7 @@ pub fn view(ui: &mut Ui, d: &RootData, sec: Section, closing: Option<usize>, boa
     let rt = glyph(ui, Pb::Rt, GSize::Sm);
     let tabs_el = tabs(ui, s(), &items, sec.tab(), true);
     let sections = ui.bx(s().row().items_stretch().gap(1.0).h(2.25)).child(ui.bx(s().row().items_center()).child(lt)).child(tabs_el).child(ui.bx(s().row().items_center()).child(rt));
-    let search_icon = icon(ui, "search", 1.1, tok::ICON2);
-    let search = ui
-        .bx(s().row().items_center().gap(0.6).h(2.5).w(19.0).px(0.9))
-        .bg(tok::L1)
-        .border(1.0, tok::BORDER_LIGHT)
-        .radius(ui.r(0.25))
-        .child(search_icon)
-        .child(ui.text(tr().trade.search_any_coin_short, T::new(Ty::Small).c(tok::MUTED)).focus_color(tok::FG));
-    let search = fill_nav(search, T_SEARCH, Some(tr().trade.search_coins), None, false);
+    let search = crate::screens::market::parts::section_search(ui, tr().trade.search_any_coin_short, T_SEARCH, Some(tr().trade.search_coins));
     let head = ui.bx(s().row().items_center().gap(2.0).px(2.5).pb(1.0)).child(sections).child(ui.bx(s().ml_auto()).group(crate::kit::group("tr-search", false)).child(search));
     let body = match sec {
         Section::Home => home(ui, d),

@@ -56,15 +56,18 @@ impl HomePage {
 
 /// The page's tree.
 pub fn view(ui: &mut Ui, a: &Answers, win: usize, frame: u64) -> El {
-    let page = ui.bx(s().fill().col().pt(1.0).pb(2.5)).scrolls_y(key(&format!("mk-home-{frame}")));
+    let page = ui.bx(s().fill().col().pb(2.5)).scrolls_y(key(&format!("mk-home-{frame}")));
 
-    // ---- sections, search, SUI price
+    // ---- sections, search, SUI price: the same bar, at the same place and size, as the other
+    // Market sections (trade/root.rs view), so LT/RT never moves it.
     let sections = market_sections(ui, Section::Collections);
-    let search = search_field(ui, s().ml_auto().w(24.0), 2.75, tr().market.search_collections, true, SM, 1.0, T_SEARCH);
-    let mut head = ui.bx(s().row().items_center().gap(1.0).px(2.5).pb(1.5).pt(0.5)).child(sections).child(search);
+    // The search keeps the right edge, where the other sections have theirs: the price goes before it.
+    let search = section_search(ui, tr().market.search_collections, T_SEARCH, None);
+    let mut head = ui.bx(s().row().items_center().gap(2.0).px(2.5).pb(2.0)).child(sections).child(ui.bx(s().ml_auto()));
     if let Some(u) = a.sui_usd() {
         head = head.child(ui.text(format!("SUI ${u:.3}"), t(SM).c(tok::MUTED).tab()));
     }
+    let head = head.child(search);
 
     // ---- trending
     let trend_path = paths::collections("24h", "volume", 12);
