@@ -15,6 +15,11 @@ translate! { trade {
     hops: "{n}ホップ",
     hops_via: "{venues}経由で{n}ホップ",
     linked_wallets: "{n}個のウォレットと関連",
+    tag_holder: "Holder",
+    tag_swing: "Swing trader",
+    tag_early: "Early buyer",
+    tag_scalper: "Scalper",
+    tag_sniper: "Sniper",
     holders_n: "保有者{n}人",
 
     switch_to: "{label}に切り替え",

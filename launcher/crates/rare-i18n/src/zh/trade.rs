@@ -15,6 +15,11 @@ translate! { trade {
     hops: "{n} 跳",
     hops_via: "经 {venues} {n} 跳",
     linked_wallets: "关联 {n} 个钱包",
+    tag_holder: "Holder",
+    tag_swing: "Swing trader",
+    tag_early: "Early buyer",
+    tag_scalper: "Scalper",
+    tag_sniper: "Sniper",
     holders_n: "{n} 位持有者",
 
     switch_to: "切换到 {label}",

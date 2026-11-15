@@ -32,6 +32,12 @@ strings! {
     hops_via: "{n} hop via {venues}|{n} hops via {venues}",
     /// Trader labels: number of other wallets funded from the same source
     linked_wallets: "Linked to {n} wallet|Linked to {n} wallets",
+    /// Trader style tags from the leaderboard, by key (an unknown key shows the server's label)
+    tag_holder: "Holder",
+    tag_swing: "Swing trader",
+    tag_early: "Early buyer",
+    tag_scalper: "Scalper",
+    tag_sniper: "Sniper",
     /// Column header: holder count; n is a formatted number
     holders_n: "{n} holder|{n} holders",
 
