@@ -1,5 +1,6 @@
-//! Settings > Controls and Sound, live in the app: UI sounds and rumble (rare-render's feedback
-//! player, with the rumble strength), and LC and RC (`crate::side`). The values come from
+//! Settings > Controls, Lighting and Sound, live in the app: UI sounds and rumble (rare-render's
+//! feedback player, with the rumble strength), the stick lights (features/lights.rs), and LC and
+//! RC (`crate::side`). The values come from
 //! launcher.json, read again whenever Settings saved.
 
 use super::*;
@@ -35,6 +36,10 @@ impl App {
         let c = crate::screens::settings::config::load();
         self.player.set(Some(c.ui_sounds.unwrap_or(true)), Some(c.rumble.unwrap_or(true)));
         self.player.strength = (c.rumble_strength.unwrap_or(100.0) / 100.0).clamp(0.0, 1.0);
+        // The stick lights, live as Settings > Lighting changes them (nothing in fixtures).
+        if !self.fixture {
+            crate::features::lights::sync(&c);
+        }
     }
 
     /// Plays what the handlers asked for since the last frame.

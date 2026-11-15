@@ -1,6 +1,15 @@
 --- a/ayaneo-ec.c
 +++ b/ayaneo-ec.c
-@@ -75,80 +75,34 @@
+@@ -21,6 +21,8 @@
+ #include <linux/sysfs.h>
+ #include <acpi/battery.h>
+ 
++#include "suiplay-rgb.h"
++
+ #define AYANEO_PWM_ENABLE_REG	 0x4A
+ #define AYANEO_PWM_REG		 0x4B
+ #define AYANEO_PWM_MODE_AUTO	 0x00
+@@ -75,80 +77,34 @@
  	.has_magic_modules = true,
  };
  
@@ -27,7 +36,7 @@
 -			DMI_MATCH(DMI_BOARD_NAME, "AYANEO 2"),
 -		},
  		.driver_data = (void *)&quirk_fan,
- 	},
+-	},
 -	{
 -		.matches = {
 -			DMI_MATCH(DMI_BOARD_VENDOR, "AYANEO"),
@@ -76,7 +85,7 @@
 -			DMI_EXACT_MATCH(DMI_BOARD_NAME, "KUN"),
 -		},
 -		.driver_data = (void *)&quirk_charge_limit,
--	},
+ 	},
 -	{
 -		.matches = {
 -			DMI_MATCH(DMI_BOARD_VENDOR, "AYANEO"),
@@ -100,7 +109,7 @@
  /* Callbacks for hwmon interface */
  static umode_t ayaneo_ec_hwmon_is_visible(const void *drvdata,
  					  enum hwmon_sensor_types type, u32 attr,
-@@ -484,6 +438,19 @@
+@@ -484,6 +440,19 @@
  
  	data->pdev = pdev;
  	data->quirks = dmi_entry->driver_data;
@@ -120,7 +129,58 @@
  	ret = devm_mutex_init(&pdev->dev, &data->hwmon_lock);
  	if (ret)
  		return ret;
-@@ -596,5 +563,5 @@
+@@ -505,7 +474,8 @@
+ 			return ret;
+ 	}
+ 
+-	return 0;
++	/* Rare OS: the stick rings (suiplay-rgb.c). Untouched until userspace writes. */
++	return suiplay_rgb_probe(&pdev->dev);
+ }
+ 
+ static int ayaneo_freeze(struct device *dev)
+@@ -559,11 +529,32 @@
+ 	return 0;
+ }
+ 
++/* Rare OS: the stick rings go dark in suspend and come back on resume (suiplay-rgb.c). */
++static int ayaneo_suspend(struct device *dev)
++{
++	suiplay_rgb_suspend(dev);
++	return 0;
++}
++
++static int ayaneo_resume(struct device *dev)
++{
++	suiplay_rgb_resume(dev);
++	return 0;
++}
++
+ static const struct dev_pm_ops ayaneo_pm_ops = {
++	.suspend = ayaneo_suspend,
++	.resume = ayaneo_resume,
+ 	.freeze = ayaneo_freeze,
+ 	.restore = ayaneo_restore,
+ };
+ 
++/* Rare OS: the EC gets the stick rings back at power off and reboot. */
++static void ayaneo_shutdown(struct platform_device *pdev)
++{
++	suiplay_rgb_shutdown(&pdev->dev);
++}
++
+ static struct platform_driver ayaneo_platform_driver = {
+ 	.driver = {
+ 		.name = "ayaneo-ec",
+@@ -571,6 +562,7 @@
+ 		.pm = pm_sleep_ptr(&ayaneo_pm_ops),
+ 	},
+ 	.probe = ayaneo_ec_probe,
++	.shutdown = ayaneo_shutdown,
+ };
+ 
+ static struct platform_device *ayaneo_platform_device;
+@@ -596,5 +588,5 @@
  module_exit(ayaneo_ec_exit);
  
  MODULE_AUTHOR("Antheas Kapenekakis <lkml@antheas.dev>");

@@ -12,6 +12,7 @@ pub mod developer;
 pub mod devices;
 pub mod display;
 pub mod index;
+pub mod lights;
 pub mod live;
 pub mod network;
 pub mod ossheets;
@@ -247,6 +248,7 @@ impl Settings {
             SectionId::Display => Box::new(display::DisplaySection::build(cx, &mut self.nav, col, &cfg, now)),
             SectionId::Sound => Box::new(sound::SoundSection::build(cx, &mut self.nav, col, &cfg, now)),
             SectionId::Controls => Box::new(controls::ControlsSection::build(cx, &mut self.nav, col, &cfg, now)),
+            SectionId::Lighting => Box::new(lights::LightsSection::build(cx, &mut self.nav, col, &cfg, now)),
             SectionId::Power => Box::new(power::PowerSection::build(cx, &mut self.nav, col, &cfg, now)),
             SectionId::Network => Box::new(network::NetworkSection::build(cx, &mut self.nav, col, &cfg, now)),
             SectionId::Accounts => Box::new(accounts::AccountsSection::build(cx, &mut self.nav, col, &cfg, now)),

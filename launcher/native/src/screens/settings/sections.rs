@@ -8,6 +8,7 @@ pub enum SectionId {
     Display,
     Sound,
     Controls,
+    Lighting,
     Power,
     Network,
     Accounts,
@@ -23,11 +24,12 @@ pub enum SectionId {
     Ask,
 }
 
-pub const SECTIONS: [SectionId; 17] = [
+pub const SECTIONS: [SectionId; 18] = [
     SectionId::System,
     SectionId::Display,
     SectionId::Sound,
     SectionId::Controls,
+    SectionId::Lighting,
     SectionId::Power,
     SectionId::Network,
     SectionId::Accounts,
@@ -51,6 +53,7 @@ impl SectionId {
             SectionId::Display => t.sec_display,
             SectionId::Sound => t.sec_sound,
             SectionId::Controls => t.sec_controls,
+            SectionId::Lighting => tr().lights.section,
             SectionId::Power => t.sec_power,
             SectionId::Network => t.sec_network,
             SectionId::Accounts => t.sec_accounts,
@@ -74,6 +77,7 @@ impl SectionId {
             SectionId::Display => "display",
             SectionId::Sound => "sound",
             SectionId::Controls => "controls",
+            SectionId::Lighting => "lighting",
             SectionId::Power => "power",
             SectionId::Network => "network",
             SectionId::Accounts => "accounts",

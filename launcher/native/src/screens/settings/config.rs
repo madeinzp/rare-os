@@ -29,6 +29,14 @@ pub struct Config {
     /// The keys LC and RC hold when set to Key shortcut (rare_input::shortcut, `ctrl+alt+space`).
     pub lc_shortcut: Option<String>,
     pub rc_shortcut: Option<String>,
+    /// The stick lights (Settings > Lighting, features/lights.rs): "default" (the controller's
+    /// own, unset), "on" or "off"; the effect ("solid", "breathe", "cycle"); each ring's color
+    /// as RRGGBB; brightness in percent.
+    pub lights_mode: Option<String>,
+    pub lights_effect: Option<String>,
+    pub lights_left: Option<String>,
+    pub lights_right: Option<String>,
+    pub lights_brightness: Option<f32>,
     pub sleep_idle_battery: Option<f32>,
     pub sleep_idle_ac: Option<f32>,
     pub ui_scale: Option<String>,
@@ -63,6 +71,14 @@ pub fn fixture() -> Config {
         // RC on a key shortcut (shots of Settings > Controls).
         c.rc_action = Some("shortcut".into());
         c.rc_shortcut = Some("ctrl+alt+space".into());
+    }
+    if std::env::var("RR_LIGHTS_MOCK").is_ok() {
+        // Lighting on, breathing, both rings pink from the palette (shots of Settings > Lighting).
+        c.lights_mode = Some("on".into());
+        c.lights_effect = Some("breathe".into());
+        c.lights_left = Some("ff3d9a".into());
+        c.lights_right = Some("ff3d9a".into());
+        c.lights_brightness = Some(80.0);
     }
     if std::env::var("RR_ASK_MOCK").is_ok() {
         // Ask Rare set up (shots).
@@ -116,6 +132,11 @@ impl Config {
             rc_game_action: str_of(v, "rcGameAction"),
             lc_shortcut: str_of(v, "lcShortcut"),
             rc_shortcut: str_of(v, "rcShortcut"),
+            lights_mode: str_of(v, "lightsMode"),
+            lights_effect: str_of(v, "lightsEffect"),
+            lights_left: str_of(v, "lightsLeft"),
+            lights_right: str_of(v, "lightsRight"),
+            lights_brightness: num_of(v, "lightsBrightness"),
             sleep_idle_battery: num_of(v, "sleepIdleBattery"),
             sleep_idle_ac: num_of(v, "sleepIdleAc"),
             ui_scale: str_of(v, "uiScale"),
@@ -173,6 +194,11 @@ impl Config {
             ("rcGameAction", s(&self.rc_game_action)),
             ("lcShortcut", s(&self.lc_shortcut)),
             ("rcShortcut", s(&self.rc_shortcut)),
+            ("lightsMode", s(&self.lights_mode)),
+            ("lightsEffect", s(&self.lights_effect)),
+            ("lightsLeft", s(&self.lights_left)),
+            ("lightsRight", s(&self.lights_right)),
+            ("lightsBrightness", n(&self.lights_brightness)),
             ("sleepIdleBattery", n(&self.sleep_idle_battery)),
             ("sleepIdleAc", n(&self.sleep_idle_ac)),
             ("uiScale", s(&self.ui_scale)),

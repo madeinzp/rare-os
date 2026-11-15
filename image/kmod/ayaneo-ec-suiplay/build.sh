@@ -6,7 +6,8 @@
 # kernel's ayaneo-ec (AYANEO board vendor only) never binds and there is no fan hwmon for
 # rare-fand. Source: drivers/platform/x86/ayaneo-ec.c from the OGC kernel tag v7.2.11-ogc4, with
 # suiplay.patch (SuiPlay-only DMI table, fan quirk, as in Bazzite's kernel; charge_control=1
-# adds the 2S charge quirk, BAT0 charge_behaviour, off by default).
+# adds the 2S charge quirk, BAT0 charge_behaviour, off by default), and suiplay-rgb.c for the stick
+# ring lights (/sys/class/leds/ayaneo:rgb:joystick_rings, untouched until userspace writes).
 #
 # kernel-devel for the OGC kernel is not in any dnf repo; Universal Blue's akmods image for the
 # same kernel (the one Bazzite installs its kernel from) carries it in /kernel-rpms.
@@ -55,7 +56,7 @@ dnf5 -y install --setopt=install_weak_deps=False "$WORK/$RPM" gcc make patch kmo
 KDIR="/usr/src/kernels/${KVER}"
 [[ -f "$KDIR/Module.symvers" ]] || skip "kernel-devel has no Module.symvers"
 
-cp "$SRC/ayaneo-ec.c" "$SRC/Makefile" "$WORK/"
+cp "$SRC/ayaneo-ec.c" "$SRC/suiplay-rgb.c" "$SRC/suiplay-rgb.h" "$SRC/Makefile" "$WORK/"
 patch -d "$WORK" -p1 < "$SRC/suiplay.patch" || skip "suiplay.patch does not apply"
 make -C "$KDIR" M="$WORK" modules || skip "build failed against ${KVER}"
 
@@ -64,5 +65,6 @@ KO="$WORK/ayaneo-ec-suiplay.ko"
 modinfo -F alias "$KO" | grep -q 'svn.*MystenLabs,Inc\..*pn.*SuiPlay0X1' || skip "module has no SuiPlay0X1 alias"
 modinfo -F alias "$KO" | grep -q 'AYANEO' && skip "module would also match AYANEO boards"
 modinfo -F parm "$KO" | grep -q '^charge_control:' || skip "module has no charge_control parameter"
+modinfo -F parm "$KO" | grep -q '^rgb:' || skip "module has no rgb parameter (suiplay-rgb.c)"
 install -Dm0644 "$KO" "$OUT/usr/lib/modules/${KVER}/extra/ayaneo-ec-suiplay.ko"
 modinfo "$OUT/usr/lib/modules/${KVER}/extra/ayaneo-ec-suiplay.ko"

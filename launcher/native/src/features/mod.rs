@@ -29,6 +29,7 @@ pub mod keycapture;
 #[cfg(target_os = "linux")]
 pub mod desktop;
 pub mod kbrepeat;
+pub mod lights;
 pub mod localapi;
 pub mod parental;
 pub mod parental_sheet;

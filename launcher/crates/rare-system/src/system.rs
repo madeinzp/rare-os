@@ -702,6 +702,31 @@ pub fn set_battery_care(on: bool) -> Result<(), String> {
     .map_err(|e| format!("Battery care: {e}"))
 }
 
+// ----- stick lights (rare-fand's org.rare.Lights) -----
+
+const LIGHTS_PATH: &str = "/org/rare/Lights";
+const LIGHTS_IFACE: &str = "org.rare.Lights";
+
+/// The device has stick ring lights rare-fand can draw; None when rare-fand (or an older one
+/// without lights) isn't there.
+pub fn lights_available() -> Option<bool> {
+    let out = run("busctl", &["--system", "get-property", FAND, LIGHTS_PATH, LIGHTS_IFACE, "Available"]).ok()?;
+    busctl_value(&out)?.first().map(|v| v == "true")
+}
+
+/// The lights as rare-fand runs them (`mode=on effect=breathe left=4da2ff ...`).
+pub fn lights_spec() -> Option<String> {
+    let out = run("busctl", &["--system", "get-property", FAND, LIGHTS_PATH, LIGHTS_IFACE, "Lights"]).ok()?;
+    busctl_value(&out)?.into_iter().next()
+}
+
+/// Polkit lets the active local session through without a prompt (rare-fand checks it).
+pub fn set_lights(spec: &str) -> Result<(), String> {
+    run("busctl", &["--system", "--allow-interactive-authorization=no", "call", FAND, LIGHTS_PATH, LIGHTS_IFACE, "SetLights", "s", spec])
+        .map(|_| ())
+        .map_err(|e| format!("Lights: {e}"))
+}
+
 // ----- Handheld Daemon -----
 
 /// Waits up to ~8 s for hhd to report `ok` on its state.

@@ -375,6 +375,7 @@ catalog! {
     notify,
     settings,
     settings_more,
+    lights,
     features,
     features_more,
     wallet,

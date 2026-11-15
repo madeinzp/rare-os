@@ -1,13 +1,14 @@
 //! rare-fand [run|check|release]
 //!   run      the service (default)
 //!   check    exit 0 when an ayaneo_ec fan is here, 1 otherwise (the unit's ExecCondition)
-//!   release  hand every ayaneo_ec fan back to the EC and every battery's charge_behaviour
-//!            back to auto (the unit's ExecStopPost)
+//!   release  hand every ayaneo_ec fan back to the EC, every battery's charge_behaviour
+//!            back to auto and the stick lights back to the EC (the unit's ExecStopPost)
 //! RARE_FAND_ROOT and RARE_FAND_STATE move the sysfs root and the state file (tests, dev).
 
 use rare_fand::battery;
 use rare_fand::daemon::{Daemon, Stop};
 use rare_fand::hwmon::{self, Fan};
+use rare_fand::lights::{self, Lights};
 use rare_fand::store::STATE_FILE;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,6 +18,7 @@ use std::time::{Duration, Instant, SystemTime};
 static STOP: AtomicBool = AtomicBool::new(false);
 static FAN_DIR: OnceLock<PathBuf> = OnceLock::new();
 static BAT_DIR: OnceLock<PathBuf> = OnceLock::new();
+static ROOT: OnceLock<PathBuf> = OnceLock::new();
 
 extern "C" fn on_signal(_: libc::c_int) {
     STOP.store(true, Ordering::SeqCst);
@@ -32,6 +34,11 @@ fn main() {
             // Both, even when one fails.
             let fans = hwmon::release_all(&root);
             let bats = battery::release_all(&root);
+            match lights::release(&root) {
+                Ok(true) => eprintln!("rare-fand: stick lights handed back to the EC"),
+                Ok(false) => {}
+                Err(e) => eprintln!("rare-fand: release lights: {e}"),
+            }
             match &fans {
                 Ok(n) => eprintln!("rare-fand: {n} fan(s) handed back to the EC"),
                 Err(e) => eprintln!("rare-fand: release: {e}"),
@@ -61,8 +68,12 @@ fn run(root: &Path, state: &Path) {
     if let Some(dir) = daemon.battery_dir() {
         let _ = BAT_DIR.set(dir.to_path_buf());
     }
+    let _ = ROOT.set(root.to_path_buf());
     let prev = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
+        if let Some(r) = ROOT.get() {
+            let _ = lights::release(r);
+        }
         if let Some(dir) = FAN_DIR.get() {
             let _ = std::fs::write(dir.join("pwm1_enable"), hwmon::PWM_AUTO);
         }
@@ -78,6 +89,9 @@ fn run(root: &Path, state: &Path) {
 
     let daemon = Arc::new(Mutex::new(daemon));
     let lock = || daemon.lock().unwrap_or_else(|e| e.into_inner());
+    // The lights file sits next to the fan preset (/var/lib/rare/lights).
+    let lights = Arc::new(Mutex::new(Lights::new(root, &state.with_file_name("lights"))));
+    let lights_lock = || lights.lock().unwrap_or_else(|e| e.into_inner());
     let mut bus = None;
     let mut next_bus = Instant::now();
     let mut next = Instant::now();
@@ -88,7 +102,7 @@ fn run(root: &Path, state: &Path) {
         }
         let now = Instant::now();
         if bus.is_none() && now >= next_bus {
-            bus = connect(&daemon);
+            bus = connect(&daemon, &lights);
             next_bus = now + Duration::from_secs(30);
         }
         if now >= next {
@@ -102,6 +116,7 @@ fn run(root: &Path, state: &Path) {
                 next = now + Duration::from_secs(1);
             }
         }
+        lights_lock().tick(now);
         if now >= next_battery {
             lock().battery_tick(SystemTime::now());
             next_battery = now + Duration::from_secs(5);
@@ -109,14 +124,15 @@ fn run(root: &Path, state: &Path) {
         std::thread::sleep(Duration::from_millis(100));
     };
     lock().shutdown();
+    lights_lock().shutdown();
     drop(bus);
     std::process::exit(code);
 }
 
 /// The bus is for changing presets; the saved preset runs without it.
 #[cfg(target_os = "linux")]
-fn connect(d: &Arc<Mutex<Daemon>>) -> Option<zbus::blocking::Connection> {
-    match rare_fand::bus::serve(d.clone()) {
+fn connect(d: &Arc<Mutex<Daemon>>, l: &Arc<Mutex<Lights>>) -> Option<zbus::blocking::Connection> {
+    match rare_fand::bus::serve(d.clone(), l.clone()) {
         Ok(c) => {
             eprintln!("rare-fand: on the system bus as {}", rare_fand::bus::NAME);
             Some(c)
@@ -129,6 +145,6 @@ fn connect(d: &Arc<Mutex<Daemon>>) -> Option<zbus::blocking::Connection> {
 }
 
 #[cfg(not(target_os = "linux"))]
-fn connect(_: &Arc<Mutex<Daemon>>) -> Option<()> {
+fn connect(_: &Arc<Mutex<Daemon>>, _: &Arc<Mutex<Lights>>) -> Option<()> {
     None
 }

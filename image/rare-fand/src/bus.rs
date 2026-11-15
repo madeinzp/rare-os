@@ -17,9 +17,15 @@
 //!   Care b, Available b (BAT0 has charge_behaviour), State s ("off", "unavailable",
 //!   "unplugged", "low", "hot", "unknown", "charging", "holding"), Health d (%, -1 unknown),
 //!   Limit u (%), Cycles d (charge cycles counted by rare-fand, -1 unknown)
+//!
+//! org.rare.Lights at /org/rare/Lights (polkit action org.rare.lights.set, same rule):
+//!   SetLights(s spec)              `mode=on effect=breathe left=4da2ff right=4da2ff brightness=80`
+//!                                  (lights.rs Spec); mode=default gives the rings back to the EC
+//! Properties (read-only, anyone): Available b (the LED is there), Lights s (the spec)
 
 use crate::curve::Preset;
 use crate::daemon::Daemon;
+use crate::lights::{Lights, Spec};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 use zbus::message::Header;
@@ -32,6 +38,8 @@ pub const PATH: &str = "/org/rare/Fan";
 pub const ACTION: &str = "org.rare.fan.set";
 pub const BATTERY_PATH: &str = "/org/rare/Battery";
 pub const BATTERY_ACTION: &str = "org.rare.battery.set";
+pub const LIGHTS_PATH: &str = "/org/rare/Lights";
+pub const LIGHTS_ACTION: &str = "org.rare.lights.set";
 
 struct FanIface {
     d: Arc<Mutex<Daemon>>,
@@ -177,12 +185,47 @@ impl BatteryIface {
     }
 }
 
-/// Owns org.rare.Fan and serves /org/rare/Fan and /org/rare/Battery; keep the connection alive
-/// while running.
-pub fn serve(d: Arc<Mutex<Daemon>>) -> zbus::Result<zbus::blocking::Connection> {
+struct LightsIface {
+    l: Arc<Mutex<Lights>>,
+}
+
+impl LightsIface {
+    fn lock(&self) -> MutexGuard<'_, Lights> {
+        self.l.lock().unwrap_or_else(|e| e.into_inner())
+    }
+}
+
+#[interface(name = "org.rare.Lights")]
+impl LightsIface {
+    async fn set_lights(&self, #[zbus(header)] hdr: Header<'_>, #[zbus(connection)] conn: &Connection, spec: String) -> fdo::Result<()> {
+        authorize(conn, &hdr, LIGHTS_ACTION).await?;
+        let s = Spec::parse(&spec).map_err(fdo::Error::InvalidArgs)?;
+        let mut l = self.lock();
+        if !l.available() {
+            return Err(fdo::Error::NotSupported("this device has no stick lights".into()));
+        }
+        l.set(s, std::time::Instant::now());
+        Ok(())
+    }
+
+    #[zbus(property)]
+    fn available(&self) -> bool {
+        self.lock().available()
+    }
+
+    #[zbus(property)]
+    fn lights(&self) -> String {
+        self.lock().spec().encode()
+    }
+}
+
+/// Owns org.rare.Fan and serves /org/rare/Fan, /org/rare/Battery and /org/rare/Lights; keep the
+/// connection alive while running.
+pub fn serve(d: Arc<Mutex<Daemon>>, l: Arc<Mutex<Lights>>) -> zbus::Result<zbus::blocking::Connection> {
     zbus::blocking::connection::Builder::system()?
         .name(NAME)?
         .serve_at(PATH, FanIface { d: d.clone() })?
         .serve_at(BATTERY_PATH, BatteryIface { d })?
+        .serve_at(LIGHTS_PATH, LightsIface { l })?
         .build()
 }
