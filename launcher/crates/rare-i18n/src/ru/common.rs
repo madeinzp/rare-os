@@ -7,7 +7,7 @@ translate! { common {
     settings: "Настройки",
     wallet: "Кошелёк",
     market: "Маркет",
-    marketplace: "Торговая площадка",
+    marketplace: "Маркетплейс",
     trade: "Торговля",
     trophies: "Трофеи",
     games: "Игры",
