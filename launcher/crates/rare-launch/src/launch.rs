@@ -538,9 +538,39 @@ fn cgroup_of(pid: u32) -> Option<std::path::PathBuf> {
     Some(std::path::Path::new("/sys/fs/cgroup").join(rel.trim_start_matches('/')))
 }
 
+/// A transient scope's cgroup directory, while systemd still has the scope (`--collect` drops it
+/// once it is empty).
+#[cfg(target_os = "linux")]
+fn unit_cgroup(unit: &str) -> Option<std::path::PathBuf> {
+    let out = Command::new("systemctl").args(["--user", "show", "--property=ControlGroup", "--value", &format!("{unit}.scope")]).stderr(Stdio::null()).output().ok()?;
+    let rel = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if rel.is_empty() {
+        return None;
+    }
+    let dir = std::path::Path::new("/sys/fs/cgroup").join(rel.trim_start_matches('/'));
+    dir.is_dir().then_some(dir)
+}
+
 #[cfg(target_os = "linux")]
 fn cgroup_busy(dir: &std::path::Path) -> bool {
     std::fs::read_to_string(dir.join("cgroup.procs")).map(|t| !t.trim().is_empty()).unwrap_or(false)
+}
+
+/// Sends a store game's output (the store tool's, umu-run's, Proton's, the game's) to its log,
+/// `~/.cache/rare/<store>/<app>.log`, made new for each start, with the command, prefix and Proton
+/// at the top. Without it the output went nowhere and a start that failed said only an exit code.
+fn log_to(cmd: &mut Command, id: &str, what: &str, env: &[(String, String)]) {
+    use std::io::Write;
+    let path = rare_library::umu::log_path(id);
+    if let Some(d) = path.parent() {
+        let _ = std::fs::create_dir_all(d);
+    }
+    let Ok(mut f) = std::fs::File::create(&path) else { return };
+    let var = |k: &str| env.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str()).unwrap_or("(none)");
+    let _ = writeln!(f, "Rare: starting {id}: {what}\nWINEPREFIX={}\nPROTONPATH={}", var("WINEPREFIX"), var("PROTONPATH"));
+    if let Ok(err) = f.try_clone() {
+        cmd.stdout(f).stderr(err);
+    }
 }
 
 /// Opens a URL in a Chromium-based browser as a fullscreen app window (web games that need
@@ -605,7 +635,11 @@ impl Runner {
                 let (mut cmd, unit) = host_command_unit("legendary", &args, &game.id);
                 // The game's prefix (Heroic's when it came from Heroic) and its Proton (rare-library umu).
                 let _ = std::fs::create_dir_all(rare_library::umu::prefix(&game.id));
-                cmd.envs(rare_library::umu::env(&game.id));
+                let env = rare_library::umu::env(&game.id);
+                // legendary's, umu-run's, Proton's and the game's output: the launch-failure sheet
+                // names this log and its last error.
+                log_to(&mut cmd, &game.id, &format!("legendary {}", args.join(" ")), &env);
+                cmd.envs(env);
                 // Rare Local API: RARE_API, RARE_TOKEN, RARE_GAME (Wine passes them to the game).
                 cmd.envs(rare_localapi::grant_native(&game.id));
                 cmd.envs(launch_extra(&game.id).1);
@@ -651,7 +685,9 @@ impl Runner {
                     } else if game.id.starts_with("gog:") {
                         // GOG: the game's prefix (Heroic's when it came from Heroic) and its Proton.
                         let _ = std::fs::create_dir_all(rare_library::umu::prefix(&game.id));
-                        c.envs(rare_library::umu::env(&game.id));
+                        let env = rare_library::umu::env(&game.id);
+                        log_to(&mut c, &game.id, &format!("umu-run {}", all.join(" ")), &env);
+                        c.envs(env);
                     } else {
                         let prefix = dirs::data_dir().unwrap_or_default().join("rare/prefixes").join(game.id.replace(':', "-"));
                         let _ = std::fs::create_dir_all(&prefix);
@@ -1131,6 +1167,14 @@ fn alive(ctx: &Ctx, h: &mut Handle, procs: &[(u32, String, String)], asked: bool
                         if cg.to_string_lossy().contains(u.as_str()) {
                             *cgroup = Some(cg);
                         }
+                    }
+                }
+                // Gone before the first look (legendary hands the game to umu-run and exits within
+                // a second; this runs every 1.5 s): ask systemd where its scope is. Without this
+                // the run was dropped while the game was still starting in the scope.
+                if cgroup.is_none() && !alive {
+                    if let Some(cg) = unit.as_deref().and_then(unit_cgroup) {
+                        *cgroup = Some(cg);
                     }
                 }
                 alive || cgroup.as_deref().is_some_and(cgroup_busy)

@@ -200,8 +200,8 @@ pub fn show(job: Job) {
     crate::changed();
 }
 
-/// Its runtimes into its prefix, with the job's line saying which one.
-fn setup(id: &str, game: &str, deps: Option<Vec<String>>) -> Result<(), String> {
+/// The job's line says "Setting up" from now on.
+fn mark_setup(id: &str) {
     {
         let mut st = q().lock().unwrap();
         if let Some(j) = st.jobs.iter_mut().find(|j| j.id == id) {
@@ -212,6 +212,23 @@ fn setup(id: &str, game: &str, deps: Option<Vec<String>>) -> Result<(), String> 
         }
     }
     crate::changed();
+}
+
+/// The game's prefix, Proton and umu's runtime (prep.rs), when one is missing.
+fn prep(id: &str) -> Result<(), String> {
+    if !crate::prep::needed(id) {
+        return Ok(());
+    }
+    mark_setup(id);
+    // Not the queue's pid: a first start's setup (run_now) runs beside the download in progress,
+    // whose Pause must still stop that download. Setup rows have no Pause or Cancel.
+    crate::prep::prepare(id, &mut |_| {}, &mut |_| {})
+}
+
+/// GOG: the prefix (prep.rs), then its runtimes, with the job's line saying which one.
+fn setup(id: &str, game: &str, deps: Option<Vec<String>>) -> Result<(), String> {
+    prep(id)?;
+    mark_setup(id);
     crate::redist::ensure(game, deps, &mut |_, i, n| {
         apply(id, Update { pct: Some(i as f32 * 100.0 / n.max(1) as f32), ..Default::default() });
         crate::changed();
@@ -332,7 +349,7 @@ fn run(job: &Job) -> Result<(), String> {
     match store {
         Store::Epic => {
             if job.kind == Kind::Setup {
-                return Ok(());
+                return prep(&job.id);
             }
             if let Kind::Install { base } = &job.kind {
                 let _ = std::fs::create_dir_all(base);
@@ -344,6 +361,13 @@ fn run(job: &Job) -> Result<(), String> {
             let out = tools::run_with(LEGENDARY, &args, &[], None, &mut started, &mut line)?;
             if !out.ok {
                 return Err(friendly(&out.error()));
+            }
+            // A fresh install gets its prefix and Proton now, so its first start is a normal one.
+            // If this fails it runs again before the first start, which says why.
+            if matches!(job.kind, Kind::Install { .. }) {
+                if let Err(e) = prep(&job.id) {
+                    log::warn!("setup after install {sid}: {e}");
+                }
             }
             Ok(())
         }

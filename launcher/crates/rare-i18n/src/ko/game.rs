@@ -7,6 +7,7 @@ translate! { game {
     fail_stuck: "실행 중이지만 45초 동안 아무것도 표시되지 않았습니다. 다시 시도하면 게임을 닫고 다시 시작합니다.",
     fail_quick: "화면이 표시되기 전에 종료되었습니다{code}. 다시 시도하거나 데스크톱 모드에서 확인하세요.",
     fail_closed: "예기치 않게 종료되었습니다{code}.",
+    fail_log: "자세한 내용: {path}",
     setting_up: "설정 중",
     pause: "일시정지",
     sync_saves: "저장 동기화",

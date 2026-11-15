@@ -7,6 +7,7 @@ translate! { game {
     fail_stuck: "実行中ですが、45秒経っても何も表示されません。「再試行」でゲームを閉じて起動し直します。",
     fail_quick: "何も表示される前に終了しました{code}。再試行するか、デスクトップモードで確認してください。",
     fail_closed: "予期せず終了しました{code}。",
+    fail_log: "詳細: {path}",
     setting_up: "セットアップ中",
     pause: "一時停止",
     sync_saves: "セーブを同期",

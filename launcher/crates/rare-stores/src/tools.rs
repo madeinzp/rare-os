@@ -209,6 +209,42 @@ pub fn run(tool: &str, args: &[&str], env: &[(String, String)], timeout: Duratio
     }
 }
 
+/// `run`, with everything the tool prints written to `log` (made new each time, the command at
+/// the top). Never the arguments' values after `--code`: a sign-in code is a key to the account.
+pub fn run_logged(tool: &str, args: &[&str], env: &[(String, String)], timeout: Duration, log: &std::path::Path) -> Result<String, String> {
+    use std::io::Write;
+    if let Some(d) = log.parent() {
+        let _ = std::fs::create_dir_all(d);
+    }
+    let mut f = std::fs::File::create(log).ok();
+    let shown: Vec<&str> = args.iter().enumerate().map(|(i, a)| if i > 0 && args[i - 1] == "--code" { "<code>" } else { a }).collect();
+    if let Some(f) = f.as_mut() {
+        let _ = writeln!(f, "Rare: {tool} {}", shown.join(" "));
+    }
+    let owned: Vec<String> = args.iter().map(|a| a.to_string()).collect();
+    let out = run_with(tool, &owned, env, Some(timeout), &mut |_| {}, &mut |l| {
+        if let Some(f) = f.as_mut() {
+            let _ = writeln!(f, "{l}");
+        }
+    });
+    let out = match out {
+        Ok(o) => o,
+        Err(e) => {
+            if let Some(f) = f.as_mut() {
+                let _ = writeln!(f, "Rare: {e}");
+            }
+            return Err(e);
+        }
+    };
+    if out.ok {
+        Ok(out.stdout)
+    } else {
+        let e = out.error();
+        log::warn!("{tool} {}: {e}", args.first().copied().unwrap_or(""));
+        Err(if e.is_empty() { format!("{tool} stopped with an error") } else { e })
+    }
+}
+
 /// Stops a process group: TERM, then KILL after three seconds.
 pub fn stop(pid: u32) {
     #[cfg(unix)]

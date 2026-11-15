@@ -138,23 +138,10 @@ fn setup_running() -> bool {
     rare_core::proc::cmdlines().iter().any(|(_, comm, cmd)| is_setup(comm, cmd))
 }
 
-/// The installer's last words worth showing: umu-run's ERROR/CRITICAL lines ("Could not
-/// download..."), without its logger prefix. umu-run with no Proton and no network says only that
-/// PROTONPATH is empty ("Possible reason: ... or network error"), so that one is put plainly.
+/// The installer's last words worth showing (rare-library umu: umu-run's ERROR/CRITICAL lines,
+/// and "Proton couldn't be downloaded" when umu found no Proton and no network).
 pub fn last_error(log: &str) -> Option<String> {
-    if log.contains("GE-Proton or UMU-Proton not found") || log.contains("Environment variable not set or is empty: PROTONPATH") {
-        return Some("Proton couldn't be downloaded. Check Wi-Fi.".into());
-    }
-    let line = log.lines().rev().find(|l| l.contains("CRITICAL:") || l.contains("ERROR:"))?;
-    let msg = line.split_once("CRITICAL:").or_else(|| line.split_once("ERROR:")).map(|(_, m)| m.trim()).unwrap_or(line.trim());
-    let mut msg: String = msg.chars().take(160).collect();
-    if msg.is_empty() {
-        return None;
-    }
-    if !msg.ends_with('.') {
-        msg.push('.');
-    }
-    Some(msg)
+    rare_library::umu::last_error(log)
 }
 
 /// The error for a run that ended before Battle.net was there.

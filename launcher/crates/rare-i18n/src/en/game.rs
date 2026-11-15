@@ -11,6 +11,8 @@ strings! {
     /// code is the exit-code suffix above, or empty
     fail_quick: "It closed before showing anything{code}. Try again, or check it in Desktop mode.",
     fail_closed: "It closed unexpectedly{code}.",
+    /// Launch-failure sheet, Epic and GOG games: where the store tool's, umu-run's and Proton's output is; path is a file path
+    fail_log: "Details: {path}",
     /// Button while a game's runtimes are installed (short: button)
     setting_up: "Setting up",
     /// Button: pause a download (short: button)

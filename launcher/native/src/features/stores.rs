@@ -221,20 +221,29 @@ pub fn job_line(j: &Job) -> String {
     parts.join(" \u{b7} ")
 }
 
-/// Fetches newer cloud saves before an Epic or GOG game starts (worker thread). Never blocks the
-/// start for long and never stops it.
-pub fn before_launch(id: &str, title: &str) {
+/// Before an Epic or GOG game starts (worker thread): its first-start setup when something is
+/// missing, then newer cloud saves (never blocks the start for long and never stops it). Err stops
+/// the start: the game can't run without its prefix and Proton.
+pub fn before_launch(id: &str, title: &str) -> Result<(), String> {
     if !is_store(id) {
-        return;
+        return Ok(());
     }
-    // GOG: the runtimes the game needs, once per prefix (a game from Heroic, or a setup that
-    // didn't finish after its install). The start waits for them.
-    if let Some((Store::Gog, gid)) = Store::of(id) {
-        let deps = rare_stores::redist::deps_of(gid);
-        if !rare_stores::redist::needed(gid, &deps).is_empty() {
-            super::bus::note(trf!(tr().features_more.stores_first_start, title = title), false);
-            if let Err(e) = jobs::run_now(id, title, Kind::Setup) {
-                log::warn!("setup before {id}: {e}");
+    // The prefix, a Proton and umu's runtime (rare-stores prep: a first umu-run downloads Proton
+    // and the runtime, minutes with no window, which inside the game's start read as "didn't
+    // start" and Try again stopped the download), and for GOG the runtimes the game lists, once
+    // per prefix. Both normally happen right after the install; a game from Heroic, or a setup
+    // that failed then, gets them here. The start waits; the step shows in Downloads.
+    let prep = rare_stores::prep::needed(id);
+    let redist = match Store::of(id) {
+        Some((Store::Gog, gid)) => !rare_stores::redist::needed(gid, &rare_stores::redist::deps_of(gid)).is_empty(),
+        _ => false,
+    };
+    if prep || redist {
+        super::bus::note(trf!(tr().features_more.stores_first_start, title = title), false);
+        if let Err(e) = jobs::run_now(id, title, Kind::Setup) {
+            log::warn!("setup before {id}: {e}");
+            if rare_stores::prep::needed(id) {
+                return Err(e);
             }
         }
     }
@@ -251,6 +260,7 @@ pub fn before_launch(id: &str, title: &str) {
         Err(_) => log::warn!("saves before {id}: still syncing, starting anyway"),
         Ok(Ok(())) => {}
     }
+    Ok(())
 }
 
 /// What ran last time (to see Epic and GOG games close).

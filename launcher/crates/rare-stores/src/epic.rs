@@ -45,17 +45,54 @@ pub fn account() -> Option<String> {
 
 const NET: Duration = Duration::from_secs(90);
 
+/// What legendary printed on the last sign-in (`~/.cache/rare/epic/sign-in.log`; never the code).
+pub fn sign_in_log() -> PathBuf {
+    rare_library::umu::log_path("epic:sign-in")
+}
+
+/// The sign-in error for the player: why, in words, and where legendary's output is.
+pub fn sign_in_error(tool_error: &str) -> String {
+    let e = tool_error.to_lowercase();
+    let why = if e.contains("corrective_action") || e.contains("continuationurl") {
+        "Epic wants something from you first (new terms or a security step). Sign in at epicgames.com in the Browser, do what it asks, then sign in here again.".to_string()
+    } else if e.contains("authorization_code_not_found") || e.contains("expired") || e.contains("invalid_grant") {
+        "The sign-in code expired before Rare could use it. Sign in again.".to_string()
+    } else if e.contains("connection") || e.contains("resolve") || e.contains("timed out") || e.contains("network") || e.contains("took too long") {
+        "No connection to Epic. Check Wi-Fi and try again.".to_string()
+    } else if e.contains("missing") {
+        tool_error.to_string()
+    } else {
+        let mut t: String = tool_error.chars().take(160).collect();
+        if t.is_empty() {
+            t = "legendary stopped with an error".into();
+        }
+        format!("Epic said: {}. Try again.", t.trim_end_matches('.'))
+    };
+    format!("Couldn't sign in to Epic Games. {why} Details: {}", rare_library::umu::show_path(&sign_in_log()))
+}
+
 /// Signs in with the code from the login page. Returns the account name.
 pub fn sign_in(code: &str) -> Result<String, String> {
     if code.is_empty() {
-        return Err("Epic didn't send a sign-in code. Try again.".into());
+        return Err("Epic didn't send a sign-in code. Sign in again, and finish on Epic's page.".into());
     }
-    tools::run(LEGENDARY, &["auth", "--code", code], &[], NET).map_err(|e| {
-        log::warn!("epic sign-in: {e}");
-        "Couldn't sign in to Epic Games. Try again.".to_string()
-    })?;
+    let r = tools::run_logged(LEGENDARY, &["auth", "--code", code], &[], NET, &sign_in_log());
     crate::accounts_changed();
-    account().ok_or_else(|| "Couldn't sign in to Epic Games. Try again.".into())
+    if let Some(name) = account().filter(|_| r.is_ok()) {
+        return Ok(name);
+    }
+    // legendary 0.21.1 exits 0 when Epic refuses the code; its last line is only "Login attempt
+    // failed, please see log for details", so the reason is read from the log.
+    let log = std::fs::read_to_string(sign_in_log()).unwrap_or_default();
+    let why = log_reason(&log).or_else(|| r.err()).unwrap_or_else(|| "legendary kept no account".into());
+    log::warn!("epic sign-in: {why}");
+    Err(sign_in_error(&why))
+}
+
+/// The most telling line of legendary's log: Epic's error code when it gave one, else the last error.
+pub fn log_reason(log: &str) -> Option<String> {
+    let line = log.lines().find(|l| l.contains("errorCode") || l.contains("open the following URL")).or_else(|| log.lines().rev().find(|l| l.contains("ERROR:") || l.contains("CRITICAL:")))?;
+    Some(tools::clean(line))
 }
 
 pub fn sign_out() -> Result<(), String> {
@@ -200,6 +237,21 @@ pub fn sync_saves(app: &str, down: bool, up: bool) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn sign_in_errors_say_why() {
+        // legendary 0.21.1 against Epic (2026-11-15) with a used or made-up code.
+        let e = super::sign_in_error("Login to EGS API failed with errorCode: errors.com.epicgames.account.oauth.authorization_code_not_found");
+        assert!(e.starts_with("Couldn't sign in to Epic Games. The sign-in code expired"), "{e}");
+        assert!(e.ends_with("rare/epic/sign-in.log"), "{e}");
+        let e = super::sign_in_error("Login to EGS API failed with errorCode: errors.com.epicgames.oauth.corrective_action_required");
+        assert!(e.contains("Sign in at epicgames.com in the Browser"), "{e}");
+        let log = "Rare: legendary auth --code <code>\n[cli] INFO: Testing existing login data if present...\n[EPCAPI] ERROR: Login to EGS API failed with errorCode: errors.com.epicgames.account.oauth.authorization_code_not_found\n[Core] ERROR: Logging in failed with InvalidCredentialsError('errors.com.epicgames.account.oauth.authorization_code_not_found'), please try again.\n[cli] ERROR: Login attempt failed, please see log for details.\n";
+        assert_eq!(super::log_reason(log).as_deref(), Some("Login to EGS API failed with errorCode: errors.com.epicgames.account.oauth.authorization_code_not_found"));
+        assert_eq!(super::log_reason("[cli] ERROR: Login attempt failed, please see log for details.\n").as_deref(), Some("Login attempt failed, please see log for details."));
+        let e = super::sign_in_error("Something new.");
+        assert!(e.contains("Epic said: Something new. Try again."), "{e}");
+    }
+
     #[test]
     fn reads_the_owned_list() {
         let json = r#"[{"app_name":"Fortnite","app_title":"Fortnite","metadata":{"keyImages":[{"type":"DieselGameBoxTall","url":"https://e/t.jpg"},{"type":"DieselGameBox","url":"https://e/w.jpg"}],"customAttributes":{"CloudSaveFolder":{"type":"STRING","value":"{AppData}/x"}}}},

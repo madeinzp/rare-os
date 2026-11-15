@@ -142,9 +142,118 @@ pub fn default_tool() -> Option<String> {
     valve(&crate::steam::registered_libraries(&root)).last().map(|(a, _, _)| format!("proton_{a}"))
 }
 
-/// PROTONPATH for a game: its pick, else the default; None leaves umu to its own default.
+/// Where umu-run keeps the Protons it downloads (its STEAM_COMPAT), whether or not Steam is installed.
+pub fn umu_compat_dir() -> PathBuf {
+    dirs::home_dir().unwrap_or_default().join(".local/share/Steam/compatibilitytools.d")
+}
+
+/// The numbers in a tool's folder name, for ordering ("UMU-Proton-10.0-4" -> [10, 0, 4]).
+fn version_key(name: &str) -> Vec<u64> {
+    name.split(|c: char| !c.is_ascii_digit()).filter(|s| !s.is_empty()).filter_map(|s| s.parse().ok()).collect()
+}
+
+/// The newest UMU-Proton (else GE-Proton) umu-run downloaded before, in `dir`.
+pub fn newest_umu_proton(dir: &Path) -> Option<PathBuf> {
+    let Ok(rd) = fs::read_dir(dir) else { return None };
+    let mut found: Vec<(u8, Vec<u64>, PathBuf)> = rd
+        .flatten()
+        .filter_map(|e| {
+            let n = e.file_name().to_string_lossy().into_owned();
+            let rank = if n.starts_with("UMU-Proton-") {
+                1
+            } else if n.starts_with("GE-Proton") {
+                0
+            } else {
+                return None;
+            };
+            e.path().join("proton").is_file().then(|| (rank, version_key(&n), e.path()))
+        })
+        .collect();
+    found.sort();
+    found.pop().map(|(_, _, p)| p)
+}
+
+/// PROTONPATH for a game: its pick, else Valve's newest, else the newest Proton umu-run already
+/// downloaded. None (nothing on the device yet) leaves umu to download UMU-Proton. With no
+/// PROTONPATH umu asks GitHub for a newer UMU-Proton on every start and downloads it first, so a
+/// game would show nothing for minutes whenever a new build came out.
 pub fn protonpath(id: &str) -> Option<PathBuf> {
-    choice(id).and_then(|t| tool_path(&t)).or_else(|| default_tool().and_then(|t| tool_path(&t)))
+    choice(id).and_then(|t| tool_path(&t)).or_else(|| default_tool().and_then(|t| tool_path(&t))).or_else(|| newest_umu_proton(&umu_compat_dir()))
+}
+
+fn umu_local() -> PathBuf {
+    dirs::data_dir().unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".local/share")).join("umu")
+}
+
+/// The Steam Runtime a Proton runs in, as umu-run names its folder: from the Proton's
+/// `toolmanifest.vdf` ("require_tool_appid": 1628350 sniper for Proton 8 to 10, 4183110 steamrt4
+/// for Proton 11).
+pub fn runtime_of(proton: &Path) -> Option<&'static str> {
+    let text = fs::read_to_string(proton.join("toolmanifest.vdf")).ok()?;
+    let line = text.lines().find(|l| l.contains("require_tool_appid"))?;
+    let appid: String = line.split('"').filter(|t| !t.is_empty() && t.chars().all(|c| c.is_ascii_digit())).collect();
+    match appid.as_str() {
+        "1391110" => Some("steamrt2"),
+        "1628350" => Some("steamrt3"),
+        "4183110" => Some("steamrt4"),
+        _ => None,
+    }
+}
+
+/// umu's Steam Runtime for this Proton is on the device (`~/.local/share/umu/<steamrtN>`, set up
+/// by umu-run's first start with it); with no Proton or manifest to go by, any runtime counts.
+pub fn runtime_ready(proton: Option<&Path>) -> bool {
+    let local = umu_local();
+    match proton.and_then(runtime_of) {
+        Some(rt) => local.join(rt).join("_v2-entry-point").is_file(),
+        None => fs::read_dir(&local).map(|rd| rd.flatten().any(|e| e.path().join("_v2-entry-point").is_file())).unwrap_or(false),
+    }
+}
+
+/// Everything a game's start needs before the game itself: its prefix, a Proton and umu's
+/// runtime for it. When one is missing, umu-run downloads Proton (about 490 MB) and the runtime
+/// and makes the prefix first, with no window for minutes; Rare does that as a setup step of its
+/// own (rare-stores prep) instead of inside the game's start.
+pub fn ready(id: &str) -> bool {
+    let Some(proton) = protonpath(id) else { return false };
+    wine_root(&prefix(id)).join("drive_c").is_dir() && runtime_ready(Some(&proton))
+}
+
+/// The log of a store game's setup and last start (`~/.cache/rare/<store>/<app>.log`): umu-run's,
+/// Proton's and the store tool's output.
+pub fn log_path(id: &str) -> PathBuf {
+    let (store, app) = id.split_once(':').unwrap_or(("games", id));
+    let app: String = app.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.' { c } else { '_' }).collect();
+    dirs::cache_dir().unwrap_or_else(|| dirs::home_dir().unwrap_or_default().join(".cache")).join("rare").join(store).join(format!("{app}.log"))
+}
+
+/// A log's last words worth showing: umu-run's (or legendary's, gogdl's) ERROR/CRITICAL line
+/// ("Could not download..."), without its logger prefix. umu-run with no Proton and no network
+/// says only that PROTONPATH is empty ("Possible reason: ... or network error"), so that one is
+/// put plainly.
+pub fn last_error(log: &str) -> Option<String> {
+    if log.contains("GE-Proton or UMU-Proton not found") || log.contains("Environment variable not set or is empty: PROTONPATH") {
+        return Some("Proton couldn't be downloaded. Check Wi-Fi.".into());
+    }
+    let line = log.lines().rev().find(|l| l.contains("CRITICAL:") || l.contains("ERROR:"))?;
+    let msg = line.split_once("CRITICAL:").or_else(|| line.split_once("ERROR:")).map(|(_, m)| m.trim()).unwrap_or(line.trim());
+    let mut msg: String = msg.chars().take(160).collect();
+    if msg.is_empty() {
+        return None;
+    }
+    if !msg.ends_with('.') && !msg.ends_with('!') {
+        msg.push('.');
+    }
+    Some(msg)
+}
+
+/// The log as a path to read out to the player: `~/...` under the home folder.
+pub fn show_path(p: &Path) -> String {
+    let home = dirs::home_dir().unwrap_or_default();
+    match p.strip_prefix(&home) {
+        Ok(rest) if !home.as_os_str().is_empty() => format!("~/{}", rest.display()),
+        _ => p.display().to_string(),
+    }
 }
 
 /// The environment umu-run needs for a game (prefix, Proton, store).
@@ -175,5 +284,42 @@ mod tests {
         fs::create_dir_all(t.path().join("b/drive_c")).unwrap();
         assert_eq!(wine_root(&t.path().join("a")), t.path().join("a/pfx"));
         assert_eq!(wine_root(&t.path().join("b")), t.path().join("b"));
+    }
+
+    #[test]
+    fn newest_umu_proton_wins() {
+        let t = tempfile::tempdir().unwrap();
+        for n in ["UMU-Proton-9.0-3", "UMU-Proton-10.0-4", "UMU-Proton-10.0-10", "GE-Proton11-12", "UMU-Proton-11.0-1"] {
+            fs::create_dir_all(t.path().join(n)).unwrap();
+            if n != "UMU-Proton-11.0-1" {
+                // Still downloading: no proton script yet.
+                fs::write(t.path().join(n).join("proton"), "").unwrap();
+            }
+        }
+        assert_eq!(newest_umu_proton(t.path()), Some(t.path().join("UMU-Proton-10.0-10")));
+        fs::remove_dir_all(t.path().join("UMU-Proton-10.0-10")).unwrap();
+        fs::remove_dir_all(t.path().join("UMU-Proton-10.0-4")).unwrap();
+        fs::remove_dir_all(t.path().join("UMU-Proton-9.0-3")).unwrap();
+        assert_eq!(newest_umu_proton(t.path()), Some(t.path().join("GE-Proton11-12")));
+        assert_eq!(newest_umu_proton(&t.path().join("none")), None);
+    }
+
+    #[test]
+    fn runtime_from_the_toolmanifest() {
+        let t = tempfile::tempdir().unwrap();
+        // UMU-Proton 10.0-4's and Valve's Proton Experimental 11's manifests.
+        fs::write(t.path().join("toolmanifest.vdf"), "\"manifest\"\n{\n  \"version\" \"2\"\n  \"commandline\" \"/proton %verb%\"\n  \"require_tool_appid\" \"1628350\"\n  \"use_sessions\" \"1\"\n}\n").unwrap();
+        assert_eq!(runtime_of(t.path()), Some("steamrt3"));
+        fs::write(t.path().join("toolmanifest.vdf"), "\"manifest\"\n{\n\t\"require_tool_appid\"\t\"4183110\"\n}\n").unwrap();
+        assert_eq!(runtime_of(t.path()), Some("steamrt4"));
+        assert_eq!(runtime_of(&t.path().join("none")), None);
+    }
+
+    #[test]
+    fn log_paths() {
+        let p = log_path("epic:Fortnite");
+        assert!(p.ends_with("rare/epic/Fortnite.log"), "{}", p.display());
+        assert!(log_path("gog:1207658924").ends_with("rare/gog/1207658924.log"));
+        assert!(log_path("epic:a/../b").ends_with("rare/epic/a_.._b.log"));
     }
 }

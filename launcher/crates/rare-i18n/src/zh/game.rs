@@ -7,6 +7,7 @@ translate! { game {
     fail_stuck: "游戏仍在运行，但 45 秒内没有显示任何画面。“重试”会关闭并重新启动游戏。",
     fail_quick: "游戏在显示画面前就关闭了{code}。请重试，或在桌面模式中检查。",
     fail_closed: "游戏意外关闭{code}。",
+    fail_log: "详细信息：{path}",
     setting_up: "正在设置",
     pause: "暂停",
     sync_saves: "同步存档",

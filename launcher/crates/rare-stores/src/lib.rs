@@ -15,6 +15,7 @@ pub mod drives;
 pub mod epic;
 pub mod gog;
 pub mod jobs;
+pub mod prep;
 pub mod progress;
 pub mod redist;
 pub mod saves;
@@ -84,6 +85,26 @@ pub fn login_code(store: Store, url: &str) -> Option<String> {
             q.split('&').find_map(|kv| kv.strip_prefix("code=")).map(|c| c.to_string())
         }
     }
+}
+
+/// Why a store game's last start failed, from its log (rare-library umu `log_path`), in words:
+/// legendary's refusals first, then umu-run's or Proton's last error. None when the log says nothing.
+pub fn launch_problem(id: &str) -> Option<String> {
+    let log = std::fs::read_to_string(rare_library::umu::log_path(id)).ok()?;
+    problem_in(&log)
+}
+
+fn problem_in(log: &str) -> Option<String> {
+    if log.contains("Login failed, cannot continue") || log.contains("No saved credentials") {
+        return Some("Epic needs you to sign in again: Settings > Accounts.".into());
+    }
+    if log.contains("is not currently installed") {
+        return Some("legendary doesn't have it as installed. Check files in the game's Manage row, or install it again.".into());
+    }
+    if log.contains("Game is out of date") {
+        return Some("It needs an update first. Update it from its page.".into());
+    }
+    rare_library::umu::last_error(log)
 }
 
 /// `~/.config/rare/stores`: the owned lists, the GOG user name, the cloud save marks.
@@ -222,5 +243,14 @@ mod tests {
         assert_eq!(login_code(Store::Epic, "https://rare.invalid/store-login?store=epic&code=abc"), Some("abc".into()));
         assert_eq!(login_code(Store::Epic, "https://rare.invalid/store-login?store=epic&code="), Some("".into()));
         assert_eq!(login_code(Store::Epic, "https://www.epicgames.com/id/login"), None);
+    }
+
+    #[test]
+    fn launch_problems_read_plainly() {
+        let log = "Rare: starting epic:Fortnite: legendary launch Fortnite\n[cli] INFO: Logging in...\n[cli] ERROR: Login failed, cannot continue!\n";
+        assert_eq!(problem_in(log).as_deref(), Some("Epic needs you to sign in again: Settings > Accounts."));
+        let log = "Rare: starting epic:X\n[umu.umu_runtime:400] CRITICAL: Could not reach repo.steampowered.com\n";
+        assert_eq!(problem_in(log).as_deref(), Some("Could not reach repo.steampowered.com."));
+        assert_eq!(problem_in("Rare: starting epic:X\nfsync: up and running.\n"), None);
     }
 }

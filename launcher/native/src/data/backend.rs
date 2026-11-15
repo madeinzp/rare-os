@@ -1369,7 +1369,7 @@ impl Backend for DeviceBackend {
             g.launch = rare_emu::roms::launch_spec(rom, &rare_emu::roms::home(), true)?;
         }
         // Epic and GOG: newer cloud saves first.
-        crate::features::stores::before_launch(id, &g.title);
+        crate::features::stores::before_launch(id, &g.title)?;
         // World of Warcraft: how to turn on its controller mode, until it is on.
         if let Some(hint) = rare_library::battlenet::gamepad_hint(id, g.install_dir.as_deref()) {
             crate::features::bus::note(hint, false);

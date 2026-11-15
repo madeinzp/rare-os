@@ -198,7 +198,7 @@ fn make_overlay(o: &Overlay) -> Box<dyn Page> {
         Overlay::Game(id) => Box::new(crate::screens::game::GameDetail::new(id.clone())),
         Overlay::Search => Box::new(crate::screens::search::Search::default()),
         Overlay::Qam => Box::new(crate::screens::quick::QuickSettings::default()),
-        Overlay::LaunchFail { .. } => Box::new(crate::screens::game::launch::LaunchFail),
+        Overlay::LaunchFail { .. } => Box::new(crate::screens::game::launch::LaunchFail::default()),
         Overlay::Other("signin") => Box::new(crate::screens::signin::SignInPage::default()),
         Overlay::Other("profile") => Box::new(crate::screens::sui::profile_page::ProfilePage::default()),
         // Share mounts its own scene page over this one (share_glue); anything else unknown stays blank.

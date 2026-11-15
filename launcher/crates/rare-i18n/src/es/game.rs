@@ -7,6 +7,7 @@ translate! { game {
     fail_stuck: "Sigue en ejecución, pero no apareció nada en 45 segundos. Reintentar lo cierra y lo vuelve a iniciar.",
     fail_quick: "Se cerró antes de mostrar nada{code}. Reintenta o revísalo en modo escritorio.",
     fail_closed: "Se cerró inesperadamente{code}.",
+    fail_log: "Detalles: {path}",
     setting_up: "Configurando",
     pause: "Pausar",
     sync_saves: "Sincronizar",
