@@ -1346,7 +1346,7 @@ impl App {
         let now = clock::secs();
         let cfg = crate::screens::settings::config::load();
         let ask = |st: &mut State, title: &str, placeholder: &str, secret: bool, key: String, value: Option<String>| {
-            st.osk = Some(OskReq { title: title.into(), value: value.unwrap_or_default(), placeholder: Some(placeholder.into()), secret, purpose: OskFor::Settings(key), status: None });
+            st.osk = Some(OskReq { secret, ..OskReq::new(title, value.unwrap_or_default(), Some(placeholder), OskFor::Settings(key)) });
         };
         let command = |me: &mut App, cmd: &str, arg: &str| {
             if let Some((_, screen, _)) = me.legacy_page.as_mut() {
@@ -1747,7 +1747,7 @@ impl App {
                         self.st.toast("Use at least 6 digits", Tone::Error, now);
                     } else {
                         *SEND_PIN_FIRST.lock().unwrap() = Some(v);
-                        self.st.osk = Some(OskReq { title: "Enter it again".into(), value: String::new(), placeholder: Some("The same digits".into()), secret: true, purpose: OskFor::Settings("send-pin-2".into()), status: None });
+                        self.st.osk = Some(OskReq { secret: true, ..OskReq::new("Enter it again", "", Some("The same digits"), OskFor::Settings("send-pin-2".into())) });
                     }
                 }
                 "send-pin-2" if !cancelled => {
@@ -2751,6 +2751,11 @@ impl App {
                 // and the keyboard landed off screen (invisible, with the focus in it).
                 let host = wrapper(&mut self.scene, layer::MODAL + 1);
                 self.osk = Some(Slot::new(t, host, Box::new(crate::screens::osk::Osk::default()), SCOPE_OSK));
+            }
+            // The pad thread repeats held X and A only while a keyboard is up (features/kbrepeat.rs).
+            crate::features::kbrepeat::LAUNCHER_OPEN.store(self.osk.is_some(), std::sync::atomic::Ordering::Relaxed);
+            if self.osk.is_none() && !crate::features::typekb::is_open() {
+                crate::features::kbrepeat::stop();
             }
         }
     }

@@ -24,6 +24,8 @@ pub mod gamebuttons;
 pub mod firstrun;
 pub mod gamemgmt;
 pub mod ingame;
+pub mod kblayout;
+pub mod kbrepeat;
 pub mod localapi;
 pub mod parental;
 pub mod parental_sheet;

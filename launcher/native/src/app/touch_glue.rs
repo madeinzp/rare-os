@@ -68,6 +68,8 @@ pub(super) struct Touch {
     logged: u32,
     /// This touch stopped a fling: it is not a tap.
     swallow: bool,
+    /// A finger is held on a keyboard key: it repeats until the finger lifts.
+    osk_hold: bool,
 }
 
 impl Touch {
@@ -77,7 +79,7 @@ impl Touch {
             .or_else(|| std::env::var_os("HOME").and_then(|h| std::fs::read_to_string(std::path::Path::new(&h).join(".config/rare/touch-rotate")).ok()))
             .and_then(|s| Rotation::parse(&s))
             .unwrap_or_default();
-        Touch { rec: Recognizer::new(Config::for_rem(rem)), drag: Drag::None, fling: None, rotation, mouse: (0.0, 0.0), mouse_down: false, last_touch: -10.0, logged: 0, swallow: false }
+        Touch { rec: Recognizer::new(Config::for_rem(rem)), drag: Drag::None, fling: None, rotation, mouse: (0.0, 0.0), mouse_down: false, last_touch: -10.0, logged: 0, swallow: false, osk_hold: false }
     }
 }
 
@@ -197,6 +199,9 @@ impl App {
         self.animate = true;
         crate::features::services::touch();
         self.touch_mode(true);
+        if matches!(phase, TouchPhase::Up | TouchPhase::Cancel) && std::mem::take(&mut self.touch.osk_hold) {
+            crate::features::kbrepeat::up(rare_input::Pad::A);
+        }
         let gs = match phase {
             TouchPhase::Down => self.touch.rec.down(id, x, y, now),
             TouchPhase::Move => self.touch.rec.moved(id, x, y, now),
@@ -241,6 +246,15 @@ impl App {
             }
             Gesture::Tap { .. } | Gesture::LongPress { .. } if std::mem::take(&mut self.touch.swallow) => {}
             Gesture::Tap { x, y } => self.tap(x, y, false, now),
+            // A finger held on a key of the keyboard types it, then again and again while it stays
+            // (Delete, a letter, Space), until it lifts; never Done, as a long press elsewhere.
+            Gesture::LongPress { x, y } if self.st.osk.is_some() && self.target() == Target::Views => {
+                if self.views_focus(x, y, now).is_some() {
+                    self.press(Btn::A);
+                    crate::features::kbrepeat::touch_hold();
+                    self.touch.osk_hold = true;
+                }
+            }
             Gesture::LongPress { x, y } => self.tap(x, y, true, now),
             Gesture::DragStart { x0, y0, x, y, horizontal } => self.drag_start(x0, y0, x, y, horizontal, now),
             Gesture::Drag { x, y } => self.drag_to(x, y, now),

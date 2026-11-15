@@ -170,11 +170,16 @@ pub struct OskReq {
     pub purpose: OskFor,
     /// A live line under the field the asking screen keeps current (Friends' "Found name.sui").
     pub status: Option<String>,
+    /// Web address and email fields get their own quick keys (. / : @ .com).
+    pub field: crate::features::kblayout::Field,
 }
 
 impl OskReq {
     pub fn new(title: impl Into<String>, value: impl Into<String>, placeholder: Option<&str>, purpose: OskFor) -> OskReq {
-        OskReq { title: title.into(), value: value.into(), placeholder: placeholder.map(String::from), secret: false, purpose, status: None }
+        use crate::features::kblayout::Field;
+        let title = title.into();
+        let field = if matches!(purpose, OskFor::WebGameUrl) { Field::Url } else { Field::guess(&title, placeholder) };
+        OskReq { title, value: value.into(), placeholder: placeholder.map(String::from), secret: false, purpose, status: None, field }
     }
 }
 

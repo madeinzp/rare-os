@@ -692,19 +692,40 @@ fn main() {
             // intercepts it over a game (App.tsx's guide / guidehold / qam). On the
             // device rare-overlay sees each press first (features/ingame.rs): the Rare button over
             // a game brings the Rare menu up over it, Quick its Quick settings.
-            use rare_native::features::ingame;
+            use rare_native::features::{ingame, kbrepeat, typekb};
             use rare_render::input::Input;
+            // Held X and A on Rare's keyboards repeat (features/kbrepeat.rs): to the keyboard over
+            // an app, or into the launcher's queue as a repeat.
+            {
+                let push = push.clone();
+                kbrepeat::start(move |p| {
+                    if !typekb::pad(p, true) {
+                        push(Btn::from_pad(p), true, clock::mono_ns());
+                    }
+                });
+            }
             rare_render::input::spawn_with(
                 // A web game in front takes the pad first (features/webgame.rs): what comes back
                 // is the launcher's (the Rare button, presses while a sheet is over the game).
                 move |i| match {
                     // Any pad event is activity (idle dim and sleep).
                     rare_native::features::services::touch();
-                    // Rare's keyboard over a game or app takes the pad first (features/typekb.rs).
-                    match &i {
-                        Input::Press(e) if rare_native::features::typekb::pad(e.pad, e.repeat) => None,
-                        _ => rare_native::features::webgame::pad_input(i),
+                    let fresh = match &i {
+                        Input::Press(e) if !e.repeat => Some(e.pad),
+                        _ => None,
+                    };
+                    if let Input::Release(p) = &i {
+                        kbrepeat::up(*p);
                     }
+                    // Rare's keyboard over a game or app takes the pad first (features/typekb.rs).
+                    let r = match &i {
+                        Input::Press(e) if typekb::pad(e.pad, e.repeat) => None,
+                        _ => rare_native::features::webgame::pad_input(i),
+                    };
+                    if let Some(p) = fresh {
+                        kbrepeat::down(p);
+                    }
+                    r
                 } {
                     None => {}
                     Some(Input::Press(e)) => {

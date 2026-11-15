@@ -15,45 +15,22 @@
 //!   pad input and every press comes to the launcher's pad thread, which hands it here first
 //!   (`pad`). Rare and Quick still do what they always do; the keyboard goes first.
 //!
-//! The d-pad moves (rows wrap sideways), A types, X deletes, Y is Shift, Menu is Enter, View is
-//! Tab, LB and RB move the cursor, B closes.
+//! The layout and the pad are the launcher keyboard's (features/kblayout.rs): letters, ?123 and
+//! #+= (LT, Y), A types, X deletes (held, again and again), Menu is Enter, plus View is Tab, LB and
+//! RB move the cursor, B closes. A browser's address bar opens it with web address keys (. / :
+//! and .com, `open_for`).
 
+use super::kblayout::{self, Field, Host, Out as KOut};
 use rare_input::Pad;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
-
-const LOWER: [[&str; 10]; 4] = [
-    ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"],
-    ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"],
-    ["a", "s", "d", "f", "g", "h", "j", "k", "l", "@"],
-    ["z", "x", "c", "v", "b", "n", "m", ".", "-", "_"],
-];
-const UPPER: [[&str; 10]; 4] = [
-    ["!", "?", "#", "$", "%", "&", "*", "(", ")", "/"],
-    ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
-    ["A", "S", "D", "F", "G", "H", "J", "K", "L", ":"],
-    ["Z", "X", "C", "V", "B", "N", "M", ",", "'", "+"],
-];
-/// The special row: what each key does, its label, its width.
-const SPECIAL: [(Special, &str, f32); 5] = [(Special::Shift, "Shift", 1.4), (Special::Space, "Space", 4.0), (Special::Delete, "Delete", 1.4), (Special::Enter, "Enter", 1.4), (Special::Close, "Close", 1.4)];
-const HINT: &str = "A Type    X Delete    Y Shift    Menu Enter    View Tab    LB RB Cursor    B Close";
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Special {
-    Shift,
-    Space,
-    Delete,
-    Enter,
-    Close,
-}
 
 // Linux input key codes.
 const KEY_BACKSPACE: u16 = 14;
 const KEY_TAB: u16 = 15;
 const KEY_ENTER: u16 = 28;
 const KEY_LEFTSHIFT: u16 = 42;
-const KEY_SPACE: u16 = 57;
 const KEY_LEFT: u16 = 105;
 const KEY_RIGHT: u16 = 106;
 
@@ -77,99 +54,61 @@ pub enum Out {
     Nothing,
 }
 
-/// The keyboard's state: where focus is and whether Shift is on.
+/// The keyboard over an app: the shared layout, with the app's own keys around it.
 #[derive(Clone, Debug, PartialEq)]
-pub struct Kb {
-    pub shift: bool,
-    /// [row, col]; row 4 is the special row.
-    pub pos: (usize, usize),
-}
+pub struct Kb(pub kblayout::Kb);
 
 impl Default for Kb {
     fn default() -> Self {
-        Kb { shift: false, pos: (1, 0) }
+        Kb::new(Field::Text)
+    }
+}
+
+fn taps(text: &str) -> Vec<Tap> {
+    text.chars().filter_map(key_of).map(|(k, s)| Tap::Key(k, s)).collect()
+}
+
+fn out(o: KOut) -> Out {
+    match o {
+        KOut::Nothing => Out::Nothing,
+        KOut::Redraw => Out::Redraw,
+        KOut::Type(t) => Out::Type(taps(t)),
+        KOut::Delete => Out::Type(vec![Tap::Key(KEY_BACKSPACE, false)]),
+        KOut::Done => Out::Type(vec![Tap::Key(KEY_ENTER, false)]),
+        // No clipboard over an app: the app's own paste (Ctrl+V) stays the app's.
+        KOut::Paste => Out::Nothing,
+        KOut::Close => Out::Close,
     }
 }
 
 impl Kb {
-    fn rows(&self) -> &'static [[&'static str; 10]; 4] {
-        if self.shift {
-            &UPPER
-        } else {
-            &LOWER
-        }
+    pub const fn new(field: Field) -> Kb {
+        Kb(kblayout::Kb::new(field, Host::Over))
     }
 
-    /// A button press (or a held direction's repeat).
+    /// A button press (or a held button's repeat).
     pub fn press(&mut self, p: Pad, repeat: bool) -> Out {
-        let (r, c) = self.pos;
-        let last = 4;
-        let n = SPECIAL.len();
-        let cols = |row: usize| if row == last { n } else { 10 };
-        let next = match p {
-            Pad::Up => Some(if r == 0 { (last, ((c as f32 / 9.0) * (n - 1) as f32).round() as usize) } else if r == last { (r - 1, ((c as f32 / (n - 1) as f32) * 9.0).round() as usize) } else { (r - 1, c) }),
-            Pad::Down => Some(if r + 1 == last { (last, ((c as f32 / 9.0) * (n - 1) as f32).round() as usize) } else if r == last { (0, ((c as f32 / (n - 1) as f32) * 9.0).round() as usize) } else { (r + 1, c) }),
-            Pad::Left => Some((r, (c + cols(r) - 1) % cols(r))),
-            Pad::Right => Some((r, (c + 1) % cols(r))),
-            _ => None,
-        };
-        if let Some(to) = next {
-            if to == self.pos {
-                return Out::Nothing;
-            }
-            self.pos = to;
-            return Out::Redraw;
-        }
-        // Only directions repeat; a held A or X types once.
-        if repeat {
-            return Out::Nothing;
-        }
         match p {
-            Pad::A => {
-                if r == last {
-                    self.special(SPECIAL[c.min(n - 1)].0)
-                } else {
-                    let ch = self.rows()[r][c];
-                    let taps: Vec<Tap> = ch.chars().filter_map(key_of).map(|(k, s)| Tap::Key(k, s)).collect();
-                    if self.shift && ch.chars().all(|c| c.is_ascii_uppercase()) {
-                        self.shift = false;
-                    }
-                    Out::Type(taps)
-                }
-            }
-            Pad::X => self.special(Special::Delete),
-            Pad::Y => self.special(Special::Shift),
-            Pad::Start => self.special(Special::Enter),
+            // The app's keys: Tab, the cursor, Close.
+            Pad::Select | Pad::Lb | Pad::Rb | Pad::B if repeat => Out::Nothing,
             Pad::Select => Out::Type(vec![Tap::Key(KEY_TAB, false)]),
             Pad::Lb => Out::Type(vec![Tap::Key(KEY_LEFT, false)]),
             Pad::Rb => Out::Type(vec![Tap::Key(KEY_RIGHT, false)]),
             Pad::B => Out::Close,
-            _ => Out::Nothing,
-        }
-    }
-
-    fn special(&mut self, s: Special) -> Out {
-        match s {
-            Special::Shift => {
-                self.shift = !self.shift;
-                Out::Redraw
-            }
-            Special::Space => Out::Type(vec![Tap::Key(KEY_SPACE, false)]),
-            Special::Delete => Out::Type(vec![Tap::Key(KEY_BACKSPACE, false)]),
-            Special::Enter => Out::Type(vec![Tap::Key(KEY_ENTER, false)]),
-            Special::Close => Out::Close,
+            _ => out(self.0.press(p, repeat)),
         }
     }
 
     /// What the HUD draws.
     pub fn view(&self) -> rare_system::hud::Keyboard {
+        let k = &self.0;
         rare_system::hud::Keyboard {
-            rows: self.rows().iter().map(|r| r.iter().map(|k| k.to_string()).collect()).collect(),
-            special: SPECIAL.iter().map(|(s, l, _)| if *s == Special::Shift && self.shift { "abc".to_string() } else { l.to_string() }).collect(),
-            weights: SPECIAL.iter().map(|(_, _, w)| *w).collect(),
-            focus: self.pos,
-            shift: self.shift,
-            hint: HINT.to_string(),
+            rows: k.rows().iter().map(|r| r.iter().map(|c| c.to_string()).collect()).collect(),
+            special: k.special().iter().map(|s| k.label(*s).to_string()).collect(),
+            weights: k.weights(),
+            focus: k.pos,
+            shift: k.lit(),
+            hint: k.hint(),
         }
     }
 }
@@ -208,7 +147,7 @@ struct Live {
     open: bool,
 }
 
-static LIVE: Mutex<Live> = Mutex::new(Live { kb: Kb { shift: false, pos: (1, 0) }, open: false });
+static LIVE: Mutex<Live> = Mutex::new(Live { kb: Kb::new(Field::Text), open: false });
 
 fn live() -> std::sync::MutexGuard<'static, Live> {
     LIVE.lock().unwrap_or_else(|e| e.into_inner())
@@ -290,18 +229,34 @@ pub fn is_open() -> bool {
 
 /// Brings the keyboard up over the app in front.
 pub fn open() {
+    open_for(Field::Text);
+}
+
+/// Brings the keyboard up for a field of this kind (a browser's address bar: `Field::Url`). Open
+/// already: it switches to that kind's keys.
+pub fn open_for(field: Field) {
     {
         let mut l = live();
         if l.open {
+            if l.kb.0.field != field {
+                l.kb = Kb::new(field);
+                rare_system::hud::keyboard(Some(l.kb.view()));
+            }
             return;
         }
         l.open = true;
-        l.kb = Kb::default();
+        l.kb = Kb::new(field);
         rare_system::hud::keyboard(Some(l.kb.view()));
     }
-    log::info!("keyboard: open over the app in front");
+    log::info!("keyboard: open over the app in front ({field:?})");
     rare_input::ip::capture(true);
     send(Job::Warm);
+}
+
+/// Whether a held `p` repeats on the keyboard over the app (features/kbrepeat.rs times it).
+pub fn repeats(p: Pad) -> bool {
+    let l = live();
+    l.open && l.kb.0.repeats(p)
 }
 
 /// Takes it down; the app gets the pad back.
@@ -356,6 +311,9 @@ pub fn tick() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::features::kblayout::{Layer, LOWER, MORE, SPECIAL_ROW, SYMBOLS, UPPER};
+
+    const KEY_SPACE: u16 = 57;
 
     #[test]
     fn types_moves_and_shifts() {
@@ -363,55 +321,106 @@ mod tests {
         // Starts on q.
         assert_eq!(k.press(Pad::A, false), Out::Type(vec![Tap::Key(16, false)]));
         assert_eq!(k.press(Pad::Right, false), Out::Redraw);
-        assert_eq!(k.pos, (1, 1));
+        assert_eq!(k.0.pos, (1, 1));
         // Y: Shift, then W is typed with Shift and Shift goes off again.
         assert_eq!(k.press(Pad::Y, false), Out::Redraw);
-        assert!(k.shift);
+        assert!(k.0.shift);
         assert_eq!(k.press(Pad::A, false), Out::Type(vec![Tap::Key(17, true)]));
-        assert!(!k.shift);
+        assert!(!k.0.shift);
         // Symbols stay shifted while Shift is on.
         k.press(Pad::Y, false);
-        k.pos = (0, 0);
+        k.0.pos = (0, 0);
         assert_eq!(k.press(Pad::A, false), Out::Type(vec![Tap::Key(2, true)]));
-        assert!(k.shift);
+        assert!(k.0.shift);
+    }
+
+    #[test]
+    fn symbols_type_with_the_right_keys() {
+        let mut k = Kb::default();
+        // LT: ?123. Row 1's first key is @ (Shift+2).
+        assert_eq!(k.press(Pad::Lt, false), Out::Redraw);
+        assert_eq!(k.0.layer, Layer::Symbols);
+        assert_eq!(k.press(Pad::A, false), Out::Type(vec![Tap::Key(3, true)]));
+        // Y: #+=, where ^ and ` are.
+        k.press(Pad::Y, false);
+        assert_eq!(k.0.layer, Layer::More);
+        k.0.pos = (1, 6);
+        assert_eq!(k.press(Pad::A, false), Out::Type(vec![Tap::Key(7, true)]));
+        k.0.pos = (2, 6);
+        assert_eq!(k.press(Pad::A, false), Out::Type(vec![Tap::Key(41, false)]));
+        // A web address field: .com is one key, five taps.
+        let mut u = Kb::new(Field::Url);
+        u.0.pos = (SPECIAL_ROW, 2);
+        assert_eq!(
+            u.press(Pad::A, false),
+            Out::Type(vec![
+                Tap::Key(52, false),
+                Tap::Key(46, false),
+                Tap::Key(24, false),
+                Tap::Key(50, false)
+            ])
+        );
     }
 
     #[test]
     fn buttons() {
         let mut k = Kb::default();
-        assert_eq!(k.press(Pad::X, false), Out::Type(vec![Tap::Key(KEY_BACKSPACE, false)]));
-        assert_eq!(k.press(Pad::Start, false), Out::Type(vec![Tap::Key(KEY_ENTER, false)]));
-        assert_eq!(k.press(Pad::Select, false), Out::Type(vec![Tap::Key(KEY_TAB, false)]));
-        assert_eq!(k.press(Pad::Lb, false), Out::Type(vec![Tap::Key(KEY_LEFT, false)]));
+        assert_eq!(
+            k.press(Pad::X, false),
+            Out::Type(vec![Tap::Key(KEY_BACKSPACE, false)])
+        );
+        assert_eq!(
+            k.press(Pad::Start, false),
+            Out::Type(vec![Tap::Key(KEY_ENTER, false)])
+        );
+        assert_eq!(
+            k.press(Pad::Select, false),
+            Out::Type(vec![Tap::Key(KEY_TAB, false)])
+        );
+        assert_eq!(
+            k.press(Pad::Lb, false),
+            Out::Type(vec![Tap::Key(KEY_LEFT, false)])
+        );
         assert_eq!(k.press(Pad::B, false), Out::Close);
-        // Held A does not type again; held directions move.
-        assert_eq!(k.press(Pad::A, true), Out::Nothing);
+        // Held X deletes again; held A types the letter again; held directions move.
+        assert_eq!(
+            k.press(Pad::X, true),
+            Out::Type(vec![Tap::Key(KEY_BACKSPACE, false)])
+        );
+        assert_eq!(k.press(Pad::A, true), Out::Type(vec![Tap::Key(16, false)]));
         assert_eq!(k.press(Pad::Down, true), Out::Redraw);
+        // A held B, View, LB or RB does nothing more.
+        for p in [Pad::B, Pad::Select, Pad::Lb, Pad::Rb] {
+            assert_eq!(k.press(p, true), Out::Nothing);
+        }
     }
 
     #[test]
     fn wraps_and_reaches_the_special_row() {
         let mut k = Kb::default();
         k.press(Pad::Left, false);
-        assert_eq!(k.pos, (1, 9));
+        assert_eq!(k.0.pos, (1, 9));
         k.press(Pad::Down, false);
         k.press(Pad::Down, false);
         k.press(Pad::Down, false);
-        assert_eq!(k.pos, (4, 4));
+        assert_eq!(k.0.pos, (4, 5));
         assert_eq!(k.press(Pad::A, false), Out::Close);
-        k.pos = (4, 1);
-        assert_eq!(k.press(Pad::A, false), Out::Type(vec![Tap::Key(KEY_SPACE, false)]));
+        k.0.pos = (4, 2);
+        assert_eq!(
+            k.press(Pad::A, false),
+            Out::Type(vec![Tap::Key(KEY_SPACE, false)])
+        );
         // Down from the special row wraps to the top, Up from the top to the special row.
         k.press(Pad::Down, false);
-        assert_eq!(k.pos.0, 0);
+        assert_eq!(k.0.pos.0, 0);
         k.press(Pad::Up, false);
-        assert_eq!(k.pos.0, 4);
+        assert_eq!(k.0.pos.0, 4);
     }
 
     #[test]
     fn every_key_can_be_typed() {
         let keys = device_keys();
-        for rows in [&LOWER, &UPPER] {
+        for rows in [&LOWER, &UPPER, &SYMBOLS, &MORE] {
             for row in rows.iter() {
                 for ch in row.iter().flat_map(|k| k.chars()) {
                     let (code, _) = key_of(ch).unwrap_or_else(|| panic!("no key for {ch}"));
@@ -419,9 +428,22 @@ mod tests {
                 }
             }
         }
-        for (s, _, _) in SPECIAL {
-            if let Out::Type(t) = Kb::default().special(s) {
-                assert!(t.iter().all(|&Tap::Key(c, _)| keys.contains(&c)));
+        for field in [Field::Text, Field::Url, Field::Email] {
+            let mut k = Kb::new(field);
+            for c in 0..k.0.special().len() {
+                k.0.pos = (SPECIAL_ROW, c);
+                k.0.layer = Layer::Letters;
+                if let Out::Type(t) = k.press(Pad::A, false) {
+                    assert!(
+                        !t.is_empty() && t.iter().all(|&Tap::Key(c, _)| keys.contains(&c)),
+                        "{field:?} {c}"
+                    );
+                }
+            }
+            for r in 0..4 {
+                for c in 0..10 {
+                    assert!(k.0.rows()[r][c].chars().all(|ch| key_of(ch).is_some()));
+                }
             }
         }
         assert!(keys.contains(&KEY_LEFTSHIFT));
@@ -432,11 +454,24 @@ mod tests {
         let mut k = Kb::default();
         let v = k.view();
         assert_eq!(v.rows.len(), 4);
-        assert_eq!(v.special.len(), SPECIAL.len());
+        assert_eq!(
+            v.special,
+            vec!["Shift", "?123", "Space", "Delete", "Enter", "Close"]
+        );
+        assert_eq!(v.weights.len(), v.special.len());
         assert_eq!(v.focus, (1, 0));
         k.press(Pad::Y, false);
         let v = k.view();
         assert_eq!(v.rows[1][0], "Q");
-        assert_eq!(v.special[0], "abc");
+        assert!(v.shift, "Shift drawn lit");
+        k.press(Pad::Y, false);
+        k.press(Pad::Lt, false);
+        let v = k.view();
+        assert_eq!(v.rows[1][0], "@");
+        assert_eq!(&v.special[..2], &["#+=".to_string(), "abc".to_string()]);
+        assert!(v.hint.contains("LT abc"));
+        let v = Kb::new(Field::Url).view();
+        assert_eq!(v.special[2], ".com");
+        assert_eq!(v.rows[3][9], "/");
     }
 }

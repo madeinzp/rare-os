@@ -71,7 +71,13 @@
     if (NAMED[k]) return [k, NAMED[k][0], NAMED[k][1]];
     if (/^[a-z]$/i.test(k)) return [k, "Key" + k.toUpperCase(), k.toUpperCase().charCodeAt(0)];
     if (/^[0-9]$/.test(k)) return [k, "Digit" + k, k.charCodeAt(0)];
-    const map = { ".": ["Period", 190], "-": ["Minus", 189], "_": ["Minus", 189], "@": ["Digit2", 50] };
+    // US layout: the key each symbol is on (shifted ones share it).
+    const map = {
+      ".": ["Period", 190], ">": ["Period", 190], ",": ["Comma", 188], "<": ["Comma", 188], "-": ["Minus", 189], "_": ["Minus", 189], "=": ["Equal", 187], "+": ["Equal", 187],
+      "/": ["Slash", 191], "?": ["Slash", 191], ";": ["Semicolon", 186], ":": ["Semicolon", 186], "'": ["Quote", 222], '"': ["Quote", 222], "[": ["BracketLeft", 219], "{": ["BracketLeft", 219],
+      "]": ["BracketRight", 221], "}": ["BracketRight", 221], "\\": ["Backslash", 220], "|": ["Backslash", 220], "`": ["Backquote", 192], "~": ["Backquote", 192],
+      "!": ["Digit1", 49], "@": ["Digit2", 50], "#": ["Digit3", 51], "$": ["Digit4", 52], "%": ["Digit5", 53], "^": ["Digit6", 54], "&": ["Digit7", 55], "*": ["Digit8", 56], "(": ["Digit9", 57], ")": ["Digit0", 48],
+    };
     const m = map[k] || ["Unidentified", 0];
     return [k, m[0], m[1]];
   };
@@ -259,15 +265,62 @@
   }
 
   // ---------- on-screen keyboard ----------
-  const ROWS = ["1234567890", "qwertyuiop", "asdfghjkl@", "zxcvbnm.-_"].map((r) => r.split(""));
-  const SPECIAL = ["shift", "space", "del", "done"];
-  const osk = { el: null, input: null, r: 1, c: 0, shift: false, open: false };
+  // The launcher keyboard's layout (launcher/native features/kblayout.rs; a test there keeps this
+  // equal): letters (Shift: capitals, and in plain fields the number row's symbols), ?123 and #+=
+  // (every ASCII symbol between them), and in web address and email fields . - / : or @ . - _ on
+  // the letters with a .com key. Pad: the d-pad moves (rows wrap), A types, X deletes, Y is Shift
+  // (#+= / 123 on the symbol pages), LT switches letters and symbols, Menu finishes, B closes; held
+  // X and a held A on a key that types repeat, as does a finger held on a key.
+  const KB = {"lower":["1234567890","qwertyuiop","asdfghjkl@","zxcvbnm.-_"],"upper":["!?#$%&*()/","QWERTYUIOP","ASDFGHJKL:","ZXCVBNM,'+"],"sym":["1234567890","@#$_&-+()/","*\"':;!?,.=","%~<>[]{}\\|"],"more":["1234567890","[]{}#%^*+=","_\\|~<>`$&@",".,?!'\"-/:;"],"url":":.-/","com":".com"};
+  const GRID = { lower: KB.lower.map((r) => Array.from(r)), upper: KB.upper.map((r) => Array.from(r)), sym: KB.sym.map((r) => Array.from(r)), more: KB.more.map((r) => Array.from(r)) };
+  const osk = { el: null, input: null, r: 1, c: 0, shift: false, layer: "abc", field: "text", open: false, hold: null };
+  const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  /** What a field is for: web address and email fields get their own keys. */
+  const fieldOf = (i) => {
+    if (!i || !i.getAttribute) return "text";
+    const t = (i.getAttribute("type") || "").toLowerCase(), m = (i.getAttribute("inputmode") || "").toLowerCase(), ac = (i.getAttribute("autocomplete") || "").toLowerCase();
+    if (t === "url" || m === "url" || ac === "url") return "url";
+    if (t === "email" || m === "email" || ac.includes("email")) return "email";
+    return "text";
+  };
+  const oskRows = () => {
+    if (osk.layer === "sym") return GRID.sym;
+    if (osk.layer === "more") return GRID.more;
+    const text = osk.field === "text";
+    let g = (osk.shift && text ? GRID.upper : GRID.lower).map((r) => r.slice());
+    if (osk.shift && !text) g = g.map((r, ri) => (ri === 0 ? r : r.map((k) => (/^[a-z]$/.test(k) ? k.toUpperCase() : k))));
+    if (osk.field === "url") [g[2][9], g[3][7], g[3][8], g[3][9]] = Array.from(KB.url);
+    return g;
+  };
+  const oskSpecial = () => ["shift", "layer", ...(osk.field !== "text" ? ["com"] : []), "space", "del", "done"];
+  const oskWeights = () => oskSpecial().map((k) => (k === "space" ? (osk.field !== "text" ? 3 : 4) : 1.4));
+  const oskLabel = (k) =>
+    ({ shift: { abc: "Shift", sym: "#+=", more: "123" }[osk.layer], layer: osk.layer === "abc" ? "?123" : "abc", com: KB.com, space: "Space", del: "Delete", done: osk.input ? "Done" : "Enter" })[k];
+  const OSK_BUTTON = { shift: "Y", layer: "LT", del: "X", done: "Menu" };
+  const oskKey = (r, c) => (r === 4 ? oskSpecial()[Math.min(c, oskSpecial().length - 1)] : { ch: oskRows()[r][c] });
+  // Up and down line up with the keys' centres (Space is wide).
+  const toSpecial = (c) => {
+    const w = oskWeights(), total = w.reduce((a, b) => a + b, 0), x = ((c + 0.5) / 10) * total;
+    let acc = 0;
+    for (let i = 0; i < w.length; i++) if (x < (acc += w[i])) return i;
+    return w.length - 1;
+  };
+  const toCol = (i) => {
+    const w = oskWeights(), total = w.reduce((a, b) => a + b, 0);
+    const centre = w.slice(0, i).reduce((a, b) => a + b, 0) + w[i] / 2;
+    return Math.min(9, Math.floor((centre / total) * 10));
+  };
   const oskRender = () => {
     if (!osk.el) return;
-    const rows = ROWS.map((row, ri) => row.map((k, ci) => `<b class="${osk.r === ri && osk.c === ci ? "on" : ""}">${osk.shift ? k.toUpperCase() : k}</b>`).join("")).map((h) => `<div>${h}</div>`);
-    const label = { del: "Del", done: osk.input ? "Done" : "Enter", shift: "Shift", space: "Space" };
-    rows.push(`<div>${SPECIAL.map((k, ci) => `<b class="${osk.r === ROWS.length && osk.c === ci ? "on" : ""} w">${label[k]}</b>`).join("")}</div>`);
-    rows.push(`<p>A type · X delete · Y shift · Menu ${osk.input ? "done" : "enter"} · B close</p>`);
+    const lit = (osk.layer === "abc" && osk.shift) || osk.layer === "more";
+    const rows = oskRows().map((row, ri) => `<div>${row.map((k, ci) => `<b data-k="${ri},${ci}" class="${osk.r === ri && osk.c === ci ? "on" : ""}">${esc(k)}</b>`).join("")}</div>`);
+    const w = oskWeights();
+    rows.push(
+      `<div>${oskSpecial()
+        .map((k, ci) => `<b data-k="4,${ci}" style="flex:${w[ci]}" class="${osk.r === 4 && osk.c === ci ? "on" : ""} w${k === "shift" && lit ? " lit" : ""}${k === "done" ? " d" : ""}">${OSK_BUTTON[k] ? `<i>${OSK_BUTTON[k]}</i>` : ""}${esc(oskLabel(k))}</b>`)
+        .join("")}</div>`,
+    );
+    rows.push(`<p><i>A</i> Type&emsp;<i>B</i> Close</p>`);
     osk.el.innerHTML = rows.join("");
   };
   /** Opens the keyboard. With an input it edits that field; without one it sends key presses. */
@@ -277,24 +330,43 @@
       osk.el.id = "__rare_osk";
       const st = document.createElement("style");
       st.textContent =
-        "#__rare_osk{position:fixed;left:0;right:0;bottom:0;z-index:2147483647;background:#191523;padding:12px 24px 14px;font:500 18px Inter,system-ui,sans-serif;color:#f2f2f3;box-shadow:0 -10px 40px #0008}#__rare_osk div{display:flex;gap:6px;margin-top:6px}#__rare_osk b{flex:1;height:44px;display:flex;align-items:center;justify-content:center;border-radius:9px;background:#231e2f;font-weight:500}#__rare_osk b.w{flex:2}#__rare_osk b.on{background:#f2f2f3;color:#100c18}#__rare_osk p{margin:10px 0 0;text-align:center;font-size:13px;color:#a09cab}";
+        "#__rare_osk{position:fixed;left:0;right:0;bottom:0;z-index:2147483647;background:#191523;padding:12px 24px 14px;font:500 18px Inter,system-ui,sans-serif;color:#f2f2f3;box-shadow:0 -10px 40px #0008;user-select:none;-webkit-user-select:none;touch-action:none}#__rare_osk div{display:flex;gap:6px;margin-top:6px}#__rare_osk b{flex:1;min-width:0;height:44px;display:flex;align-items:center;justify-content:center;gap:6px;border-radius:9px;background:#231e2f;font-weight:500;white-space:nowrap}#__rare_osk b.w{background:#2a2438;font-size:16px}#__rare_osk b.lit{background:#4a4458}#__rare_osk b.d{background:#3d5afe}#__rare_osk b.on{background:#f2f2f3;color:#100c18}#__rare_osk i{font:700 10px Inter,system-ui,sans-serif;font-style:normal;padding:2px 5px;border-radius:5px;background:#f2f2f322}#__rare_osk b.on i{background:#100c1822}#__rare_osk p{margin:10px 0 0;text-align:right;font-size:13px;color:#a09cab}";
       document.documentElement.appendChild(st);
       document.documentElement.appendChild(osk.el);
+      // Touch: a key types on press (the field keeps focus), and again while held.
+      osk.el.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        const b = e.target.closest && e.target.closest("b[data-k]");
+        if (!b) return;
+        const [r, c] = b.dataset.k.split(",").map(Number);
+        osk.r = r;
+        osk.c = c;
+        oskHold("a");
+      });
+      for (const t of ["pointerup", "pointercancel", "pointerleave"]) osk.el.addEventListener(t, () => oskRelease("a"));
     }
     osk.input = input && isText(input) ? input : null;
+    osk.field = fieldOf(osk.input);
+    osk.layer = "abc";
+    osk.shift = false;
+    osk.r = 1;
+    osk.c = 0;
     osk.open = true;
     osk.el.style.display = "block";
     oskRender();
   };
   const oskHide = () => {
     osk.open = false;
+    oskRelease();
     if (osk.el) osk.el.style.display = "none";
   };
   const oskType = (t) => {
     const i = osk.input;
     if (!i) {
       // Key mode: the page listens to the keyboard (word games).
-      tapKey(t === null ? "Backspace" : t === "\n" ? "Enter" : t, document.activeElement && document.activeElement !== document.body ? document.activeElement : document.body);
+      const to = document.activeElement && document.activeElement !== document.body ? document.activeElement : document.body;
+      if (t === null || t === "\n") return tapKey(t === null ? "Backspace" : "Enter", to);
+      for (const ch of t) tapKey(ch, to);
       return;
     }
     if (t === "\n") {
@@ -311,31 +383,70 @@
     setter ? setter.call(i, v) : (i.value = v);
     i.dispatchEvent(new Event("input", { bubbles: true }));
   };
-  const oskPad = (b) => {
-    const last = ROWS.length;
-    const cols = osk.r === last ? SPECIAL.length : 10;
-    if (b === "up") osk.r = Math.max(0, osk.r - 1);
-    else if (b === "down") osk.r = Math.min(last, osk.r + 1);
-    else if (b === "left") osk.c = (osk.c - 1 + cols) % cols;
-    else if (b === "right") osk.c = (osk.c + 1) % cols;
-    else if (b === "x") oskType(null);
-    else if (b === "y") osk.shift = !osk.shift;
-    else if (b === "b") oskHide();
-    else if (b === "start") osk.input ? oskType("\n") : (oskType("\n"), oskHide());
-    else if (b === "a") {
-      if (osk.r === last) {
-        const k = SPECIAL[osk.c];
-        if (k === "shift") osk.shift = !osk.shift;
-        else if (k === "space") oskType(" ");
-        else if (k === "del") oskType(null);
-        else osk.input ? oskType("\n") : (oskType("\n"), oskHide());
-      } else {
-        const k = ROWS[osk.r][osk.c];
-        oskType(osk.shift ? k.toUpperCase() : k);
-      }
+  /** A key pressed (A on it, or a finger). `repeat`: held; only keys that type repeat. */
+  const oskHit = (k, repeat) => {
+    if (k && k.ch !== undefined) {
+      if (osk.layer === "abc" && osk.shift && /^[A-Z]$/.test(k.ch)) osk.shift = false;
+      return oskType(k.ch);
     }
-    osk.c = Math.min(osk.c, (osk.r === last ? SPECIAL.length : 10) - 1);
+    if (repeat && !["space", "del"].includes(k)) return;
+    if (k === "shift") {
+      if (osk.layer === "abc") osk.shift = !osk.shift;
+      else osk.layer = osk.layer === "sym" ? "more" : "sym";
+    } else if (k === "layer") {
+      osk.layer = osk.layer === "abc" ? "sym" : "abc";
+      osk.shift = false;
+    } else if (k === "com") oskType(KB.com);
+    else if (k === "space") oskType(" ");
+    else if (k === "del") oskType(null);
+    else if (k === "done") osk.input ? oskType("\n") : (oskType("\n"), oskHide());
+  };
+  // Any other button ends a hold first (focus may move under a held A).
+  const oskOther = (b) => {
+    oskRelease();
+    oskPad(b, false);
+  };
+  const oskRepeats = (b) => {
+    if (b === "x") return true;
+    if (b !== "a") return false;
+    const k = oskKey(osk.r, osk.c);
+    return typeof k === "object" || k === "space" || k === "del";
+  };
+  const oskPad = (b, repeat) => {
+    const last = 4, n = oskSpecial().length;
+    const cols = (row) => (row === last ? n : 10);
+    const at = [osk.r, osk.c];
+    if (b === "up") [osk.r, osk.c] = osk.r === 0 ? [last, toSpecial(osk.c)] : osk.r === last ? [last - 1, toCol(osk.c)] : [osk.r - 1, osk.c];
+    else if (b === "down") [osk.r, osk.c] = osk.r + 1 === last ? [last, toSpecial(osk.c)] : osk.r === last ? [0, toCol(osk.c)] : [osk.r + 1, osk.c];
+    else if (b === "left") osk.c = (osk.c - 1 + cols(osk.r)) % cols(osk.r);
+    else if (b === "right") osk.c = (osk.c + 1) % cols(osk.r);
+    else if (repeat && !oskRepeats(b)) return;
+    else if (b === "a") oskHit(oskKey(osk.r, osk.c), repeat);
+    else if (b === "x") oskType(null);
+    else if (b === "y") oskHit("shift");
+    else if (b === "lt") oskHit("layer");
+    else if (b === "b") oskHide();
+    else if (b === "start") oskHit("done");
+    if (at[0] !== osk.r || at[1] !== osk.c) osk.c = Math.min(osk.c, cols(osk.r) - 1);
     if (osk.open) oskRender();
+  };
+  // Held X, or A (a finger) on a key that types: again after 420 ms, then every 70 ms, for 8 s at most.
+  const oskHold = (b) => {
+    oskRelease();
+    oskPad(b, false);
+    if (!osk.open || !oskRepeats(b)) return;
+    const since = performance.now();
+    osk.hold = { b, t: setTimeout(function again() {
+      if (!osk.open || !osk.hold || performance.now() - since > 8000) return oskRelease();
+      oskPad(b, true);
+      osk.hold.t = setTimeout(again, 70);
+    }, 420) };
+  };
+  const oskRelease = (b) => {
+    if (osk.hold && (!b || osk.hold.b === b)) {
+      clearTimeout(osk.hold.t);
+      osk.hold = null;
+    }
   };
   const isText = (t) => t && ((t.tagName === "INPUT" && !["checkbox", "radio", "button", "submit", "range", "color", "file", "hidden", "image", "reset"].includes(t.type)) || t.tagName === "TEXTAREA" || t.isContentEditable);
   // Only real, visible fields: many games keep a hidden input focused to capture keys.
@@ -352,7 +463,9 @@
   const POINTER_CLICK = new Set(P.pointer ? ["rb"] : []);
   window.__rarePad = (b, down) => {
     if (osk.open) {
-      if (down) oskPad(b);
+      if (!down) oskRelease(b);
+      else if (b === "a" || b === "x") oskHold(b);
+      else oskOther(b);
       return;
     }
     // The page has the real controller; A on a text field still brings the keyboard.
