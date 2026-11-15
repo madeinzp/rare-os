@@ -152,9 +152,22 @@ pub fn top_traders(rows: &[LeaderRow], extras: Option<&BoardExtras>, sort: Sort,
     out
 }
 
-/// Style tags worth a word in a row (the flagged ones never reach a row).
+/// Style tags worth a word in a row (the flagged ones never reach a row), in the UI language: the
+/// known keys have their own words, any other shows the leaderboard's label.
 pub fn style_words(tags: &[BoardTag]) -> Vec<String> {
-    tags.iter().filter(|t| !FLAGGED.contains(&t.key.as_str())).map(|t| t.label.clone()).collect()
+    tags.iter().filter(|t| !FLAGGED.contains(&t.key.as_str())).map(|t| tag_word(t).to_string()).collect()
+}
+
+fn tag_word(t: &BoardTag) -> &str {
+    let s = &tr().trade;
+    match t.key.as_str() {
+        "holder" => s.tag_holder,
+        "swing" => s.tag_swing,
+        "early" => s.tag_early,
+        "scalper" => s.tag_scalper,
+        "sniper" => s.tag_sniper,
+        _ => &t.label,
+    }
 }
 
 /// The name a trader goes by: their username, a display name, else a short address.
@@ -346,6 +359,13 @@ mod tests {
 
     fn lr(addr: &str, pnl: f64, trades: f64, vol: f64, win: Option<f64>) -> LeaderRow {
         LeaderRow { user: UserChip { address: addr.into(), ..Default::default() }, pnl_usd: pnl, trades, volume_usd: vol, win_rate: win, ..Default::default() }
+    }
+
+    #[test]
+    fn style_words_name_known_tags_and_keep_others() {
+        let tag = |k: &str, l: &str| BoardTag { key: k.into(), label: l.into(), reason: String::new() };
+        let w = style_words(&[tag("early", "Early buyer"), tag("bot", "Bot"), tag("whale", "Whale")]);
+        assert_eq!(w, ["Early buyer", "Whale"]);
     }
 
     #[test]

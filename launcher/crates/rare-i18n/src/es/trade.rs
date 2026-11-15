@@ -15,6 +15,11 @@ translate! { trade {
     hops: "{n} salto|{n} saltos",
     hops_via: "{n} salto vía {venues}|{n} saltos vía {venues}",
     linked_wallets: "Vinculado a {n} billetera|Vinculado a {n} billeteras",
+    tag_holder: "Holder",
+    tag_swing: "Swing trader",
+    tag_early: "Early buyer",
+    tag_scalper: "Scalper",
+    tag_sniper: "Sniper",
     holders_n: "{n} titular|{n} titulares",
 
     switch_to: "Cambiar a {label}",
