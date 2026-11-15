@@ -105,12 +105,18 @@ pub fn fixture(name: &str, cx: &mut Cx, now: f64) -> Option<Box<dyn Screen>> {
             installing(&a, "netflix", None, Some("Couldn't install Google Chrome. Check your Wi-Fi and try again."));
             sheet(cx, a, "netflix")
         }
-        // Battle.net: Get (Rare installs it), installing (the setup's own window has the screen),
-        // and installed.
+        // Battle.net: Get (Rare installs it), installing (Rare's bar until the setup's own window
+        // has the screen), an install that ended with an error, and installed.
         "apps-sheet-battlenet" => sheet(cx, demo(&OWNER, &[]), "battlenet"),
         "apps-sheet-battlenet-install" => {
             let a = demo(&OWNER, &[]);
             installing(&a, "battlenet", None, None);
+            sheet(cx, a, "battlenet")
+        }
+        "apps-sheet-battlenet-error" => {
+            let a = demo(&OWNER, &[]);
+            let e = "Battle.net's installer closed before it finished. Try again. Details: ~/.cache/rare/battlenet/install.log";
+            installing(&a, "battlenet", None, Some(e));
             sheet(cx, a, "battlenet")
         }
         "apps-sheet-battlenet-ready" => sheet(cx, demo(&[OWNER[0], OWNER[1], catalog::BATTLENET], &[]), "battlenet"),

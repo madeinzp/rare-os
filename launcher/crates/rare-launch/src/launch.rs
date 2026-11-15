@@ -107,6 +107,12 @@ pub struct Runner {
     waiting: Arc<Mutex<HashMap<String, (Instant, bool)>>>,
     /// Steam games whose start waits for the player in Steam's UI, with what Steam asks.
     asks: Arc<Mutex<HashMap<String, &'static str>>>,
+    /// Runs whose owner says how they went (Get Battle.net's installer, apps/battlenet.rs): no
+    /// "didn't start" after NO_WINDOW and no failed start when they end. A first umu-run
+    /// downloads Proton and its runtime before any window shows, which took 77 s on a wired
+    /// link; the "didn't start" sheet's Try again then closed the installer and tried to open
+    /// Battle.net, which wasn't there yet, every time.
+    owned: Arc<Mutex<std::collections::HashSet<String>>>,
 }
 
 fn detached(cmd: &mut Command) -> &mut Command {
@@ -704,7 +710,21 @@ impl Runner {
     /// A program started elsewhere (apps), tracked like a game: its scope's cgroup, or its tree.
     pub fn track_child(&self, id: &str, child: Child, unit: Option<String>) {
         self.quitting.lock().unwrap().remove(id);
+        self.owned.lock().unwrap().remove(id);
         self.inner.lock().unwrap().insert(id.to_string(), Handle::Child { child, unit, cgroup: None, started: Instant::now(), exit: None });
+    }
+
+    /// `track_child` for a run whose owner reports how it went (see `owned`): the Running list
+    /// has it with Resume and Close, but the runner never says it didn't start.
+    pub fn track_child_owned(&self, id: &str, child: Child, unit: Option<String>) {
+        self.track_child(id, child, unit);
+        self.owned.lock().unwrap().insert(id.to_string());
+    }
+
+    /// Whether gamescope has listed a window of this run. Always true outside Rare OS game mode,
+    /// where nothing is known about windows.
+    pub fn has_window(&self, id: &str) -> bool {
+        !windows_known() || self.shown.lock().unwrap().contains_key(id)
     }
 
     /// Steam's own UI, open from now until the Steam client quits. Opening it again keeps the
@@ -1017,8 +1037,9 @@ impl Runner {
                         let shown = me.shown.lock().unwrap();
                         let mut waiting = me.waiting.lock().unwrap();
                         let ready = steam_ready();
+                        let owned = me.owned.lock().unwrap();
                         for (id, h) in map.iter() {
-                            if shown.contains_key(id) || matches!(h, Handle::Window { .. }) {
+                            if shown.contains_key(id) || matches!(h, Handle::Window { .. }) || owned.contains(id) {
                                 continue;
                             }
                             let steam_wait = matches!(h, Handle::Steam { .. } | Handle::SteamUi { .. });
@@ -1061,8 +1082,9 @@ impl Runner {
                             let shown_for = me.shown.lock().unwrap().remove(id.as_str()).map(|t| t.elapsed());
                             let stuck_said = me.waiting.lock().unwrap().remove(id.as_str()).is_some_and(|(_, said)| said);
                             me.asks.lock().unwrap().remove(id.as_str());
+                            let owned = me.owned.lock().unwrap().remove(id.as_str());
                             crate::apps::front::steam_ask(id, false);
-                            if let Some((reason, code)) = failed_start(kind, seen, alive_for, code, shown_for, windows_known()).filter(|_| !quit && !stuck_said) {
+                            if let Some((reason, code)) = failed_start(kind, seen, alive_for, code, shown_for, windows_known()).filter(|_| !quit && !stuck_said && !owned) {
                                 failed.push(LaunchFailed { id: id.clone(), reason, code });
                             }
                         }

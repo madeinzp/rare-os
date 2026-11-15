@@ -201,8 +201,11 @@ impl Apps {
     pub fn install(&mut self, app: &AppEntry) {
         self.installing.insert(app.id.clone(), InstallState { progress: None, error: None });
         self.touch();
-        if self.host.install(app).is_err() {
-            let m = failed(&format!("Couldn't install {}.", app.name), "Check your Wi-Fi and try again.");
+        if let Err(e) = self.host.install(app) {
+            // Its own reason when it gives one (Battle.net without umu-run), else the usual step.
+            let e = e.trim().trim_end_matches('.');
+            let next = if e.is_empty() { "Check your Wi-Fi and try again.".to_string() } else { format!("{e}.") };
+            let m = failed(&format!("Couldn't install {}.", app.name), &next);
             self.finish(&app.id, Some(m));
         }
     }
@@ -299,6 +302,7 @@ pub struct MockHost {
     pub games: Vec<GameRef>,
     pub streams: Vec<(String, StreamRef, String)>,
     pub fail_native: bool,
+    pub fail_install: Option<String>,
 }
 
 impl MockHost {
@@ -322,7 +326,7 @@ impl Host for MockHost {
     }
     fn install(&mut self, app: &AppEntry) -> Result<(), String> {
         self.log(format!("install {}", app.id));
-        Ok(())
+        self.fail_install.clone().map_or(Ok(()), Err)
     }
     fn toast(&mut self, msg: &str, error: bool) {
         self.toasts.borrow_mut().push((msg.to_string(), error));
@@ -444,6 +448,24 @@ mod tests {
         assert!(!a.busy("discord"));
         assert!(a.installing["discord"].error.is_some());
         assert_eq!(toasts.borrow().last().unwrap(), &("Couldn't install Discord. Check your Wi-Fi and try again.".to_string(), true));
+    }
+
+    #[test]
+    fn an_install_that_cannot_start_says_why() {
+        let host = MockHost { fail_install: Some("Battle.net needs umu-run (Proton), and Rare couldn't find it.".into()), ..Default::default() };
+        let toasts = host.toasts.clone();
+        let mut a = Apps::new(Box::new(host));
+        a.install(app("battlenet"));
+        let want = "Couldn't install Battle.net. Battle.net needs umu-run (Proton), and Rare couldn't find it.";
+        assert_eq!(a.installing["battlenet"].error.as_deref(), Some(want));
+        assert_eq!(toasts.borrow().last().unwrap(), &(want.to_string(), true));
+        assert!(!a.busy("battlenet"));
+        // No reason given: the usual next step.
+        let host = MockHost { fail_install: Some(String::new()), ..Default::default() };
+        let toasts = host.toasts.clone();
+        let mut a = Apps::new(Box::new(host));
+        a.install(app("discord"));
+        assert_eq!(toasts.borrow().last().unwrap().0, "Couldn't install Discord. Check your Wi-Fi and try again.");
     }
 
     #[test]

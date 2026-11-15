@@ -232,6 +232,11 @@ impl AppSheet {
                 let pct = i.progress.map(|p| format!("{}%", (p * 100.0).round() as i32)).unwrap_or_default();
                 let w = cx.scene.add(rowb, s().row().justify_end().w(3.0 * r).no_shrink_().done(), Node::default());
                 cx.scene.add_text(cx.t, w, s().done(), &pct, ts(r, ty::SMALL.0, ty::SMALL.1, 400).tabular(), tok::FG);
+                if o.command.is_empty() && i.progress.is_none() {
+                    // Battle.net after its download: Proton's first start comes before Blizzard's window.
+                    let note = "The first time, Rare also downloads Proton (up to 1 GB). Blizzard's window opens when it's ready.";
+                    cx.scene.add_text(cx.t, blk, s().done(), note, ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
+                }
             }
             if let Some(e) = installing.as_ref().and_then(|i| i.error.as_ref()) {
                 cx.scene.add_text(cx.t, blk, s().done(), e, ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::NEG);
