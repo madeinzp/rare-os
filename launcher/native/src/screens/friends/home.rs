@@ -5,6 +5,7 @@
 //! Home places it with `home_friends(ui, data, base)` (tags `base..`) and maps presses on those
 //! tags with `home_press`.
 
+use rare_i18n::{tr, trf};
 use super::bits::*;
 use super::model::FriendsData;
 use super::screen::avatar_stack;
@@ -66,7 +67,7 @@ pub fn home_friends(ui: &mut Ui, d: &FriendsData, base: u32) -> Vec<El> {
             ui,
             s(),
             "friends-playing",
-            Some("Friends playing"),
+            Some(tr().friends.friends_playing),
             Some(&n),
             cards,
         ));
@@ -86,8 +87,8 @@ fn friend_card(ui: &mut Ui, d: &FriendsData, f: &Friend, tag: u32) -> El {
     let card = nav(
         tile(card, 1.06),
         tag,
-        Some("Open"),
-        Some("Join game"),
+        Some(tr().common.open),
+        Some(tr().friends.join_game),
         false,
     );
     let av = friend_avatar(ui, s(), f, 1.75);
@@ -124,27 +125,26 @@ fn party_strip(ui: &mut Ui, d: &FriendsData, p: &Party, invite: bool, base: u32)
     let g = p.game.as_ref();
     let playing_it = g.is_some_and(|g| d.running.contains(&g.id));
     let title = if invite {
-        format!("{} invited you to a party", label(host))
+        trf!(tr().friends.invited_you_to_party, name = label(host))
     } else if Some(p.host.as_str()) == me {
-        "Your party".into()
+        tr().friends.your_party.into()
     } else {
-        format!("{}'s party", label(host))
+        trf!(tr().friends.party_of, name = label(host))
     };
     let names: Vec<String> = joined
         .iter()
         .map(|m| {
             if Some(m.address.as_str()) == me {
-                "you".to_string()
+                tr().friends.you_lower.to_string()
             } else {
                 label(Some(m))
             }
         })
         .collect();
-    let sub = format!(
-        "{}{}",
-        g.map(|g| format!("{}, ", g.title)).unwrap_or_default(),
-        names.join(", ")
-    );
+    let sub = match g {
+        Some(g) => trf!(tr().friends.party_game_and_names, game = g.title.clone(), names = names.join(", ")),
+        None => names.join(", "),
+    };
     let stack = avatar_stack(
         ui,
         &joined.iter().take(5).copied().collect::<Vec<_>>(),
@@ -159,17 +159,17 @@ fn party_strip(ui: &mut Ui, d: &FriendsData, p: &Party, invite: bool, base: u32)
     if invite {
         acts.push(button(
             ui,
-            Btn::new("Join party", base + H_JOIN_PARTY).primary(),
+            Btn::new(tr().friends.join_party, base + H_JOIN_PARTY).primary(),
         ));
-        acts.push(button(ui, Btn::new("Decline", base + H_DECLINE)));
+        acts.push(button(ui, Btn::new(tr().friends.decline, base + H_DECLINE)));
     } else {
         if g.is_some() && !playing_it {
             acts.push(button(
                 ui,
-                Btn::new("Join game", base + H_JOIN_GAME).primary(),
+                Btn::new(tr().friends.join_game, base + H_JOIN_GAME).primary(),
             ));
         }
-        acts.push(button(ui, Btn::new("Open party", base + H_OPEN_PARTY)));
+        acts.push(button(ui, Btn::new(tr().friends.open_party, base + H_OPEN_PARTY)));
     }
     let buttons = ui
         .bx(s().row().gap(0.75))

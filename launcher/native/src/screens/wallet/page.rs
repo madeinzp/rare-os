@@ -10,6 +10,7 @@ use super::home::stack::{HomeTab, Stack, WalletView};
 use super::live::{self, Answer};
 use crate::screens::inventory::{sheet as inv_sheet, view as inv_view};
 use rare_market::inventory::Inventory;
+use rare_i18n::tr;
 use std::sync::mpsc::Receiver;
 use super::markup::{div, El as M};
 use super::pages::{accounts, coin, receive, settings, watch, welcome};
@@ -422,7 +423,7 @@ impl WalletTab {
             }
         }
         if !Self::wired(&v) {
-            st.toast("This part of the wallet is not in the native launcher yet", crate::state::Tone::Info, rare_render::clock::secs());
+            st.toast(tr().wallet.not_native_yet, crate::state::Tone::Info, rare_render::clock::secs());
             return;
         }
         match v {
@@ -454,7 +455,7 @@ impl WalletTab {
     pub(super) fn page_hints(&self) -> Vec<WHint> {
         let cur = self.current();
         if self.item.is_some() {
-            return vec![WHint { b: "a", label: "Select".into() }, WHint { b: "b", label: "Close".into() }];
+            return vec![WHint { b: "a", label: tr().common.select.into() }, WHint { b: "b", label: tr().common.close.into() }];
         }
         match &self.stack.top().view {
             WalletView::Home { .. } if self.accounts.is_empty() => welcome::welcome_hints(),
@@ -487,7 +488,7 @@ impl WalletTab {
                 Some(home::Effect::Push(v)) => self.push(st, v),
                 Some(home::Effect::Copy(a)) => {
                     super::flows::manage::copy_text(&a);
-                    st.toast("Address copied", crate::state::Tone::Info, now);
+                    st.toast(tr().wallet.address_copied, crate::state::Tone::Info, now);
                 }
                 Some(home::Effect::More) => self.more(),
                 Some(home::Effect::Retry) => {
@@ -505,7 +506,7 @@ impl WalletTab {
             Msg::Receive(receive::Msg::Copy(a)) => {
                 super::flows::manage::copy_text(&a);
                 self.copied = true;
-                st.toast("Address copied", crate::state::Tone::Info, now);
+                st.toast(tr().wallet.address_copied, crate::state::Tone::Info, now);
             }
             Msg::Receive(receive::Msg::Verify) => {
                 let cur = self.current().cloned();
@@ -515,7 +516,7 @@ impl WalletTab {
                             self.verify = Some(receive::Verify::Busy);
                             self.verify_rx = Some(super::flows::hardware::verify_receive(a.address.clone(), l.path.clone(), l.device.clone()));
                         }
-                        None => self.verify = Some(receive::Verify::Error { message: "This account has no Ledger path. Remove it and add it again.".into(), fix: None }),
+                        None => self.verify = Some(receive::Verify::Error { message: tr().wallet.no_ledger_path.into(), fix: None }),
                     }
                     self.ver += 1;
                 }
@@ -636,7 +637,7 @@ impl Page for WalletTab {
                 Ok(Ok(Err(e))) => Some(receive::Verify::Error { message: e.message, fix: e.fix }),
                 Ok(Err(e)) => Some(receive::Verify::Error { message: e, fix: None }),
                 Err(std::sync::mpsc::TryRecvError::Empty) => None,
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => Some(receive::Verify::Error { message: "The Ledger check stopped. Try again.".into(), fix: None }),
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => Some(receive::Verify::Error { message: tr().wallet.ledger_check_stopped.into(), fix: None }),
             };
             if let Some(v) = done {
                 self.verify = Some(v);

@@ -264,7 +264,7 @@ pub fn gate(status: FriendsStatus, error: Option<&str>) -> FriendsData {
     let mut d = FriendsData {
         now_ms: mock().now_ms,
         my_name: "Demo wallet".into(),
-        sign_method: Some(crate::screens::wallet::service::METHOD_PASSKEY_PHONE.into()),
+        sign_method: Some(crate::screens::wallet::service::method_passkey_phone().into()),
         ..Default::default()
     };
     d.st.status = status;

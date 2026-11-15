@@ -1,6 +1,7 @@
 //! Setting the PIN (or a passphrase) that protects keys on this device: enter it, then again
 //! (launcher/src/wallet/ui/onboard/PinSetup.tsx). Every flow that creates the vault uses it.
 
+use rare_i18n::tr;
 use crate::screens::wallet::kit::{btn, btn_full, field, pin_pad, pin_press, FieldSpec, PinPadSpec, Size, Variant};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::types::SecretKind;
@@ -64,19 +65,19 @@ fn view_opts(st: &State, title: &str, body: &str, busy: bool, allow_pass: bool) 
         if st.first.is_none() {
             title.to_string()
         } else {
-            "Enter it again".into()
+            tr().wallet_setup.enter_again.into()
         }
     } else {
-        "Choose a passphrase".into()
+        tr().wallet_setup.choose_passphrase.into()
     };
     let sub = if pin {
         if st.first.is_none() {
             body.to_string()
         } else {
-            "Type the same 6 digits to confirm.".into()
+            tr().wallet_setup.confirm_digits.into()
         }
     } else {
-        "At least 8 characters. It unlocks your keys on this device.".into()
+        tr().wallet_setup.passphrase_note.into()
     };
     let entry = if pin {
         pin_pad(PinPadSpec { length: Some(PIN_LENGTH), value: &st.value, disabled: busy, ..Default::default() }, Msg::Key)
@@ -86,12 +87,12 @@ fn view_opts(st: &State, title: &str, body: &str, busy: bool, allow_pass: bool) 
     } else {
         let off = st.pass.chars().count() < 8 || st.pass != st.pass2 || busy;
         div("mx-auto flex max-w-[28rem] flex-col gap-4 text-left")
-            .kid(field(FieldSpec { label: Some("Passphrase"), value: &st.pass, secret: true, def: true, placeholder: Some("At least 8 characters"), ..Default::default() }, Msg::TypePass))
+            .kid(field(FieldSpec { label: Some(tr().wallet_setup.passphrase), value: &st.pass, secret: true, def: true, placeholder: Some(tr().wallet_setup.at_least_8), ..Default::default() }, Msg::TypePass))
             .kid(field(
-                FieldSpec { label: Some("Confirm passphrase"), value: &st.pass2, secret: true, placeholder: Some("Type it again"), error: (!st.pass2.is_empty() && st.pass != st.pass2).then_some("These do not match"), ..Default::default() },
+                FieldSpec { label: Some(tr().wallet_setup.confirm_passphrase), value: &st.pass2, secret: true, placeholder: Some(tr().wallet_setup.type_again), error: (!st.pass2.is_empty() && st.pass != st.pass2).then_some(tr().wallet_setup.do_not_match), ..Default::default() },
                 Msg::TypePass2,
             ))
-            .kid(btn("Continue", Variant::Primary, &cn(&["w-full", when(off, "pointer-events-none opacity-40")]), Some(Msg::Continue)))
+            .kid(btn(tr().common.continue_, Variant::Primary, &cn(&["w-full", when(off, "pointer-events-none opacity-40")]), Some(Msg::Continue)))
     };
     let mut d = div("flex flex-col items-center text-center")
         .kid(h2("text-xl font-bold").text(heading))
@@ -103,7 +104,7 @@ fn view_opts(st: &State, title: &str, body: &str, busy: bool, allow_pass: bool) 
     if !allow_pass {
         return d;
     }
-    d.kid(div("mt-6").kid(btn_full(if pin { "Use a passphrase instead" } else { "Use a 6 digit PIN instead" }, Variant::Ghost, Size::Md, false, "", Some(Msg::Switch))))
+    d.kid(div("mt-6").kid(btn_full(if pin { tr().wallet_setup.use_passphrase } else { tr().wallet_setup.use_pin }, Variant::Ghost, Size::Md, false, "", Some(Msg::Switch))))
 }
 
 pub fn update(st: &mut State, msg: Msg, busy: bool) -> Option<Out> {
@@ -127,7 +128,7 @@ pub fn update(st: &mut State, msg: Msg, busy: bool) -> Option<Out> {
                 Some(f) if f == next => Some(Out::Done(PinOptions { kind: SecretKind::Pin, secret: next })),
                 Some(_) => {
                     st.value.clear();
-                    st.error = "Those PINs did not match. Start again.".into();
+                    st.error = tr().wallet_setup.pins_no_match.into();
                     None
                 }
             }

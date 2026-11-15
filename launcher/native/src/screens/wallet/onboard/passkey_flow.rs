@@ -2,6 +2,7 @@
 //! device PIN (create), Bluetooth when it is off, the live ceremony, and the "signed in" note
 //! when this device has no key for the account. Shared by the Passkey page and first run.
 
+use rare_i18n::tr;
 use super::ceremony::{self, bluetooth_view, BtMsg, Ceremony, Via};
 use super::flow::{plain_error, udev_fix, Failure, Gate};
 use super::hw_parts::hw_error;
@@ -101,24 +102,24 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
             let mut d = div("flex flex-col gap-4").kid(
                 div("flex flex-col gap-2")
                     .role("radiogroup")
-                    .kid(choice(pr.via == Via::Phone, "smartphone", if pr.create { "Use your phone" } else { "Sign in with your phone" }, "Scan a code with your phone's camera, then use Face ID or your fingerprint", Msg::Pick(Via::Phone), true))
-                    .kid(choice(pr.via == Via::Usb, "usb", "Use a security key", "A USB or NFC key such as a YubiKey. No camera needed.", Msg::Pick(Via::Usb), false)),
+                    .kid(choice(pr.via == Via::Phone, "smartphone", if pr.create { tr().wallet_setup.use_phone } else { tr().wallet_setup.sign_in_phone }, tr().wallet_setup.phone_body, Msg::Pick(Via::Phone), true))
+                    .kid(choice(pr.via == Via::Usb, "usb", tr().wallet_setup.use_key, tr().wallet_setup.key_body, Msg::Pick(Via::Usb), false)),
             );
             if pr.create {
-                d = d.kid(p("text-sm text-secondary").text("Your passkey can always sign. This device signs everyday transactions with your PIN."));
+                d = d.kid(p("text-sm text-secondary").text(tr().wallet_setup.passkey_always_signs));
             }
             if let Some((m, fix)) = &st.error {
                 d = d.kid(hw_error(m, fix.as_deref(), false, false).map(&|_| Msg::Continue));
             }
-            d.kid(btn("Continue", Variant::Primary, "w-full", Some(Msg::Continue)))
+            d.kid(btn(tr().common.continue_, Variant::Primary, "w-full", Some(Msg::Continue)))
         }
-        Step::Pin => div("pt-4").kid(pin_setup::view(&st.pin, "Set a device PIN", "This device signs everyday transactions with it. Your passkey can always sign too.", false).map(&Msg::Pin)),
+        Step::Pin => div("pt-4").kid(pin_setup::view(&st.pin, tr().wallet_setup.set_device_pin, tr().wallet_setup.device_pin_note, false).map(&Msg::Pin)),
         Step::Bluetooth => bluetooth_view(st.bt_note.as_deref(), st.bt_busy, st.bt_error.as_deref(), true).map(&Msg::Bt),
         Step::Run => div("pt-2").kid(ceremony::view(pr.via, pr.ceremony, pr.qr_url, &st.key_pin).map(&Msg::Ceremony)),
         Step::Device => div("flex flex-col items-center gap-4 py-10 text-center")
-            .kid(h2("text-xl font-bold").text("You are signed in"))
-            .kid(p("max-w-[28rem] text-secondary").text("This device will ask your phone to approve each transaction."))
-            .kid(btn("Continue", Variant::Primary, "mt-2 w-64", Some(Msg::Finish)).def(true)),
+            .kid(h2("text-xl font-bold").text(tr().wallet_setup.signed_in))
+            .kid(p("max-w-[28rem] text-secondary").text(tr().wallet_setup.device_asks_phone))
+            .kid(btn(tr().common.continue_, Variant::Primary, "mt-2 w-64", Some(Msg::Finish)).def(true)),
     };
     let can_back = matches!(st.step, Step::Pin | Step::Bluetooth | Step::Run) || (st.step == Step::Choose && pr.can_exit);
     if can_back {
@@ -246,14 +247,14 @@ pub fn ran(pr: &Props, st: &mut State, run: u64, res: Result<(String, bool), Fai
                 return None;
             }
             if pr.via == Via::Phone && code == Some("ble-off") {
-                st.bt_note = Some("Turn Bluetooth back on to finish with your phone.".into());
+                st.bt_note = Some(tr().wallet_setup.ble_back_on.into());
                 st.step = Step::Bluetooth;
                 return None;
             }
             let message = if code == Some("notfound") {
-                if pr.via == Via::Usb { "No security key found. Insert it and try again." } else { "No Rare passkey found on that phone." }.to_string()
+                if pr.via == Via::Usb { tr().wallet_setup.no_key_found } else { tr().wallet_setup.no_passkey_on_phone }.to_string()
             } else {
-                plain_error(&e, "Could not use the passkey. Try again.")
+                plain_error(&e, tr().wallet_setup.passkey_failed)
             };
             st.error = Some((message, udev_fix(&e)));
             st.step = Step::Choose;

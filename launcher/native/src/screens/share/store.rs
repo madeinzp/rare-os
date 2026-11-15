@@ -5,6 +5,7 @@
 //! pressing Share and approving twice in Rare Wallet.
 
 use super::format::{duration, share_epochs, CostEstimate, DurationId, Network, SponsorQuote, DURATIONS};
+use rare_i18n::{tr, trf};
 use rare_share::{Capture, ShareStatus};
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -19,12 +20,15 @@ pub enum Step {
 }
 
 /// ShareScreen's STEPS: (step, label, what it says while it is the current one).
-pub const STEPS: [(Step, &str, &str); 4] = [
-    (Step::Encode, "Prepare", "Preparing the files"),
-    (Step::Register, "Pay for storage", "Approve in Rare Wallet"),
-    (Step::Upload, "Upload", "Uploading to Walrus"),
-    (Step::Certify, "Confirm", "Approve to confirm"),
-];
+pub fn steps() -> [(Step, &'static str, &'static str); 4] {
+    let s = tr().share;
+    [
+        (Step::Encode, s.step_prepare, s.step_preparing),
+        (Step::Register, s.step_pay, s.step_pay_doing),
+        (Step::Upload, s.step_upload, s.step_uploading),
+        (Step::Certify, s.step_confirm, s.step_confirm_doing),
+    ]
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ShareResult {
@@ -192,7 +196,7 @@ impl ShareState {
             return false;
         }
         if !self.sponsored() && self.address.is_none() {
-            self.phase = Phase::Error("Add a Rare Wallet account to share.".into());
+            self.phase = Phase::Error(tr().share.add_wallet.into());
             return false;
         }
         self.phase = Phase::Uploading(if self.sponsored() { Step::Upload } else { Step::Encode });
@@ -249,7 +253,7 @@ impl ShareState {
     }
 
     pub fn days_label(&self) -> &'static str {
-        duration(self.duration).label
+        duration(self.duration).label()
     }
 }
 
@@ -262,10 +266,10 @@ pub fn new_count(captures: Option<&[Capture]>, seen_at: u64) -> usize {
 pub fn clips_note(st: Option<&ShareStatus>) -> Option<&'static str> {
     let st = st?;
     if !st.clips.available {
-        return Some("Clips need gpu-screen-recorder or GStreamer with VA-API");
+        return Some(tr().share.clips_unavailable);
     }
     if !st.clips.enabled {
-        return Some("Instant replay is off. Turn it on below.");
+        return Some(tr().share.replay_is_off);
     }
     None
 }
@@ -286,19 +290,19 @@ pub fn plain_share_error(m: &str, need: Option<u128>) -> String {
     let insufficient_wal = l.contains("not enough wal") || then(&l, "insufficient", "wal") || then(&l, "no", "wal coins") || l.contains("insufficientcoinbalance");
     if insufficient_wal {
         return match need.filter(|n| *n > 0) {
-            Some(n) => format!("Not enough WAL in this account. Sharing this needs about {} WAL.", js_precision(n as f64 / 1e9, 2)),
-            None => "Not enough WAL in this account.".into(),
+            Some(n) => trf!(tr().share.not_enough_wal_need, wal = js_precision(n as f64 / 1e9, 2)),
+            None => tr().share.not_enough_wal.into(),
         };
     }
     let insufficient_sui = l.contains("insufficientgas") || l.contains("gasbalancetoolow") || l.contains("not enough sui") || then(&l, "insufficient", "sui");
     if insufficient_sui {
-        return "Not enough SUI in this account for the fees.".into();
+        return tr().share.not_enough_sui.into();
     }
     if has(m, &["failed to fetch", "networkerror", "load failed", "timed out"]) {
-        return "Couldn't reach Walrus. Check the connection and try again.".into();
+        return tr().share.walrus_unreachable.into();
     }
     if m.is_empty() {
-        "That didn't go through. Try again.".into()
+        tr().share.didnt_go_through.into()
     } else {
         m.to_string()
     }

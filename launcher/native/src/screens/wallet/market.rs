@@ -2,6 +2,8 @@
 //! `ItemCardView`, `RarityBadge`, `Verified`, `VenueMark`, `Sui`; format.ts `shortName`, `TIER`).
 //! The Marketplace screens are workstream 15's; these are the same markup for Phase 3.
 
+use rare_i18n::{tr, trf};
+
 use super::fmt::{fmt_sui, DASH};
 use super::kit::mimg;
 use super::markup::*;
@@ -9,12 +11,12 @@ use super::types::{ItemCard, Rarity};
 
 pub fn tier_name(t: &str) -> String {
     match t {
-        "common" => "Common",
-        "uncommon" => "Uncommon",
-        "rare" => "Rare",
-        "epic" => "Epic",
-        "legendary" => "Legendary",
-        "mythic" => "Mythic",
+        "common" => tr().wallet.tier_common,
+        "uncommon" => tr().wallet.tier_uncommon,
+        "rare" => tr().wallet.tier_rare,
+        "epic" => tr().wallet.tier_epic,
+        "legendary" => tr().wallet.tier_legendary,
+        "mythic" => tr().wallet.tier_mythic,
         other => other,
     }
     .to_string()
@@ -47,14 +49,14 @@ pub fn rarity_badge<M>(r: Option<&Rarity>, small: bool, class: &str) -> Option<E
     let r = r?;
     Some(
         span(cn(&["inline-flex items-center rounded-sm bg-labels-neutral/90 font-medium text-label-neutral-text tabular-nums", if small { "h-5 px-1 text-[0.6875rem]" } else { "h-6 px-1.5 text-xs" }, class]))
-            .attr("title", format!("Rank {}, {}", r.rank, tier_name(&r.tier)))
+            .attr("title", trf!(tr().wallet.rank_title, rank = r.rank, tier = tier_name(&r.tier)))
             .text(r.rank.to_string()),
     )
 }
 
 /// `Verified`: the brand check badge.
 pub fn verified<M>(size: &str) -> El<M> {
-    icon("verified", "inline-block shrink-0").attr("style", format!("width: {size}; height: {size}")).role("img").label("Verified")
+    icon("verified", "inline-block shrink-0").attr("style", format!("width: {size}; height: {size}")).role("img").label(tr().wallet.verified)
 }
 
 /// `VenueMark`.
@@ -63,7 +65,7 @@ pub fn venue_mark<M>(v: &str, size: &str) -> Option<El<M>> {
     Some(
         span("inline-flex shrink-0 items-center justify-center overflow-hidden rounded-[3px]")
             .attr("style", format!("width: {size}; height: {size}"))
-            .attr("title", format!("Listed on {label}"))
+            .attr("title", trf!(tr().wallet.listed_on, venue = label))
             .kid(img(Some(src), "", "size-full object-contain")),
     )
 }
@@ -91,7 +93,7 @@ pub fn item_card<M>(card: &ItemCard, idx: usize, def: bool, show_collection: boo
     }
     let price = match &card.listing {
         Some(l) => span("flex h-5 items-center gap-1 text-sm").kid(sui(Some(l.all_in_mist.unwrap_or(l.price_mist)), 3, false, true, "font-semibold")).kid_opt(venue_mark(&l.venue, "0.875rem")),
-        None => span("flex h-5 items-center gap-1 text-sm").kid(span("text-secondary").text(if card.staked.is_some() { "Staked" } else { "Not listed" })),
+        None => span("flex h-5 items-center gap-1 text-sm").kid(span("text-secondary").text(if card.staked.is_some() { tr().wallet.staked } else { tr().wallet.not_listed })),
     };
     info = info.kid(price).kid(
         span("flex h-6 items-center gap-1 text-sm text-secondary")

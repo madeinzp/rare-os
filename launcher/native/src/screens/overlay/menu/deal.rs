@@ -2,6 +2,7 @@
 //! the best offer with its dry build, then the sale or the listing through rare-market's
 //! `RealTrade` and Rare Wallet's review sheet. Everything here blocks: run it on a worker.
 
+use rare_i18n::tr;
 use crate::screens::overlay::panels::trade::{plain_error, Offer, OfferKind};
 use crate::screens::overlay::panels::OfferState;
 use rare_market::api::{self, ItemDetail};
@@ -12,7 +13,7 @@ fn trader() -> RealTrade {
 }
 
 fn card(id: &str) -> Result<api::ItemCard, String> {
-    api::get::<ItemDetail>(&*crate::screens::market::feed::net(), &api::paths::item(id)).map(|d| d.card).map_err(|_| "Couldn't read that item. Try again.".to_string())
+    api::get::<ItemDetail>(&*crate::screens::market::feed::net(), &api::paths::item(id)).map(|d| d.card).map_err(|_| tr().overlay.deal_read_failed.to_string())
 }
 
 fn num(s: &str) -> i128 {
@@ -75,6 +76,6 @@ pub fn sell(id: &str, address: &str, q: &Quote) -> Result<Did, String> {
 
 pub fn list(id: &str, address: &str, price_mist: i128) -> Result<Did, String> {
     let card = card(id)?;
-    let pm = u64::try_from(price_mist).map_err(|_| "Price must be above zero.".to_string())?;
+    let pm = u64::try_from(price_mist).map_err(|_| tr().overlay.deal_price_zero.to_string())?;
     trader().list(&card, pm, address).map(|_| Did::Listed(price_mist)).map_err(|e| e.0)
 }

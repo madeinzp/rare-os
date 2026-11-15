@@ -85,5 +85,5 @@ pub fn glyph(ui: &mut Ui, b: Pb, size: GSize) -> El {
 /// A glyph and its label, as in the hint bar (`t` is the label's look; it inherits the bar's).
 pub fn hint(ui: &mut Ui, b: Pb, label: &str, t: T) -> El {
     let g = glyph(ui, b, GSize::Md);
-    ui.bx(s().row().items_center().gap(0.45)).child(g).child(ui.text(label, t))
+    ui.bx(s().row().items_center().gap(0.45).shrink().min0()).child(g).child(ui.text_s(s().shrink().min0(), label, t.fit()))
 }

@@ -2,6 +2,7 @@
 //! Close, and the order panel. LT/RT set the leverage while the order panel has focus, X flips Long
 //! and Short, the presets set the margin, A on the panel's button opens the review.
 
+use rare_i18n::{tr, trf};
 use super::chart_area::{self, ChartArea, ChartOut};
 use super::fmt::*;
 use super::model::*;
@@ -105,17 +106,17 @@ pub fn order_view(d: &PerpData, t: &Ticket) -> OrderView {
     let too_small = t.margin * t.lev < min_order;
     let blocked = d.market.is_none() || d.preview.is_none() || plan.blocked || too_small;
     let why = if d.wallet.is_none() {
-        Some("Add a wallet first".to_string())
+        Some(tr().trade.add_wallet_first.to_string())
     } else if plan.needs_account {
-        Some("One time, before your first order".into())
+        Some(tr().trade.one_time_setup.into())
     } else if plan.blocked {
-        Some("Not enough USDC in your wallet".into())
+        Some(tr().trade.not_enough_usdc.into())
     } else if too_small {
-        Some(format!("Minimum order {}", perp_px(Some(min_order))))
+        Some(trf!(tr().trade.minimum_order, amount = perp_px(Some(min_order))))
     } else {
         d.preview_error.clone()
     };
-    let button = if plan.needs_account && d.wallet.is_some() { "Set up perps".to_string() } else { format!("Review {} {}", t.side.lower(), fmt_leverage(t.lev)) };
+    let button = if plan.needs_account && d.wallet.is_some() { tr().trade.set_up_perps.to_string() } else { trf!(tr().trade.review_side_lev, side = t.side.word_lower(), leverage = fmt_leverage(t.lev)) };
     OrderView { plan, blocked, why, button, disabled: blocked && !plan.needs_account }
 }
 
@@ -124,29 +125,29 @@ pub fn review_for(d: &PerpData, t: &Ticket, ov: &OrderView) -> Option<Review> {
     let m = d.market.as_ref()?;
     match t.sheet? {
         Sheet::Open if ov.plan.needs_account => Some(Review {
-            title: "Set up perps".into(),
-            sub: Some("One time, before your first order".into()),
-            action: "Create account".into(),
+            title: tr().trade.set_up_perps.into(),
+            sub: Some(tr().trade.one_time_setup.into()),
+            action: tr().trade.create_account.into(),
             tone: Tone::Primary,
-            lines: vec![("What it does".into(), Val::t("Creates your perps account for USDC margin"), false), ("After that".into(), Val::t("Review your order again to open it"), false)],
+            lines: vec![(tr().trade.what_it_does.into(), Val::t(tr().trade.creates_account_note), false), (tr().trade.after_that.into(), Val::t(tr().trade.review_again_note), false)],
         }),
         Sheet::Open => {
             let p = d.preview.as_ref()?;
             let mut lines = vec![
-                ("Margin".to_string(), Val::t(format!("${}", trim_num(t.margin))), false),
-                ("Size".into(), Val::t(format!("{} {}, {}", num_size(p.size_units), m.symbol, num_text(NumKind::Money, Some(p.notional_usd), NumOptions::default()))), true),
-                ("Entry about".into(), Val::t(perp_px(Some(p.entry_price))), false),
-                ("Liquidation".into(), Val::t(liq_text(p.liquidation_price, p.entry_price)), false),
-                ("Fees".into(), Val::n(NumKind::Money, Some(p.fee_usd)), false),
+                (tr().trade.margin.to_string(), Val::t(format!("${}", trim_num(t.margin))), false),
+                (tr().trade.size.into(), Val::t(format!("{} {}, {}", num_size(p.size_units), m.symbol, num_text(NumKind::Money, Some(p.notional_usd), NumOptions::default()))), true),
+                (tr().trade.entry_about.into(), Val::t(perp_px(Some(p.entry_price))), false),
+                (tr().trade.liquidation.into(), Val::t(liq_text(p.liquidation_price, p.entry_price)), false),
+                (tr().trade.fees.into(), Val::n(NumKind::Money, Some(p.fee_usd)), false),
             ];
             if ov.plan.short_by > 0.0 {
-                lines.push(("Adds from your wallet".into(), Val::t(format!("{} USDC", perp_px(Some(ov.plan.short_by)))), false));
+                lines.push((tr().trade.adds_from_wallet.into(), Val::t(format!("{} USDC", perp_px(Some(ov.plan.short_by)))), false));
             }
-            lines.push(("Slippage".into(), Val::t("1%"), false));
+            lines.push((tr().trade.slippage.into(), Val::t("1%"), false));
             Some(Review {
                 title: format!("{} {} {}", t.side.word(), m.symbol, fmt_leverage(t.lev)),
-                sub: Some("Market order".into()),
-                action: format!("Open {}", t.side.lower()),
+                sub: Some(tr().trade.market_order.into()),
+                action: trf!(tr().trade.open_side, side = t.side.word_lower()),
                 tone: if t.side == PerpSide::Long { Tone::Buy } else { Tone::Sell },
                 lines,
             })
@@ -154,15 +155,15 @@ pub fn review_for(d: &PerpData, t: &Ticket, ov: &OrderView) -> Option<Review> {
         Sheet::Close => {
             let p = d.position()?;
             Some(Review {
-                title: format!("Close {} {}", m.symbol, p.side.lower()),
-                sub: Some("Market order for the whole position".into()),
-                action: "Close position".into(),
+                title: trf!(tr().trade.close_title, symbol = m.symbol, side = p.side.word_lower()),
+                sub: Some(tr().trade.market_order_whole.into()),
+                action: tr().trade.close_position.into(),
                 tone: Tone::Primary,
                 lines: vec![
-                    ("Position".into(), Val::t(format!("{} {}", p.side.word(), fmt_leverage(p.leverage))), false),
-                    ("Entry".into(), Val::t(perp_px(Some(p.entry_price))), false),
-                    ("Mark".into(), Val::t(perp_px(p.mark_price)), false),
-                    ("P/L if closed now".into(), Val::n(NumKind::Pnl, Some(p.pnl_usd)), true),
+                    (tr().trade.position.into(), Val::t(format!("{} {}", p.side.word(), fmt_leverage(p.leverage))), false),
+                    (tr().trade.entry.into(), Val::t(perp_px(Some(p.entry_price))), false),
+                    (tr().trade.mark.into(), Val::t(perp_px(p.mark_price)), false),
+                    (tr().trade.pnl_if_closed.into(), Val::n(NumKind::Pnl, Some(p.pnl_usd)), true),
                 ],
             })
         }
@@ -235,18 +236,18 @@ impl PerpPage {
     /// The hint bar (PerpPage's usePageHints, the sheet's, or chart mode's).
     pub fn page_hints(&self) -> Vec<(&'static str, String)> {
         if self.t.sheet.is_some() {
-            return vec![("a", "Select".into()), ("b", "Cancel".into())];
+            return vec![("a", tr().common.select.into()), ("b", tr().common.cancel.into())];
         }
         if self.chart.mode.on {
-            return chart_area::HINTS.iter().map(|(b, l)| (*b, l.to_string())).collect();
+            return chart_area::hints().iter().map(|(b, l)| (*b, l.to_string())).collect();
         }
-        let flip = ("x", if self.t.side == PerpSide::Long { "Short" } else { "Long" }.to_string());
-        let sel = ("a", "Select".to_string());
-        let search = ("y", "Search".to_string());
-        let back = ("b", "Back".to_string());
+        let flip = ("x", if self.t.side == PerpSide::Long { tr().trade.short } else { tr().trade.long }.to_string());
+        let sel = ("a", tr().common.select.to_string());
+        let search = ("y", tr().common.search.to_string());
+        let back = ("b", tr().common.back.to_string());
         match self.area() {
-            "order" => vec![sel, ("lt", "Less leverage".into()), ("rt", "More leverage".into()), flip, search, back],
-            "chart" => vec![("a", "Control chart".into()), ("select", "Chart mode".into()), flip, search, back],
+            "order" => vec![sel, ("lt", tr().trade.less_leverage.into()), ("rt", tr().trade.more_leverage.into()), flip, search, back],
+            "chart" => vec![("a", tr().trade.control_chart.into()), ("select", tr().trade.chart_mode.into()), flip, search, back],
             _ => vec![sel, flip, search, back],
         }
     }
@@ -362,7 +363,7 @@ pub fn view(ui: &mut Ui, d: &PerpData, t: &Ticket, chart: &ChartArea, focused_ch
     let Some(m) = d.market.as_ref() else {
         let mut page = page;
         if d.markets_error {
-            page = page.child(ui.bx(s().pt(5.0).row().justify_center()).child(ui.text("This market is unavailable right now.", T::new(Ty::Small).c(tok::MUTED))));
+            page = page.child(ui.bx(s().pt(5.0).row().justify_center()).child(ui.text(tr().trade.market_unavailable, T::new(Ty::Small).c(tok::MUTED))));
         } else {
             page = page.child(super::ui::loading_bar(ui));
         }
@@ -374,11 +375,11 @@ pub fn view(ui: &mut Ui, d: &PerpData, t: &Ticket, chart: &ChartArea, focused_ch
     let logo = d.logo.as_deref().and_then(|l| logo_url(Some(l)));
     let ch = num_parts(NumKind::Change, m.change_pct, NumOptions::default());
     let ch_col = ch.as_ref().map(|p| crate::kit::num::tone_color(p.tone, tok::FG)).unwrap_or(tok::FG);
-    let title = baseline_row(ui, s().gap(0.5), vec![(T::new(Ty::Title).w(600), m.symbol.clone()), (T::new(Ty::Body).w(500).c(tok::MUTED), format!("{} perp", pair_label(&m.pair)))]);
+    let title = baseline_row(ui, s().gap(0.5), vec![(T::new(Ty::Title).w(600), m.symbol.clone()), (T::new(Ty::Body).w(500).c(tok::MUTED), trf!(tr().trade.perp_pair, pair = pair_label(&m.pair)))]);
     let price = baseline_row(
         ui,
         s().gap(0.75),
-        vec![(T::new(Ty::Display).w(600).tab(), perp_px(Some(m.price))), (T::new(Ty::Body).tab().c(ch_col), ch.map(|p| p.text()).unwrap_or_default()), (T::new(Ty::Small).c(tok::MUTED), "24h".into())],
+        vec![(T::new(Ty::Display).w(600).tab(), perp_px(Some(m.price))), (T::new(Ty::Body).tab().c(ch_col), ch.map(|p| p.text()).unwrap_or_default()), (T::new(Ty::Small).c(tok::MUTED), tr().trade.h24.into())],
     );
     let price = roll_first(ui, price, Some(m.price));
     let names = ui.bx(s().col().shrink().min0()).child(title).child(price);
@@ -392,39 +393,39 @@ pub fn view(ui: &mut Ui, d: &PerpData, t: &Ticket, chart: &ChartArea, focused_ch
         ui,
         s(),
         vec![
-            ("24h volume", Stat::Num(NumKind::Market, m.volume_usd, o)),
-            ("Open interest", Stat::Num(NumKind::Market, m.open_interest_usd, o)),
-            ("Funding 1h", Stat::Text(m.funding_rate.map(|f| funding_pct(f, 1.0)).unwrap_or_default())),
-            ("Next funding", Stat::Text(m.next_funding_ms.filter(|v| *v != 0.0).map(|v| until_text(v, d.now_ms)).unwrap_or_default())),
-            ("Max leverage", Stat::Text(fmt_leverage(m.max_leverage.unwrap_or(1.0)))),
-            ("Fees", Stat::Text(m.taker_fee.map(|f| format!("{:.3}%", f * 100.0)).unwrap_or_default())),
+            (tr().trade.volume_24h, Stat::Num(NumKind::Market, m.volume_usd, o)),
+            (tr().trade.open_interest, Stat::Num(NumKind::Market, m.open_interest_usd, o)),
+            (tr().trade.funding_1h, Stat::Text(m.funding_rate.map(|f| funding_pct(f, 1.0)).unwrap_or_default())),
+            (tr().trade.next_funding, Stat::Text(m.next_funding_ms.filter(|v| *v != 0.0).map(|v| until_text(v, d.now_ms)).unwrap_or_default())),
+            (tr().trade.max_leverage, Stat::Text(fmt_leverage(m.max_leverage.unwrap_or(1.0)))),
+            (tr().trade.fees, Stat::Text(m.taker_fee.map(|f| format!("{:.3}%", f * 100.0)).unwrap_or_default())),
         ],
         true,
         false,
     );
     let stats_panel = kit::panel(ui, s().col().mt(1.0).px(1.25).py(0.75)).maybe(stats);
 
-    let mut pos = kit::panel(ui, s().col().mt(1.25).p(1.25)).child(ui.text("Your position", T::new(Ty::Row).w(600)));
+    let mut pos = kit::panel(ui, s().col().mt(1.25).p(1.25)).child(ui.text(tr().trade.your_position, T::new(Ty::Row).w(600)));
     match d.position() {
         Some(p) => {
             let sl = stat_line(
                 ui,
                 s().flex(1.0),
                 vec![
-                    ("Side", Stat::Text(format!("{} {}", p.side.word(), fmt_leverage(p.leverage)))),
-                    ("Size", Stat::Num(NumKind::Money, Some(p.notional_usd), NumOptions { compact: true, ..Default::default() })),
-                    ("Entry", Stat::Text(perp_px(Some(p.entry_price)))),
-                    ("Liquidation", Stat::Text(perp_px(p.liquidation_price))),
-                    ("P/L", Stat::Num(NumKind::Pnl, Some(p.pnl_usd), NumOptions::default())),
+                    (tr().trade.side, Stat::Text(format!("{} {}", p.side.word(), fmt_leverage(p.leverage)))),
+                    (tr().trade.size, Stat::Num(NumKind::Money, Some(p.notional_usd), NumOptions { compact: true, ..Default::default() })),
+                    (tr().trade.entry, Stat::Text(perp_px(Some(p.entry_price)))),
+                    (tr().trade.liquidation, Stat::Text(perp_px(p.liquidation_price))),
+                    (tr().trade.pnl, Stat::Num(NumKind::Pnl, Some(p.pnl_usd), NumOptions::default())),
                 ],
                 true,
                 false,
             );
-            let close = action(ui, s(), Action { hint: Some("Close position".into()), ..Action::new("Close", Tone::Secondary, T_CLOSE) });
+            let close = action(ui, s(), Action { hint: Some(tr().trade.close_position.into()), ..Action::new(tr().common.close, Tone::Secondary, T_CLOSE) });
             pos = pos.child(ui.bx(s().row().items_center().mt(0.75).gap(1.5)).maybe(sl).child(close));
         }
         None => {
-            let msg = if d.wallet.is_some() { "No open position in this market." } else { "Add a Rare Wallet account to trade perps." };
+            let msg = if d.wallet.is_some() { tr().trade.no_open_position } else { tr().trade.add_wallet_to_trade_perps };
             pos = pos.child(ui.text_s(s().mt(0.5), msg, T::new(Ty::Small).c(tok::MUTED)));
         }
     }
@@ -443,31 +444,31 @@ pub fn view(ui: &mut Ui, d: &PerpData, t: &Ticket, chart: &ChartArea, focused_ch
         dots = dots.child(ui.bx(s().h(0.375).flex(1.0).min0()).bg(if *st <= t.lev { tok::FG } else { tok::L4 }).radius(ui.r(0.1875)));
     }
     let lev_mid = ui.bx(s().row().items_center().gap(0.75).wp(1.0)).child(dots).child(right_text(ui, s().w(3.5), fmt_leverage(t.lev), T::new(Ty::Row).w(600).tab()));
-    let lev = stepper(ui, "leverage", "tr-lev", T_LEV_MINUS, T_LEV_PLUS, lev_mid);
+    let lev = stepper(ui, tr().trade.less_leverage, tr().trade.more_leverage, "tr-lev", T_LEV_MINUS, T_LEV_PLUS, lev_mid);
     let pv = d.preview.as_ref();
     let mut items: Vec<(&str, Val, bool)> = vec![
-        ("Size", Val::t(pv.map(|p| format!("{} {}, {}", num_size(p.size_units), m.symbol, num_text(NumKind::Money, Some(p.notional_usd), NumOptions::default()))).unwrap_or_default()), false),
-        ("Entry", Val::t(pv.map(|p| perp_px(Some(p.entry_price))).unwrap_or_default()), false),
-        ("Liquidation", Val::t(pv.map(|p| liq_text(p.liquidation_price, p.entry_price)).unwrap_or_default()), false),
-        ("Fees", pv.map(|p| Val::n(NumKind::Money, Some(p.fee_usd))).unwrap_or(Val::None), false),
+        (tr().trade.size, Val::t(pv.map(|p| format!("{} {}, {}", num_size(p.size_units), m.symbol, num_text(NumKind::Money, Some(p.notional_usd), NumOptions::default()))).unwrap_or_default()), false),
+        (tr().trade.entry, Val::t(pv.map(|p| perp_px(Some(p.entry_price))).unwrap_or_default()), false),
+        (tr().trade.liquidation, Val::t(pv.map(|p| liq_text(p.liquidation_price, p.entry_price)).unwrap_or_default()), false),
+        (tr().trade.fees, pv.map(|p| Val::n(NumKind::Money, Some(p.fee_usd))).unwrap_or(Val::None), false),
     ];
     if d.wallet.is_some() {
-        let label = if ov.plan.needs_account { "Perps account" } else { "From your wallet" };
+        let label = if ov.plan.needs_account { tr().trade.perps_account } else { tr().trade.from_your_wallet };
         let v = if ov.plan.needs_account {
-            "Set up first".to_string()
+            tr().trade.set_up_first.to_string()
         } else if ov.plan.short_by > 0.0 {
             format!("{} USDC", perp_px(Some(ov.plan.short_by)))
         } else {
-            "Nothing".into()
+            tr().trade.nothing.into()
         };
         items.push((label, Val::t(v), false));
     }
-    items.push(("Wallet USDC", d.usdc.map(|u| Val::n(NumKind::Money, Some(u))).unwrap_or(Val::None), false));
+    items.push((tr().trade.wallet_usdc, d.usdc.map(|u| Val::n(NumKind::Money, Some(u))).unwrap_or(Val::None), false));
     let tone = if t.side == PerpSide::Long { Tone::Buy } else { Tone::Sell };
-    let review = action(ui, s(), Action { def: true, full: true, disabled: ov.disabled, hint: Some(ov.why.clone().unwrap_or_else(|| "Review".into())), ..Action::new(ov.button.clone(), tone, T_REVIEW) });
-    let switch = side_switch(ui, [("Long", Tone::Buy), ("Short", Tone::Sell)], if t.side == PerpSide::Long { 0 } else { 1 }, "tr-side", T_SIDE);
-    let margin = ui.bx(s().col()).child(ui.text("Margin", T::new(Ty::Small).c(tok::MUTED))).child(center_text(ui, s().mt(0.25), format!("${}", trim_num(t.margin)), T::new(Ty::Display).w(600).tab()));
-    let leverage = ui.bx(s().col()).child(ui.text("Leverage", T::new(Ty::Small).c(tok::MUTED))).child(ui.bx(s().col().mt(0.25)).child(lev));
+    let review = action(ui, s(), Action { def: true, full: true, disabled: ov.disabled, hint: Some(ov.why.clone().unwrap_or_else(|| tr().trade.review.into())), ..Action::new(ov.button.clone(), tone, T_REVIEW) });
+    let switch = side_switch(ui, [(tr().trade.long, Tone::Buy), (tr().trade.short, Tone::Sell)], if t.side == PerpSide::Long { 0 } else { 1 }, "tr-side", T_SIDE);
+    let margin = ui.bx(s().col()).child(ui.text(tr().trade.margin, T::new(Ty::Small).c(tok::MUTED))).child(center_text(ui, s().mt(0.25), format!("${}", trim_num(t.margin)), T::new(Ty::Display).w(600).tab()));
+    let leverage = ui.bx(s().col()).child(ui.text(tr().trade.leverage, T::new(Ty::Small).c(tok::MUTED))).child(ui.bx(s().col().mt(0.25)).child(lev));
     let figures = lines(ui, &items);
     let mut order = kit::panel(ui, s().col().gap(1.0).p(1.25).self_start()).child(switch).child(margin).child(chips).child(leverage).child(figures).child(review);
     if let Some(w) = &ov.why {

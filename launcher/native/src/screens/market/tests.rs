@@ -65,7 +65,7 @@ fn x_steps_the_range_and_y_opens_search() {
     assert!(m.top().hints().contains(&("x", "Range 7d".to_string())));
     m.press(&mut cx, Pad::Y, 0.0);
     assert!(m.top().is_search());
-    assert_eq!(m.press(&mut cx, Pad::Y, 0.0), Out::Act(search::ASK.into()), "Y on search edits the term");
+    assert_eq!(m.press(&mut cx, Pad::Y, 0.0), Out::Act(search::ask()), "Y on search edits the term");
     assert_eq!(m.depth(), 2);
 }
 

@@ -12,7 +12,9 @@
 //!                         off Linux)
 //!   RR_TAB=library        start on a tab;  RR_OPEN=game:<id> | search | qam | library:<filter> |
 //!                         launchfail:<id>|<reason> | options:<id> | uninstall:<id> | osk | handoff | toast:<text> |
-//!                         ingame:<run id>|<menu|switcher|quick|power>|<frame png> (Rare over a game)
+//!                         ingame:<run id>|<menu|switcher|quick|power>|<frame png> (Rare over a game) |
+//!                         act:<act> (what a press would run: act:support:lang-open)
+//!   RR_LANG=ru            the UI's language (en, zh, es, ja, ru, pt-BR, ko), over the saved one
 //!   RR_SEARCH=<q>         the search already typed;  RR_RUNNING=<id,...> games shown as running
 //!   RR_CLOCK="8:05 PM"    a fixed clock;  RR_BOOT=hold|off  keep the boot splash up, or skip it
 //!   RR_SHOT=<png>         render headless, play RR_SCRIPT (right,right,a,wait:500,text:ha), write a
@@ -494,10 +496,11 @@ impl Main {
         self.stats.maybe_flush();
         self.gpu = Some(gpu);
         if self.app.as_mut().is_some_and(|a| std::mem::take(&mut a.rescale)) {
-            // The whole app is laid out in rem: rebuild at the new UI size and come back to Settings.
+            // The whole app is laid out in rem: rebuild at the new UI size (or in a new language) and
+            // come back to the same tab (Settings, for both).
             let old = self.app.take().unwrap();
+            self.resume_tab = Some(old.st.tab);
             self.pending = Some((old.text, old.images));
-            self.resume_tab = Some(Tab::Settings);
             self.build();
             self.wake();
         }
@@ -671,6 +674,7 @@ fn main() {
     if std::env::args().nth(1).as_deref() == Some("--desktop-controls") {
         std::process::exit(rare_native::features::desktop::run());
     }
+    rare_native::lang::init();
     if let Ok(shot) = std::env::var("RR_SHOT") {
         headless(shot);
         return;

@@ -23,6 +23,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Mutex;
+use rare_i18n::{tr, trf, trn};
 
 /// How long an entered PIN stays good.
 pub const UNLOCK_SECS: f64 = 300.0;
@@ -37,10 +38,32 @@ const MAX_TRIES: u32 = 5;
 
 /// Daily limits in minutes (None: off), and their labels.
 pub const DAILY: [Option<u32>; 7] = [None, Some(30), Some(60), Some(90), Some(120), Some(180), Some(240)];
+/// English labels; `daily_labels()` has the player's language.
 pub const DAILY_LABELS: [&str; 7] = ["Off", "30 min", "1 h", "1.5 h", "2 h", "3 h", "4 h"];
+
+/// The daily limit choices as the player reads them, in `DAILY`'s order.
+pub fn daily_labels() -> [String; 7] {
+    let f = &tr().features_more;
+    [
+        tr().common.off.to_string(),
+        trf!(f.parental_min, n = 30),
+        trf!(f.parental_hours, n = 1),
+        trf!(f.parental_hours, n = "1.5"),
+        trf!(f.parental_hours, n = 2),
+        trf!(f.parental_hours, n = 3),
+        trf!(f.parental_hours, n = 4),
+    ]
+}
 /// Maximum age ratings (None: off), and their labels.
 pub const AGES: [Option<u8>; 4] = [None, Some(7), Some(12), Some(16)];
+/// English labels; `age_labels()` has the player's language.
 pub const AGE_LABELS: [&str; 4] = ["Off", "Up to 7", "Up to 12", "Up to 16"];
+
+/// The age limit choices as the player reads them, in `AGES`'s order.
+pub fn age_labels() -> [String; 4] {
+    let f = &tr().features_more;
+    [tr().common.off.to_string(), trf!(f.parental_up_to, n = 7), trf!(f.parental_up_to, n = 12), trf!(f.parental_up_to, n = 16)]
+}
 /// Settings sections that need the PIN to change.
 pub const LOCKED_SECTIONS: [&str; 5] = ["system", "network", "accounts", "developer", "parental"];
 
@@ -110,16 +133,16 @@ pub enum Block {
 impl Block {
     pub fn title(&self) -> String {
         match self {
-            Block::UsedUp => "Today's play time is used up".into(),
-            Block::Hours(f, t) => format!("Playing is allowed from {} to {}", hour_text(*f), hour_text(*t)),
-            Block::Rating(_) => "This game needs a parent's PIN".into(),
+            Block::UsedUp => tr().features_more.parental_used_up.into(),
+            Block::Hours(f, t) => trf!(tr().features_more.parental_allowed_from, from = hour_text(*f), to = hour_text(*t)),
+            Block::Rating(_) => tr().features_more.parental_needs_pin.into(),
         }
     }
 
     pub fn reason(&self) -> String {
         match self {
-            Block::Rating(age) => format!("It's rated for ages {age} and up. A parent's PIN lets it start."),
-            _ => "A parent's PIN lets this game start.".into(),
+            Block::Rating(age) => trf!(tr().features_more.parental_rated, age = age),
+            _ => tr().features_more.parental_pin_lets.into(),
         }
     }
 }
@@ -159,9 +182,9 @@ pub fn play_left(r: &Rules, used_secs: u64, minute: u32, sec: u32) -> Option<(i6
 pub fn played_text(secs: u64) -> String {
     let m = secs / 60;
     match (m / 60, m % 60) {
-        (0, m) => format!("{m} min"),
-        (h, 0) => format!("{h} h"),
-        (h, m) => format!("{h} h {m} min"),
+        (0, m) => trf!(tr().features_more.parental_min, n = m),
+        (h, 0) => trf!(tr().features_more.parental_hours, n = h),
+        (h, m) => trf!(tr().features_more.parental_hours_min, h = h, m = m),
     }
 }
 
@@ -321,7 +344,7 @@ fn with<R>(f: impl FnOnce(&mut Inner) -> R) -> R {
             me.saved = read("parental.json");
             me.usage = read("parental-usage.json");
         }
-        me.profile = ("default".into(), "This device".into());
+        me.profile = ("default".into(), tr().features_more.parental_this_device.into());
         // Shots: RR_PARENTAL=sheet puts the PIN sheet up for a launch over the limit.
         if fixture() && std::env::var("RR_PARENTAL").as_deref() == Ok("sheet") {
             let (tx, _) = channel();
@@ -646,7 +669,7 @@ fn notify(st: &mut State, title: &str, body: &str, now: f64) {
 /// Every update: the profile, launches the PIN let through, play time, the notices over a game.
 pub fn poll(st: &mut State, fx: &mut crate::page::Fx, now: f64) {
     dev_sign_check(now);
-    let profile = st.account.as_ref().map(|a| (a.address.clone(), a.label.clone())).unwrap_or_else(|| ("default".into(), "This device".into()));
+    let profile = st.account.as_ref().map(|a| (a.address.clone(), a.label.clone())).unwrap_or_else(|| ("default".into(), tr().features_more.parental_this_device.into()));
     let running: Vec<String> = st.running.iter().filter(|r| is_game(st, r)).cloned().collect();
     let launch = with(|me| {
         if me.profile != profile {
@@ -727,22 +750,22 @@ fn play(st: &mut State, running: &[String], now: f64) {
         }
         let Some((left, budget)) = play_left(&rules, used_of(me, &day), minute, sec) else { return };
         let ends = |up: bool| match (budget, rules.hours) {
-            (false, Some((f, t))) if up => format!("Playing is allowed from {} to {}. Save your game and take a break.", hour_text(f), hour_text(t)),
-            (false, Some((_, t))) => format!("Playing time ends at {}. Save your game.", hour_text(t)),
-            _ if up => "Today's play time is used up. Save your game and take a break.".into(),
-            _ => "Today's play time ends soon. Save your game.".into(),
+            (false, Some((f, t))) if up => trf!(tr().features_more.parental_ends_window_up, from = hour_text(f), to = hour_text(t)),
+            (false, Some((_, t))) => trf!(tr().features_more.parental_ends_at, time = hour_text(t)),
+            _ if up => tr().features_more.parental_ends_used_up.into(),
+            _ => tr().features_more.parental_ends_soon.into(),
         };
         if left <= 0 {
             let due = me.noticed.2.map_or(true, |at| now - at >= REMIND_SECS);
             if due {
                 me.noticed.2 = Some(now);
                 me.noticed.1 = true;
-                say = Some(("Time is up".into(), ends(true)));
+                say = Some((tr().features_more.parental_time_up.into(), ends(true)));
             }
         } else if left <= WARN_SECS && !me.noticed.1 {
             me.noticed.1 = true;
             let mins = (left + 59) / 60;
-            say = Some((format!("{mins} {} of play time left", if mins == 1 { "minute" } else { "minutes" }), ends(false)));
+            say = Some((trn!(tr().features_more.parental_minutes_left, mins), ends(false)));
         }
     });
     if let Some((t, b)) = say {

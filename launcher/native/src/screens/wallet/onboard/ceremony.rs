@@ -2,6 +2,7 @@
 //! a QR for the phone (hybrid over Bluetooth), or "insert your security key", with a PIN pad sheet
 //! when the key asks for its PIN. Also "Turn on Bluetooth" (BluetoothStep.tsx).
 
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::kit::{btn, btn_full, pin_pad, pin_press, sheet, PinPadSpec, SheetSpec, Size, Variant};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::sign::panels::Passkey;
@@ -61,8 +62,8 @@ pub fn view(via: Via, state: &Ceremony, qr_url: Option<&str>, pin: &str) -> El<M
     if let Ceremony::Pin { attempts_left } = state {
         return sheet(
             SheetSpec {
-                title: "Security key PIN".into(),
-                subtitle: Some(attempts_left.map(|n| format!("{n} tries left")).unwrap_or_else(|| "Enter the PIN you set on your key".into())),
+                title: tr().wallet_setup.key_pin_title.into(),
+                subtitle: Some(attempts_left.map(|n| trf!(tr().wallet_setup.tries_left, n = n)).unwrap_or_else(|| tr().wallet_setup.key_pin_prompt.into())),
                 icon: None,
                 footer: None,
                 close: Some(Msg::PinCancel),
@@ -89,16 +90,16 @@ pub fn view(via: Via, state: &Ceremony, qr_url: Option<&str>, pin: &str) -> El<M
         if show_qr {
             d = d
                 .kid(el(Tag::Qr(qr_url.unwrap_or("").to_string()), "size-[19rem]"))
-                .kid(p("max-w-[30rem] text-base").text("Scan this code with your phone's camera, then approve with Face ID or your fingerprint."))
-                .kid(p("max-w-[30rem] text-sm text-secondary").text("Your phone connects to this SuiPlay over Bluetooth, so keep Bluetooth on for both."))
+                .kid(p("max-w-[30rem] text-base").text(tr().wallet_setup.scan_qr))
+                .kid(p("max-w-[30rem] text-sm text-secondary").text(tr().wallet_setup.phone_bluetooth_note))
                 .kid_opt(status.map(|s| p("text-sm text-secondary").text(s)));
         } else {
-            d = d.kid(div("py-14").kid(p("text-xl font-semibold").text(if scanned { "Approve on your phone" } else { "Getting ready" })).kid(p("mt-2 text-sm text-secondary").text(status.unwrap_or("Starting the connection"))));
+            d = d.kid(div("py-14").kid(p("text-xl font-semibold").text(if scanned { tr().wallet_setup.approve_on_phone } else { tr().wallet_setup.getting_ready })).kid(p("mt-2 text-sm text-secondary").text(status.unwrap_or(tr().wallet_setup.starting_connection))));
         }
     } else {
-        d = d.kid(div("py-12").kid(p("text-xl font-semibold").text("Insert your security key and touch it")).kid(p("mt-2 text-sm text-secondary").text(status.unwrap_or("Plug it into the USB port. Touch it when it blinks."))));
+        d = d.kid(div("py-12").kid(p("text-xl font-semibold").text(tr().wallet_setup.insert_key)).kid(p("mt-2 text-sm text-secondary").text(status.unwrap_or(tr().wallet_setup.plug_key))));
     }
-    d.kid(btn_full("Cancel", Variant::Ghost, Size::Md, false, "", Some(Msg::Cancel)))
+    d.kid(btn_full(tr().common.cancel, Variant::Ghost, Size::Md, false, "", Some(Msg::Cancel)))
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -111,13 +112,13 @@ pub enum BtMsg {
 pub fn bluetooth_view(note: Option<&str>, busy: bool, error: Option<&str>, can_cancel: bool) -> El<BtMsg> {
     let mut d = div("flex flex-col items-center gap-5 py-10 text-center")
         .kid(icon("bluetooth", "text-icon-secondary").attr("size", "2.5rem").attr("stroke-width", "1.5"))
-        .kid(div("").kid(p("text-xl font-semibold").text("Turn on Bluetooth")).kid(p("mt-2 max-w-[30rem] text-sm text-secondary").text(note.unwrap_or("Your phone and this SuiPlay talk over Bluetooth to set up your passkey."))));
+        .kid(div("").kid(p("text-xl font-semibold").text(tr().wallet_setup.turn_on_bluetooth_title)).kid(p("mt-2 max-w-[30rem] text-sm text-secondary").text(note.unwrap_or(tr().wallet_setup.bluetooth_note))));
     if let Some(e) = error {
         d = d.kid(p("max-w-[30rem] text-sm text-negative").text(e));
     }
-    d = d.kid(btn(if busy { "Turning on" } else { "Turn on Bluetooth" }, Variant::Primary, "w-64", Some(BtMsg::TurnOn)).def(true));
+    d = d.kid(btn(if busy { tr().wallet_setup.turning_on } else { tr().wallet_setup.turn_on_bluetooth }, Variant::Primary, "w-64", Some(BtMsg::TurnOn)).def(true));
     if can_cancel {
-        d = d.kid(btn_full("Cancel", Variant::Ghost, Size::Md, false, "", Some(BtMsg::Cancel)));
+        d = d.kid(btn_full(tr().common.cancel, Variant::Ghost, Size::Md, false, "", Some(BtMsg::Cancel)));
     }
     d
 }
@@ -130,7 +131,7 @@ pub fn bluetooth_error(powered: bool, blocked: bool, native_message: Option<&str
     if powered {
         return None;
     }
-    Some(if blocked { "Bluetooth is blocked by a switch on this device." } else { "Could not turn Bluetooth on. Try again." }.into())
+    Some(if blocked { tr().wallet_setup.bluetooth_blocked } else { tr().wallet_setup.bluetooth_failed }.into())
 }
 
 #[cfg(test)]

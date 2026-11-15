@@ -5,6 +5,7 @@
 use super::header::{account_header, activity_groups, coin_head, coin_row};
 use super::lib::{hint, load_bar, Hint};
 use super::stack::{HomeTab, WalletView};
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::kit::{btn, btn_full, btn_icon, empty, page, tabs, Size, Variant};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::types::{ActivityItem, Portfolio, RareAccount};
@@ -110,21 +111,21 @@ pub fn view(pr: &Props, st: &State, inventory: impl FnOnce() -> El<Msg>) -> Opti
     let mut body = vec![account_header(account, pr.pf.data.as_ref(), st.copied, Msg::CopyAddress(account.address.clone()))];
 
     let main = if pr.can_sign {
-        btn_icon("arrow-up-right", "Send", Variant::Primary, Size::Lg, "", Some(Msg::Push(WalletView::Send { coin_type: None, to: None }))).def(true)
+        btn_icon("arrow-up-right", tr().common.send, Variant::Primary, Size::Lg, "", Some(Msg::Push(WalletView::Send { coin_type: None, to: None }))).def(true)
     } else {
-        btn_icon("user-plus", "Add a signing account", Variant::Primary, Size::Lg, "", Some(Msg::Push(WalletView::Add))).def(true)
+        btn_icon("user-plus", tr().wallet.add_signing_account, Variant::Primary, Size::Lg, "", Some(Msg::Push(WalletView::Add))).def(true)
     };
     body.push(
         div("mb-6 flex flex-wrap items-center gap-2")
             .kid(main)
-            .kid(btn_icon("arrow-down-left", "Receive", Variant::Secondary, Size::Lg, "", Some(Msg::Push(WalletView::Receive))))
-            .kid(btn_icon("users", "Accounts", Variant::Secondary, Size::Lg, "", Some(Msg::Push(WalletView::Accounts))))
-            .kid(btn_icon("settings", "Settings", Variant::Secondary, Size::Lg, "", Some(Msg::Push(WalletView::Settings))))
-            .kid(btn_icon("arrow-right-left", "Move from your old SuiPlay wallet", Variant::Ghost, Size::Lg, "ml-auto", Some(Msg::Push(WalletView::Playtron)))),
+            .kid(btn_icon("arrow-down-left", tr().common.receive, Variant::Secondary, Size::Lg, "", Some(Msg::Push(WalletView::Receive))))
+            .kid(btn_icon("users", tr().wallet.accounts, Variant::Secondary, Size::Lg, "", Some(Msg::Push(WalletView::Accounts))))
+            .kid(btn_icon("settings", tr().common.settings, Variant::Secondary, Size::Lg, "", Some(Msg::Push(WalletView::Settings))))
+            .kid(btn_icon("arrow-right-left", tr().wallet.move_from_old, Variant::Ghost, Size::Lg, "ml-auto", Some(Msg::Push(WalletView::Playtron)))),
     );
 
     let mut bar = div("mb-2 flex items-end justify-between border-b border-border-primary").kid(tabs(
-        &[("coins", "Coins"), ("collectibles", "Collectibles"), ("activity", "Activity")],
+        &[("coins", tr().wallet.coins), ("collectibles", tr().wallet.collectibles), ("activity", tr().wallet.activity)],
         tab_value(st.tab),
         |v| Msg::Tab(tab_of(v)),
         "",
@@ -133,9 +134,9 @@ pub fn view(pr: &Props, st: &State, inventory: impl FnOnce() -> El<Msg>) -> Opti
         let mut right = div("mb-2 flex items-center gap-2");
         if st.selecting {
             let n = st.selected.len();
-            right = right.kid(btn_full(&if n > 0 { format!("Send {n}") } else { "Pick items to send".into() }, Variant::Primary, Size::Md, false, "", Some(Msg::SendNfts)));
+            right = right.kid(btn_full(&if n > 0 { trf!(tr().wallet.send_n, n = n) } else { tr().wallet.pick_items_to_send.into() }, Variant::Primary, Size::Md, false, "", Some(Msg::SendNfts)));
         }
-        right = right.kid(btn_full(if st.selecting { "Done" } else { "Select" }, Variant::Secondary, Size::Md, false, "", Some(if st.selecting { Msg::StopSelecting } else { Msg::Select })));
+        right = right.kid(btn_full(if st.selecting { tr().common.done } else { tr().common.select }, Variant::Secondary, Size::Md, false, "", Some(if st.selecting { Msg::StopSelecting } else { Msg::Select })));
         bar = bar.kid(right);
     }
     body.push(bar);
@@ -153,15 +154,15 @@ pub fn view(pr: &Props, st: &State, inventory: impl FnOnce() -> El<Msg>) -> Opti
                     );
                 } else {
                     c = c.kid(empty(
-                        "No coins yet",
-                        Some(text("Send Sui assets to this address and they show up here.")),
-                        Some(btn("Receive", Variant::Secondary, "", Some(Msg::Push(WalletView::Receive)))),
+                        tr().wallet.no_coins_yet,
+                        Some(text(tr().wallet.no_coins_body)),
+                        Some(btn(tr().common.receive, Variant::Secondary, "", Some(Msg::Push(WalletView::Receive)))),
                         false,
                     ));
                 }
             }
             if pr.pf.error && pr.pf.data.is_none() {
-                c = c.kid(empty("Could not load balances", Some(text("Check the connection and try again.")), None, false));
+                c = c.kid(empty(tr().wallet.balances_failed, Some(text(tr().wallet.check_connection)), None, false));
             }
             body.push(c);
         }
@@ -170,16 +171,16 @@ pub fn view(pr: &Props, st: &State, inventory: impl FnOnce() -> El<Msg>) -> Opti
             let a = pr.act;
             let mut c = div("pt-2").kid(div("").attr("data-nav-group", "wallet-activity").kid(activity_groups(&a.items, pr.now, pr.tz_min, |x| Msg::Push(WalletView::Activity { digest: x.digest.clone() }))));
             if !a.items.is_empty() && !a.done && !a.error {
-                c = c.kid(div("flex justify-center py-3").kid(btn_full("Show more", Variant::Secondary, Size::Md, false, "", Some(Msg::More))));
+                c = c.kid(div("flex justify-center py-3").kid(btn_full(tr().wallet.show_more, Variant::Secondary, Size::Md, false, "", Some(Msg::More))));
             }
             if a.ready && a.items.is_empty() {
-                c = c.kid(empty("No activity yet", Some(text("Your transactions show up here.")), None, false));
+                c = c.kid(empty(tr().wallet.no_activity_yet, Some(text(tr().wallet.no_activity_body)), None, false));
             }
             if a.error {
                 c = c.kid(empty(
-                    if a.ready { "Couldn't load older activity" } else { "Couldn't load activity" },
+                    if a.ready { tr().wallet.older_activity_failed } else { tr().wallet.activity_failed },
                     None,
-                    Some(btn_full("Retry", Variant::Secondary, Size::Md, false, "", Some(Msg::Retry))),
+                    Some(btn_full(tr().common.retry, Variant::Secondary, Size::Md, false, "", Some(Msg::Retry))),
                     true,
                 ));
             }
@@ -213,14 +214,14 @@ fn ready(pr: &Props, st: &State) -> bool {
 pub fn hints(pr: &Props, st: &State) -> Vec<Hint> {
     if st.selecting {
         let n = st.selected.len();
-        return vec![hint("a", "Toggle"), hint("y", &if n > 0 { format!("Send {n}") } else { "Send".into() }), hint("x", "Done")];
+        return vec![hint("a", tr().wallet.hint_toggle), hint("y", &if n > 0 { trf!(tr().wallet.send_n, n = n) } else { tr().common.send.into() }), hint("x", tr().common.done)];
     }
-    let mut h = vec![hint("a", "Open")];
+    let mut h = vec![hint("a", tr().common.open)];
     if st.tab == HomeTab::Collectibles && pr.can_sign {
-        h.push(hint("x", "Select"));
+        h.push(hint("x", tr().common.select));
     }
-    h.push(hint("y", "Accounts"));
-    h.push(hint("qam", "Quick settings"));
+    h.push(hint("y", tr().wallet.accounts));
+    h.push(hint("qam", tr().common.quick_settings));
     h
 }
 
@@ -367,7 +368,7 @@ mod tests {
         let st = State::new(Some(HomeTab::Activity));
         let t = view(&pr, &st, inv).unwrap().texts();
         let i = t.iter().position(|x| x == "Today").unwrap();
-        assert_eq!(&t[i..i + 6], ["Today", "Received", "25 SUI", " from ", "0xabab...abab", "2:12 PM"]);
+        assert_eq!(&t[i..i + 6], ["Today", "Received", "25 SUI from", " ", "0xabab...abab", "2:12 PM"]);
         assert!(t.contains(&"Yesterday".to_string()));
         assert!(t.contains(&"Failed".to_string()));
         assert!(t.contains(&"Show more".to_string()));

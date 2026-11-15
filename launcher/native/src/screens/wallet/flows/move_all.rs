@@ -3,6 +3,7 @@
 //! the review sheet as the old account (`service::send`, so it signs its own way: PIN, phone,
 //! Ledger, A). View: `pages/move_all.rs`.
 
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::home::lib::Hint;
 use crate::screens::wallet::home::stack::WalletView;
 use crate::screens::wallet::markup::El as M;
@@ -92,12 +93,12 @@ impl WalletTab {
             .filter(|a| a.kind != "watch" && !a.address.eq_ignore_ascii_case(to))
             .map(|a| {
                 let method = match a.kind.as_str() {
-                    "passkey" if a.passkey.as_ref().is_some_and(|p| p.pin) => "Signs with your PIN",
-                    "passkey" => "Signs with your phone or security key",
-                    "ledger" => "Signs on your Ledger",
-                    "keystone" => "Signs on your Keystone",
-                    _ if a.device => "Signs with A on this SuiPlay",
-                    _ => "Signs with your Rare Wallet PIN",
+                    "passkey" if a.passkey.as_ref().is_some_and(|p| p.pin) => tr().wallet_setup.signs_pin,
+                    "passkey" => tr().wallet_setup.signs_phone_or_key,
+                    "ledger" => tr().wallet_setup.signs_ledger,
+                    "keystone" => tr().wallet_setup.signs_keystone,
+                    _ if a.device => tr().wallet_setup.signs_a,
+                    _ => tr().wallet_setup.signs_wallet_pin,
                 };
                 Source { address: a.address.clone(), label: a.label.clone(), method: method.into() }
             })
@@ -119,7 +120,7 @@ impl WalletTab {
     pub(in crate::screens::wallet) fn move_all_markup(&self, v: &WalletView) -> Option<M<Msg>> {
         let WalletView::MoveAll { .. } = v else { return None };
         let to = self.mv_target().unwrap_or_default();
-        let to_label = self.accounts.iter().find(|a| a.address.eq_ignore_ascii_case(&to)).map(|a| a.label.clone()).unwrap_or_else(|| "this account".into());
+        let to_label = self.accounts.iter().find(|a| a.address.eq_ignore_ascii_case(&to)).map(|a| a.label.clone()).unwrap_or_else(|| tr().wallet_setup.this_account.into());
         let froms = self.mv_sources(&to);
         let st = if self.flows.move_all.key == self.stack.top().key { self.flows.move_all.st.clone() } else if self.fixture { fixture_flow() } else { mv::State::default() };
         let pr = mv::Props { to_label: &to_label, to: &to, froms: &froms };
@@ -156,15 +157,15 @@ impl WalletTab {
             }
             Some(mv::Effect::Send(from)) if !self.fixture => {
                 let Some(plan) = self.flows.move_all.plan.clone() else { return };
-                let label = self.accounts.iter().find(|a| a.address.eq_ignore_ascii_case(&to)).map(|a| a.label.clone()).unwrap_or_else(|| "this account".into());
+                let label = self.accounts.iter().find(|a| a.address.eq_ignore_ascii_case(&to)).map(|a| a.label.clone()).unwrap_or_else(|| tr().wallet_setup.this_account.into());
                 self.flows.move_all.rx_send = Some(service::work(move |_w| {
                     let n = plan.txs.len();
                     let mut digests = Vec::new();
                     for (i, (tx, opts)) in plan.txs.into_iter().enumerate() {
-                        let title = if n > 1 { format!("Move everything to {label} ({} of {n})", i + 1) } else { format!("Move everything to {label}") };
+                        let title = if n > 1 { trf!(tr().wallet_setup.move_title_n, label = label, i = i + 1, n = n) } else { trf!(tr().wallet_setup.move_title, label = label) };
                         let r = service::send(TxInput::PtbGas(tx, opts), &from, &title).map_err(|e| e.to_string())?;
                         if r.status.as_deref() == Some("failure") {
-                            return Err("The network rejected the move. Nothing left the account.".to_string());
+                            return Err(tr().wallet_setup.move_rejected.to_string());
                         }
                         digests.push(r.digest.unwrap_or_default());
                     }
@@ -197,7 +198,7 @@ impl WalletTab {
                     f.plan = Some(m);
                     Phase::Plan(from, s)
                 }
-                Ok(Err(e)) | Err(e) => Phase::Failed(format!("Could not read that account: {e}")),
+                Ok(Err(e)) | Err(e) => Phase::Failed(trf!(tr().wallet_setup.read_account_failed, error = e)),
             };
             changed = true;
         }

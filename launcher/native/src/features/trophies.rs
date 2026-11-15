@@ -16,6 +16,7 @@ use rare_sui::grpc::{ChainRead, Include};
 use serde_json::Value;
 use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
+use rare_i18n::{tr, trf, trn};
 
 /// Most attestations one transaction carries.
 const MAX_PER_TX: usize = 25;
@@ -414,23 +415,23 @@ fn claim_blocker(s: &Store, appid: u32) -> Option<String> {
         return Some(String::new());
     }
     if s.address.is_none() && !s.fixture {
-        return Some("Add a Rare Wallet account to claim".into());
+        return Some(tr().features_more.trophies_add_account.into());
     }
     if let Some(r) = &s.registry {
         if r.paused {
-            return Some("Claims are paused".into());
+            return Some(tr().features_more.trophies_claims_paused.into());
         }
         if !r.issuer_key_set {
             return Some(String::new());
         }
     }
-    let Some(g) = s.games.get(&appid) else { return Some("Checking Rare Trophies".into()) };
-    let Some(g) = g else { return Some("This game is not on Rare Trophies yet".into()) };
+    let Some(g) = s.games.get(&appid) else { return Some(tr().features_more.trophies_checking.into()) };
+    let Some(g) = g else { return Some(tr().features_more.trophies_game_not_listed.into()) };
     if !g.attested {
-        return Some("This game's studio issues its own trophies".into());
+        return Some(tr().features_more.trophies_studio_own.into());
     }
     if g.paused {
-        return Some("Claims for this game are paused".into());
+        return Some(tr().features_more.trophies_game_paused.into());
     }
     None
 }
@@ -447,36 +448,36 @@ fn parse_attestation(reply: &Value, registry: &str, game: &str, trophy_id: u32, 
     let body = reply.get("body").cloned().unwrap_or(Value::Null);
     if !(200..300).contains(&status) {
         let msg = body.get("error").or_else(|| body.get("message")).and_then(|v| v.as_str()).map(String::from);
-        return Err(msg.unwrap_or_else(|| if status == 429 { "Too many claims right now. Try again in a minute.".into() } else { format!("The attestation service answered {status}") }));
+        return Err(msg.unwrap_or_else(|| if status == 429 { tr().features_more.trophies_too_many.into() } else { trf!(tr().features_more.trophies_att_status, status = status) }));
     }
     let norm = |k: &str| body.get(k).and_then(|v| v.as_str()).map(rare_sui::ptb::norm_addr).unwrap_or_default();
     if norm("registry") != rare_sui::ptb::norm_addr(registry) {
-        return Err("The attestation is for a different registry".into());
+        return Err(tr().features_more.trophies_att_registry.into());
     }
     if norm("game") != rare_sui::ptb::norm_addr(game) {
-        return Err("The attestation is for a different game".into());
+        return Err(tr().features_more.trophies_att_game.into());
     }
     let big = |k: &str, what: &str| -> Result<u64, String> {
         match body.get(k) {
-            Some(Value::String(s)) if s.chars().all(|c| c.is_ascii_digit()) && !s.is_empty() => s.parse().map_err(|_| format!("The attestation has no valid {what}")),
-            Some(Value::Number(n)) => n.as_u64().ok_or_else(|| format!("The attestation has no valid {what}")),
-            _ => Err(format!("The attestation has no valid {what}")),
+            Some(Value::String(s)) if s.chars().all(|c| c.is_ascii_digit()) && !s.is_empty() => s.parse().map_err(|_| trf!(tr().features_more.trophies_att_invalid, what = what)),
+            Some(Value::Number(n)) => n.as_u64().ok_or_else(|| trf!(tr().features_more.trophies_att_invalid, what = what)),
+            _ => Err(trf!(tr().features_more.trophies_att_invalid, what = what)),
         }
     };
-    let tid = big("trophyId", "trophy id")?;
+    let tid = big("trophyId", tr().features_more.trophies_what_id)?;
     if tid != trophy_id as u64 {
-        return Err("The attestation is for a different trophy".into());
+        return Err(tr().features_more.trophies_att_trophy.into());
     }
-    let expires_ms = big("expiresMs", "expiry")?;
+    let expires_ms = big("expiresMs", tr().features_more.trophies_what_expiry)?;
     if expires_ms <= now as u64 {
-        return Err("The attestation has expired. Try again.".into());
+        return Err(tr().features_more.trophies_att_expired.into());
     }
     use base64::Engine;
     let signature = base64::engine::general_purpose::STANDARD.decode(body.get("signature").and_then(|v| v.as_str()).unwrap_or_default()).map_err(|_| "The attestation signature is not readable".to_string())?;
     if signature.len() != 64 {
-        return Err("The attestation signature is not readable".into());
+        return Err(tr().features_more.trophies_att_signature.into());
     }
-    Ok(Attestation { trophy_id: tid, nonce: big("nonce", "nonce")?, expires_ms, signature })
+    Ok(Attestation { trophy_id: tid, nonce: big("nonce", tr().features_more.trophies_what_nonce)?, expires_ms, signature })
 }
 
 pub(super) fn build_claim_tx(pkg: &str, registry: &str, game: &str, player: &str, profile_id: Option<&str>, atts: &[Attestation]) -> rare_sui::ptb::Tx {
@@ -529,12 +530,12 @@ pub fn claim(appid: u32, keys: Vec<String>) {
                     }
                 });
                 if let Some((_, why)) = skipped.first() {
-                    super::bus::note(format!("{} not claimed: {}", skipped.len(), why.to_lowercase()), false);
+                    super::bus::note(trf!(tr().features_more.trophies_not_claimed, n = skipped.len(), why = why.to_lowercase()), false);
                 }
                 load_chain(true);
             }
-            Err(e) if e.contains("declined") || e.contains("cancel") => super::bus::note("Claim cancelled", false),
-            Err(e) => super::bus::note(format!("Couldn't claim the trophies. {e}"), true),
+            Err(e) if e.contains("declined") || e.contains("cancel") => super::bus::note(tr().features_more.trophies_claim_cancelled, false),
+            Err(e) => super::bus::note(trf!(tr().features_more.trophies_claim_failed, error = e), true),
         }
     });
 }
@@ -542,17 +543,17 @@ pub fn claim(appid: u32, keys: Vec<String>) {
 type Claimed = (Vec<ChainDef>, Vec<(String, String)>, String);
 
 fn claim_blocking(appid: u32, keys: &[String]) -> Result<Claimed, String> {
-    let cfg = rare_sui::network::trophy_config().ok_or("Claiming isn't set up in this build.")?;
+    let cfg = rare_sui::network::trophy_config().ok_or(tr().features_more.trophies_claim_not_set_up)?;
     let (player, game, profile_id) = with(|s| (s.address.clone(), s.games.get(&appid).cloned().flatten(), s.profile_id.clone()));
-    let player = player.ok_or("Add a Rare Wallet account to claim")?;
-    let game = game.ok_or("This game is not on Rare Trophies yet")?;
+    let player = player.ok_or(tr().features_more.trophies_add_account)?;
+    let game = game.ok_or(tr().features_more.trophies_game_not_listed)?;
     if !game.attested {
-        return Err("This game does not take self-reported trophies".into());
+        return Err(tr().features_more.trophies_no_self_reported.into());
     }
     if game.paused {
-        return Err("Claims for this game are paused".into());
+        return Err(tr().features_more.trophies_game_paused.into());
     }
-    let fresh = rare_trophies::trophies_steam_app(appid).ok_or("Steam's files for this game are gone from this device")?;
+    let fresh = rare_trophies::trophies_steam_app(appid).ok_or(tr().features_more.trophies_files_gone)?;
     let mut skipped: Vec<(String, String)> = Vec::new();
     let mut picks: Vec<(rare_trophies::steam::Achievement, ChainDef)> = Vec::new();
     for k in keys {
@@ -560,15 +561,15 @@ fn claim_blocking(appid: u32, keys: &[String]) -> Result<Claimed, String> {
         let def = game.game.defs.iter().find(|d| &d.key == k);
         match (a, def) {
             (Some(a), Some(d)) if a.unlocked && d.tier != 3 => picks.push((a.clone(), d.clone())),
-            (Some(a), _) if !a.unlocked => skipped.push((k.clone(), "No longer unlocked on this device".into())),
-            (None, _) => skipped.push((k.clone(), "No longer unlocked on this device".into())),
-            (_, None) => skipped.push((k.clone(), "Not a trophy on Rare yet".into())),
-            _ => skipped.push((k.clone(), "The platinum unlocks by itself".into())),
+            (Some(a), _) if !a.unlocked => skipped.push((k.clone(), tr().features_more.trophies_no_longer.into())),
+            (None, _) => skipped.push((k.clone(), tr().features_more.trophies_no_longer.into())),
+            (_, None) => skipped.push((k.clone(), tr().features_more.trophies_not_on_rare.into())),
+            _ => skipped.push((k.clone(), tr().features_more.trophies_platinum_auto.into())),
         }
     }
     picks.truncate(MAX_PER_TX);
     if picks.is_empty() {
-        return Err(skipped.first().map(|s| s.1.clone()).unwrap_or_else(|| "Nothing to claim".into()));
+        return Err(skipped.first().map(|s| s.1.clone()).unwrap_or_else(|| tr().features_more.trophies_nothing_to_claim.into()));
     }
     let addr = rare_sui::ptb::norm_addr(&player);
     let mut atts = Vec::new();
@@ -578,8 +579,8 @@ fn claim_blocking(appid: u32, keys: &[String]) -> Result<Claimed, String> {
         atts.push(parse_attestation(&reply, &cfg.registry, &game.game.id, def.trophy_id, now_ms())?);
     }
     let tx = build_claim_tx(&cfg.package, &cfg.registry, &game.game.id, &player, profile_id.as_deref(), &atts);
-    let title = if picks.len() == 1 { format!("Claim {}", picks[0].1.name) } else { format!("Claim {} trophies", picks.len()) };
-    let signer = super::signer::current().ok_or("Add a Rare Wallet account to claim")?;
+    let title = if picks.len() == 1 { trf!(tr().features_more.trophies_claim_one, name = picks[0].1.name) } else { trn!(tr().features_more.trophies_claim_n, picks.len()) };
+    let signer = super::signer::current().ok_or(tr().features_more.trophies_add_account)?;
     live::rt().block_on(signer.sign_and_execute(tx, &title)).map_err(|e| e.to_string())?;
     Ok((picks.into_iter().map(|p| p.1).collect(), skipped, game.game.name))
 }
@@ -615,8 +616,8 @@ fn hud(p: &Popup) {
     }
     let p = p.clone();
     bg(move || {
-        let meta = [p.game.clone(), p.tier.map(|t| crate::screens::trophies::model::tier_name(t).to_string()), p.points.map(|x| format!("{x} points"))].into_iter().flatten().collect::<Vec<_>>().join(" \u{b7} ");
-        let title = if p.minted { format!("On chain: {}", p.name) } else { p.name.clone() };
+        let meta = [p.game.clone(), p.tier.map(|t| crate::screens::trophies::model::tier_name(t).to_string()), p.points.map(|x| trn!(tr().features_more.trophies_points_n, x))].into_iter().flatten().collect::<Vec<_>>().join(" \u{b7} ");
+        let title = if p.minted { trf!(tr().features_more.trophies_on_chain, name = p.name) } else { p.name.clone() };
         rare_system::hud::toast_icon(&title, Some(&meta), p.icon_url.as_deref().and_then(hud_icon));
     });
 }
@@ -868,7 +869,7 @@ fn case_data_steam(st: &State, sort: ui::GameSort) -> CaseData {
                 let info = s.games.get(&g.appid).cloned().flatten();
                 let rows = game_rows(Some(g), info.as_ref().map(|i| &i.game), &s.minted);
                 let title = st.library.as_ref().and_then(|l| l.games.iter().find(|x| x.id == format!("steam:{}", g.appid))).map(|x| x.title.clone());
-                let name = title.filter(|t| !t.is_empty()).or_else(|| (!g.name.is_empty()).then(|| g.name.clone())).or_else(|| info.as_ref().map(|i| i.game.name.clone())).unwrap_or_else(|| format!("Steam app {}", g.appid));
+                let name = title.filter(|t| !t.is_empty()).or_else(|| (!g.name.is_empty()).then(|| g.name.clone())).or_else(|| info.as_ref().map(|i| i.game.name.clone())).unwrap_or_else(|| trf!(tr().features_more.trophies_steam_app, appid = g.appid));
                 CaseGame {
                     appid: g.appid,
                     name,
@@ -1013,19 +1014,20 @@ fn row_sheet(st: &mut State, appid: u32, key: &str) {
     let Some(g) = d.games.iter().find(|g| g.appid == appid) else { return };
     let Some(r) = g.row(key) else { return };
     let code = |what: &str| Act::Legacy(format!("trophy:{what}:{appid}:{key}"));
-    let mut items = vec![OptionItem { label: if r.showcased { "Remove from your showcase".into() } else { "Show on your profile".into() }, on: None, act: code("show") }];
+    let mut items = vec![OptionItem { label: if r.showcased { tr().features_more.trophies_remove_showcase.into() } else { tr().features_more.trophies_show_profile.into() }, on: None, act: code("show") }];
     let can_pin = rare_sui::network::trophy_config().is_some() && r.pinned.is_none() && !matches!(r.trust, Trust::Flagged(_));
     if can_pin {
-        items.push(OptionItem { label: "Pin to chain".into(), on: None, act: code("chain") });
+        items.push(OptionItem { label: tr().features_more.trophies_pin_to_chain.into(), on: None, act: code("chain") });
     }
     let trust = match &r.trust {
-        Trust::Verified => "Verified on SuiPlay: it counts toward your Rare score.".to_string(),
-        Trust::Flagged(why) => format!("Not counted: {why}."),
-        Trust::Unverified => "Not verified, so it doesn't count toward your Rare score.".to_string(),
-        Trust::Pending => "Not checked by rare.market yet.".to_string(),
+        Trust::Verified => tr().features_more.trophies_trust_verified.to_string(),
+        Trust::Flagged(why) => trf!(tr().features_more.trophies_trust_flagged, why = why),
+        Trust::Unverified => tr().features_more.trophies_trust_unverified.to_string(),
+        Trust::Pending => tr().features_more.trophies_trust_pending.to_string(),
     };
-    let chain = if r.pinned.is_some() { " It is on chain." } else if can_pin { " Pin to chain mints it in your wallet as a self-reported trophy; Rare covers the fee within its limits." } else { "" };
-    st.options = Some(OptionsSpec { title: r.name.clone(), sub: Some(format!("{} · {}. {trust}{chain}", g.name, rare_trophies::score::tier_name(r.tier.unwrap_or(0)))), items });
+    let f = &tr().features_more;
+    let tmpl = if r.pinned.is_some() { f.trophies_sheet_on_chain } else if can_pin { f.trophies_sheet_can_pin } else { f.trophies_sheet_plain };
+    st.options = Some(OptionsSpec { title: r.name.clone(), sub: Some(trf!(tmpl, game = g.name, tier = rare_trophies::score::tier_name(r.tier.unwrap_or(0)), trust = trust)), items });
 }
 
 /// The sheet's codes: `trophy:show:<appid>:<key>`, `trophy:chain:<appid>:<key>`.
@@ -1041,7 +1043,7 @@ pub fn on_code(st: &mut State, code: &str) {
     match what {
         "show" => {
             let on = super::trophy_case::toggle_showcase(pin);
-            super::bus::note(if on { "On your profile" } else { "Removed from your profile" }, false);
+            super::bus::note(if on { tr().features_more.trophies_on_profile } else { tr().features_more.trophies_off_profile }, false);
         }
         "chain" => super::trophy_case::pin_to_chain(pin),
         _ => {}
@@ -1121,7 +1123,7 @@ impl Page for CasePage {
                 if let Some(lib) = d.games.iter().find(|g| g.appid == *appid).and_then(|g| g.lib_id.clone()) {
                     let on = !rare_trophies::milestones::marked(&lib);
                     super::trophy_case::set_complete(&lib, on);
-                    super::bus::note(if on { "Marked complete" } else { "No longer marked complete" }, false);
+                    super::bus::note(if on { tr().features_more.trophies_marked_complete } else { tr().features_more.trophies_unmarked_complete }, false);
                 }
                 self.ver += 1;
             }

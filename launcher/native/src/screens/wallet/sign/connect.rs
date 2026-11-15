@@ -6,6 +6,7 @@ use super::review::Account;
 use super::site::{host_of, site_risks};
 use crate::screens::wallet::kit::{addr, btn, list_button, sheet, account_avatar, SheetSpec, Variant};
 use crate::screens::wallet::markup::*;
+use rare_i18n::{tr, trf};
 
 pub struct Props<'a> {
     pub game: &'a str,
@@ -39,21 +40,21 @@ pub enum Msg {
 
 pub fn view(p: &Props, st: &State) -> El<Msg> {
     let warn = site_risks(Some(p.origin));
-    let mut body = vec![p_("text-sm text-secondary").text("It can also ask you to sign. Every request still shows up here for you to approve, and nothing is signed without it.")];
+    let mut body = vec![p_("text-sm text-secondary").text(tr().wallet_sign.connect_body)];
     if !warn.is_empty() {
         body.push(ul("mt-3 flex flex-col gap-1 text-sm text-negative").role("alert").kids(warn.iter().map(|w| li("").key(&w.id).text(&w.text))));
     }
-    body.push(h3("mb-2 mt-5 text-sm text-secondary").text("Account to share"));
+    body.push(h3("mb-2 mt-5 text-sm text-secondary").text(tr().wallet_sign.account_to_share));
     body.push(div("rounded border border-border-primary p-1").kids(p.accounts.iter().map(|a| {
         let right = (st.pick.as_deref() == Some(a.address.as_str())).then(|| icon("check", "text-primary").attr("size", "1.25rem"));
         list_button(Some(account_avatar(&a.address, "2rem")), &a.label, Some(addr(&a.address, false, "")), right, Msg::Pick(a.address.clone()), false, "").key(&a.address)
     })));
     sheet(
         SheetSpec {
-            title: format!("{} wants to see your address", p.game),
+            title: trf!(tr().wallet_sign.connect_title, game = p.game),
             subtitle: Some(host_of(Some(p.origin))),
             icon: None,
-            footer: Some(vec![btn("Allow", Variant::Primary, "flex-1", Some(Msg::Allow)).def(true), btn("Don't allow", Variant::Secondary, "", Some(Msg::Deny))]),
+            footer: Some(vec![btn(tr().wallet_sign.allow, Variant::Primary, "flex-1", Some(Msg::Allow)).def(true), btn(tr().wallet_sign.dont_allow, Variant::Secondary, "", Some(Msg::Deny))]),
             close: Some(Msg::Deny),
             width: "36rem",
         },

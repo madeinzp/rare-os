@@ -6,6 +6,7 @@ use super::model::StoreGame;
 use super::parts::{store_card, trunc_text};
 use crate::kit::{self, tok, Btn};
 use crate::screens::market::host::*;
+use rare_i18n::{tr, trf};
 use rare_render::input::Pad;
 use rare_render::view::{key, El, Look};
 
@@ -98,15 +99,15 @@ impl StorePage {
 
     pub fn page_hints(&self) -> Vec<(&'static str, String)> {
         let a = match self.host.tag() {
-            Some(T_SEARCH) => Some("Search"),
-            Some(T_RETRY) => Some("Select"),
-            Some(_) => Some("Details"),
+            Some(T_SEARCH) => Some(tr().common.search),
+            Some(T_RETRY) => Some(tr().common.select),
+            Some(_) => Some(tr().common.details),
             None => None,
         };
         let mut h: Vec<(&'static str, String)> = a.map(|a| ("a", a.to_string())).into_iter().collect();
-        h.push(("b", "Back".into()));
-        h.push(("x", "Search store".into()));
-        h.push(("y", "Search".into()));
+        h.push(("b", tr().common.back.into()));
+        h.push(("x", tr().store.search_store_hint.into()));
+        h.push(("y", tr().common.search.into()));
         h
     }
 
@@ -169,48 +170,48 @@ pub fn view(ui: &mut Ui, d: &StoreData, q: Option<&str>) -> El {
     // Header: title and line, the search field on the right.
     let titles = ui
         .bx(s().col())
-        .child(ui.text("Store", T::new(Ty::Title).w(600)));
+        .child(ui.text(tr().store.title, T::new(Ty::Title).w(600)));
     // The field's text and icon are currentColor: muted, primary while focused.
     let icon = kit::focus_icon(ui, "search", 1.0, false, tok::MUTED, tok::FG);
     let field = ui
         .bx(s().row().items_center().gap(0.5).h(2.75).w(22.0).px(0.9 + 1.0 / ui.rem).ml_auto())
         .look(Look::default().radius(ui.r(0.25)).border(1.0, crate::kit::tok::BORDER_LIGHT))
         .child(icon)
-        .child(trunc_text(ui, s(), q.unwrap_or("Search the store").to_string(), T::new(Ty::Small).c(tok::MUTED)).focus_color(tok::FG));
-    let field = fill_nav(field, T_SEARCH, Some("Search"), None, false);
+        .child(trunc_text(ui, s(), q.unwrap_or(tr().store.search_placeholder).to_string(), T::new(Ty::Small).c(tok::MUTED)).focus_color(tok::FG));
+    let field = fill_nav(field, T_SEARCH, Some(tr().common.search), None, false);
     page = page.child(ui.bx(s().row().items_end().gap(1.0).px(2.5).mb(1.25)).child(titles).child(field).key(key("s-head")));
 
     let owned = &d.owned;
     if let Some(q) = q {
         let res = StoreData::ok(&d.results);
         let note = res.map(|r| r.len().to_string());
-        let mut body = ui.bx(s().col().px(2.5)).child(kit::section_head(ui, s().mb(0.9), &format!("Results for \"{q}\""), note.as_deref(), None));
+        let mut body = ui.bx(s().col().px(2.5)).child(kit::section_head(ui, s().mb(0.9), &trf!(tr().store.results_for, query = q), note.as_deref(), None));
         body = match (&d.results, res) {
             (_, Some(r)) if r.is_empty() => {
-                let b = kit::button(ui, Btn::new("Search again", T_RETRY).primary().def(true));
-                body.child(empty(ui, s(), "No games match that search", Some("Try a studio name or a genre."), vec![b]))
+                let b = kit::button(ui, Btn::new(tr().store.search_again, T_RETRY).primary().def(true));
+                body.child(empty(ui, s(), tr().store.no_match_title, Some(tr().store.no_match_body), vec![b]))
             }
-            (Some(Err(())), _) => body.child(empty(ui, s(), "Couldn't reach the store", Some("Check the connection and try again."), vec![])),
+            (Some(Err(())), _) => body.child(empty(ui, s(), tr().store.store_unreachable, Some(tr().store.check_connection), vec![])),
             _ => body.child(grid(ui, "store-results", res.map(|v| v.as_slice()).unwrap_or(&[]), owned, T_RESULTS, now)),
         };
         return page.child(body.key(key("s-results")));
     }
 
     if StoreData::failed(&d.featured) && StoreData::failed(&d.fresh) && StoreData::failed(&d.top) {
-        let b = kit::button(ui, Btn::new("Try again", T_RETRY).primary().def(true));
-        let e = empty(ui, s(), "Couldn't reach the store", Some("Check the connection. The store needs rare.market to show games."), vec![b]);
+        let b = kit::button(ui, Btn::new(tr().common.try_again, T_RETRY).primary().def(true));
+        let e = empty(ui, s(), tr().store.store_unreachable, Some(tr().store.store_needs_market), vec![b]);
         return page.child(ui.bx(s().col().px(2.5)).child(e).key(key("s-failed")));
     }
 
     if let Some(feat) = StoreData::ok(&d.featured).filter(|f| !f.is_empty()) {
         let six: Vec<StoreGame> = feat.iter().take(6).cloned().collect();
-        let head = kit::section_head(ui, s().mb(0.9), "Featured", None, None);
+        let head = kit::section_head(ui, s().mb(0.9), tr().store.featured, None, None);
         let g = grid(ui, "store-featured", &six, owned, T_FEATURED, now);
         page = page.child(ui.bx(s().col().px(2.5)).child(head).child(g).key(key("s-featured")));
     }
-    let new = shelf(ui, "store-new", "New", None, StoreData::ok(&d.fresh), owned, T_NEW, now);
-    let top = shelf(ui, "store-top", "Top sellers", Some("30 days"), StoreData::ok(&d.top), owned, T_TOP, now);
-    let sale = shelf(ui, "store-sale", "On sale", None, StoreData::ok(&d.sale), owned, T_SALE, now);
+    let new = shelf(ui, "store-new", tr().store.new_games, None, StoreData::ok(&d.fresh), owned, T_NEW, now);
+    let top = shelf(ui, "store-top", tr().store.top_sellers, Some(tr().store.thirty_days), StoreData::ok(&d.top), owned, T_TOP, now);
+    let sale = shelf(ui, "store-sale", tr().store.on_sale, None, StoreData::ok(&d.sale), owned, T_SALE, now);
     page.maybe(new.map(|e| e.key(key("s-new")))).maybe(top.map(|e| e.key(key("s-top")))).maybe(sale.map(|e| e.key(key("s-sale"))))
 }
 

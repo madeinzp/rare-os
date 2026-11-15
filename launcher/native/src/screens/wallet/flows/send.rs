@@ -2,6 +2,7 @@
 //! addresses and SuiNS names, resolved both ways), recent recipients, then `buildCoinSend` and the
 //! signing queue. The global review sheet takes over; a sent coin lands back on home.
 
+use rare_i18n::tr;
 use crate::screens::wallet::home::stack::WalletView;
 use crate::screens::wallet::markup::El as M;
 use crate::screens::wallet::page::WalletTab;
@@ -127,7 +128,7 @@ impl WalletTab {
         self.flows.send.recents = recents;
         self.flows.send.st = Some(ps);
         match eff {
-            Some(page::Effect::AskTo(v)) => st.ask_text(ASK_TO, "Send to", v, Some("0x address or name.sui")),
+            Some(page::Effect::AskTo(v)) => st.ask_text(ASK_TO, tr().wallet_setup.ask_send_to, v, Some(tr().wallet_setup.send_to_example)),
             Some(page::Effect::Resolve(t)) => self.send_resolve(t),
             Some(page::Effect::Push(v)) => self.push(st, v),
             Some(page::Effect::Send(sc)) => {
@@ -198,7 +199,7 @@ impl WalletTab {
             let res: Result<(), Option<String>> = match r {
                 Ok((sc, Ok(res))) if res.status.as_deref() != Some("failure") => {
                     save_recent(&sc.to, sc.suins.as_deref());
-                    st.toast(sc.title.replacen("Send", "Sent", 1), Tone::Info, now);
+                    st.toast(sc.done.clone(), Tone::Info, now);
                     self.stack.reset(Vec::new());
                     // Balances, activity and items refresh now and again shortly (keep::nudge).
                     crate::data::keep::nudge();
@@ -206,7 +207,7 @@ impl WalletTab {
                     self.ver += 1;
                     return false;
                 }
-                Ok((_, Ok(_))) => Err(Some("The network rejected this transaction.".into())),
+                Ok((_, Ok(_))) => Err(Some(tr().wallet_setup.network_rejected.into())),
                 Ok((_, Err(SignError::Rejected(_)))) => Err(None),
                 Ok((_, Err(SignError::Failed(m)))) => Err(Some(m)),
                 Ok((_, Err(e))) => Err(Some(e.to_string())),

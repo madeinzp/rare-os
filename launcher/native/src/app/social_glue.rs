@@ -169,7 +169,7 @@ impl App {
                 self.st.close();
                 if let Err(e) = crate::features::webgame::open_external(&url) {
                     log::warn!("open web {url}: {e}");
-                    self.st.toast("Couldn't open that page. Try again.", Tone::Error, now);
+                    self.st.toast(tr().app.open_page_failed, Tone::Error, now);
                 }
             }
             ActionTarget::Nothing => {}
@@ -224,7 +224,7 @@ impl App {
             // Fixtures: opening works, the rest needs the live service.
             match a {
                 HomeAct::Open(t) => self.show_friends(Some(t)),
-                _ => self.st.toast("Friends needs the live launcher.", Tone::Info, now),
+                _ => self.st.toast(tr().app.friends_need_live, Tone::Info, now),
             }
             return;
         };
@@ -243,7 +243,7 @@ impl App {
     pub(super) fn friends_act(&mut self, a: &str) {
         let now = clock::secs();
         let Some(social) = self.social.clone() else {
-            self.st.toast("Friends needs the live launcher.", Tone::Info, now);
+            self.st.toast(tr().app.friends_need_live, Tone::Info, now);
             return;
         };
         let after = social.act(a);
@@ -279,7 +279,7 @@ impl App {
                         if let Err(e) = r {
                             log::warn!("steam lobby: {e}");
                             st.handoff_until = None;
-                            st.toast("Couldn't open Steam. Try again.", Tone::Error, now);
+                            st.toast(tr().app.open_steam_failed, Tone::Error, now);
                         }
                     })
                 });
@@ -440,7 +440,7 @@ impl App {
             Effect::Reply(addr) => {
                 social.mark_read(&addr);
                 let name = social.label_of(&addr);
-                self.st.ask_text(format!("social:dm:{addr}"), format!("Message to {name}"), "", Some("Up to 280 characters"));
+                self.st.ask_text(format!("social:dm:{addr}"), trf!(tr().app.message_to, name = name), "", Some(tr().app.up_to_280));
             }
             Effect::OpenRequests => {
                 let first = friends.read(|s| s.received.first().map(|p| p.address.clone()));

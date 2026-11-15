@@ -5,6 +5,7 @@
 //! through `crate::sign`; their phase comes back to the buy sheet.
 
 use super::buy::Phase;
+use rare_i18n::{tr, trf};
 use super::data::{Account, Answers};
 use super::shell::Marketplace;
 use crate::screens::overlay::common::Cx;
@@ -201,15 +202,15 @@ impl Feed {
     /// `market:buy:<id>`: builds the purchase of the item's listing and hands it to Rare Wallet.
     pub fn buy(&mut self, id: &str) {
         let Some(acct) = self.a.account.clone().filter(|a| a.signer) else {
-            let _ = self.tx.send(Msg::Buy(id.to_string(), Phase::Error(crate::sign::NO_SIGNER.into())));
+            let _ = self.tx.send(Msg::Buy(id.to_string(), Phase::Error(crate::sign::no_signer().into())));
             return;
         };
         let Some(d) = self.a.get::<ItemDetail>(&api::paths::item(id)) else {
-            let _ = self.tx.send(Msg::Buy(id.to_string(), Phase::Error("This item is still loading. Try again in a moment.".into())));
+            let _ = self.tx.send(Msg::Buy(id.to_string(), Phase::Error(tr().market.item_loading.into())));
             return;
         };
         let Some(listing) = d.card.listing.clone() else {
-            let _ = self.tx.send(Msg::Buy(id.to_string(), Phase::Error("This item is not listed anymore.".into())));
+            let _ = self.tx.send(Msg::Buy(id.to_string(), Phase::Error(tr().market.item_unlisted.into())));
             return;
         };
         let (tx, id) = (self.tx.clone(), id.to_string());
@@ -221,12 +222,12 @@ impl Feed {
                 let tx_ = match built {
                     Ok(t) => t,
                     Err(e) => {
-                        let _ = tx.send(Msg::Buy(id, Phase::Error(if e.0.is_empty() { "This item can't be bought here.".into() } else { e.0 })));
+                        let _ = tx.send(Msg::Buy(id, Phase::Error(if e.0.is_empty() { tr().market.cant_buy.into() } else { e.0 })));
                         return;
                     }
                 };
                 let _ = tx.send(Msg::Buy(id.clone(), Phase::Signing));
-                let title = format!("Buy {}", d.card.name);
+                let title = trf!(tr().market.buy_title, name = d.card.name);
                 let phase = match crate::sign::sign_and_execute(tx_, &acct.address, &title) {
                     Ok(digest) => Phase::Done(digest),
                     Err(e) if e == rare_market::inventory::notice::SIGN_REJECTED => Phase::Idle,

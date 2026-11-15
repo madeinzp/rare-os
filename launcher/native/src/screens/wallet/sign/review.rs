@@ -14,6 +14,7 @@ use super::site::{decode_message, host_of, site_risks, Risk};
 use crate::screens::wallet::fmt::{format_amount, norm_type, short_id, sui_type, to_number, usd};
 use crate::screens::wallet::kit::{addr, avatar, btn, btn_full, mimg, row, sheet, toggle_row, SheetSpec, Size, Variant};
 use crate::screens::wallet::markup::*;
+use rare_i18n::{tr, trf};
 use std::collections::BTreeMap;
 
 // ------------------------------------------------------------------ inputs
@@ -239,7 +240,7 @@ fn coin_row(r: &ReviewRow, review: &Review) -> El<Msg> {
                 .kid(p("truncate text-base font-medium").text(symbol))
                 .kid(p("truncate text-xs text-secondary").text(match meta.and_then(|m| m.price_usd) {
                     Some(pr) => usd(pr),
-                    None => "No price".into(),
+                    None => tr().wallet_sign.no_price.into(),
                 })),
         )
         .kid(
@@ -276,10 +277,10 @@ fn details(review: &Review, open: bool) -> Option<El<Msg>> {
     if review.calls.is_empty() && review.shared.is_empty() {
         return None;
     }
-    let mut s = section("mt-6").label("Details").kid(
+    let mut s = section("mt-6").label(tr().wallet_sign.details).kid(
         button("flex w-full items-center justify-between rounded px-1 py-2 text-sm text-secondary", Some(Msg::Details))
             .attr("aria-expanded", open.to_string())
-            .kid(span("").text("Details"))
+            .kid(span("").text(tr().wallet_sign.details))
             .kid(icon("chevron-down", if open { "rotate-180" } else { "" }).attr("size", "1rem")),
     );
     if open {
@@ -298,19 +299,19 @@ fn details(review: &Review, open: bool) -> Option<El<Msg>> {
 
 fn account_line(address: &str, accounts: &[Account]) -> El<Msg> {
     let a = accounts.iter().find(|x| x.address == address);
-    span("").kid(text(format!("{} ", a.map(|a| a.label.as_str()).unwrap_or("Account")))).kid(addr(address, false, "ml-1 text-secondary"))
+    span("").kid(text(format!("{} ", a.map(|a| a.label.as_str()).unwrap_or(tr().wallet_sign.account)))).kid(addr(address, false, "ml-1 text-secondary"))
 }
 
 fn tx_body(pr: &Props, st: &State, site: &[Risk]) -> Vec<El<Msg>> {
     let review = match pr.load {
         Load::Loading => {
             return vec![
-                div("load-bar pointer-events-none absolute inset-x-0 top-0 h-[2px]").role("progressbar").label("Checking"),
-                p("py-10 text-center text-sm text-secondary").text("Checking what this does"),
+                div("load-bar pointer-events-none absolute inset-x-0 top-0 h-[2px]").role("progressbar").label(tr().wallet_sign.checking),
+                p("py-10 text-center text-sm text-secondary").text(tr().wallet_sign.checking_what),
             ]
         }
         Load::Unavailable => {
-            let mut v = vec![p("text-sm text-secondary").text("Could not preview this transaction. Approve only if you trust who is asking.")];
+            let mut v = vec![p("text-sm text-secondary").text(tr().wallet_sign.preview_unavailable)];
             v.extend(notes(site));
             return v;
         }
@@ -337,22 +338,22 @@ fn tx_body(pr: &Props, st: &State, site: &[Risk]) -> Vec<El<Msg>> {
         out.push(
             div("mb-6 rounded border border-negative/60 px-4 py-3")
                 .role("alert")
-                .kid(p("text-base font-semibold text-negative").text("This would fail"))
+                .kid(p("text-base font-semibold text-negative").text(tr().wallet_sign.would_fail))
                 .kid(p("mt-1 text-sm").text(review.reason.clone().unwrap_or_default())),
         );
     }
     if !sends.is_empty() {
-        out.push(section_box("You send", sends.iter().map(draw).collect()));
+        out.push(section_box(tr().wallet_sign.you_send, sends.iter().map(draw).collect()));
     }
     if !gets.is_empty() {
-        out.push(section_box("You receive", gets.iter().map(draw).collect()));
+        out.push(section_box(tr().wallet_sign.you_receive, gets.iter().map(draw).collect()));
     }
     if nothing {
-        out.push(p("text-sm text-secondary").text("No coins or objects move in or out of your wallet."));
+        out.push(p("text-sm text-secondary").text(tr().wallet_sign.nothing_moves));
     }
     if !others.is_empty() {
         out.push(section_box(
-            "Goes to",
+            tr().wallet_sign.goes_to,
             others
                 .iter()
                 .map(|o| {
@@ -364,13 +365,13 @@ fn tx_body(pr: &Props, st: &State, site: &[Risk]) -> Vec<El<Msg>> {
                 .collect(),
         ));
     }
-    let mut boxed = div("mt-6 flex flex-col gap-1.5 rounded border border-border-primary px-4 py-3").kid(row("Account", vec![account_line(&pr.req.account, pr.accounts)], "", true));
+    let mut boxed = div("mt-6 flex flex-col gap-1.5 rounded border border-border-primary px-4 py-3").kid(row(tr().wallet_sign.account, vec![account_line(&pr.req.account, pr.accounts)], "", true));
     if let Some(f) = fee {
         let mut v = vec![span(cn(&["tabular-nums", when(f.amount.is_some_and(|a| a < 0), "text-positive")])).text(&f.text)];
         if let Some(u) = money(fee_usd) {
             v.push(span("ml-2 text-secondary tabular-nums").text(u));
         }
-        boxed = boxed.kid(row("Network fee", v, "", true));
+        boxed = boxed.kid(row(tr().wallet_sign.network_fee, v, "", true));
         if let Some(sub) = f.sub.as_deref().filter(|s| !s.is_empty()) {
             boxed = boxed.kid(p("text-right text-xs text-secondary").text(sub));
         }
@@ -381,7 +382,7 @@ fn tx_body(pr: &Props, st: &State, site: &[Risk]) -> Vec<El<Msg>> {
     for f in &rare_fees {
         let m = review.coins.get(&norm_type(&f.coin_type));
         let label = match &f.pct {
-            Some(pct) => format!("{} {pct}", f.label),
+            Some(pct) => trf!(tr().wallet_sign.fee_with_pct, label = f.label, pct = pct),
             None => f.label.clone(),
         };
         boxed = boxed.kid(row(&label, vec![span("tabular-nums").text(format!("{} {}", format_amount(f.amount, m.map(|m| m.decimals).unwrap_or(9)), m.map(|m| m.symbol.as_str()).unwrap_or("")))], "", true));
@@ -389,7 +390,7 @@ fn tx_body(pr: &Props, st: &State, site: &[Risk]) -> Vec<El<Msg>> {
     out.push(boxed);
     out.extend(notes(&risks));
     if needs_ack {
-        out.push(div("mt-4 -mx-4").kid(toggle_row("I checked the full address and it is right", None, st.acked, Msg::Ack(!st.acked))));
+        out.push(div("mt-4 -mx-4").kid(toggle_row(tr().wallet_sign.ack_address, None, st.acked, Msg::Ack(!st.acked))));
     }
     out.extend(details(review, st.details.unwrap_or(failed)));
     out
@@ -399,12 +400,12 @@ fn message_body(pr: &Props, site: &[Risk]) -> Vec<El<Msg>> {
     let m = decode_message(pr.req.message.as_deref().unwrap_or(&[]));
     let is_text = m.text.is_some();
     let mut v = vec![
-        h3("mb-2 text-sm text-secondary").text(if is_text { "Message" } else { "Message (hex)" }),
+        h3("mb-2 text-sm text-secondary").text(if is_text { tr().wallet_sign.message } else { tr().wallet_sign.message_hex }),
         pre(cn(&["max-h-[14rem] overflow-y-auto whitespace-pre-wrap break-all rounded border border-border-primary bg-layer-01 px-4 py-3 text-sm", when(!is_text, "font-mono text-xs")]))
             .attr("data-testid", "message-text")
             .text(m.text.unwrap_or(m.hex)),
-        p("mt-4 text-sm text-secondary").text("Signing proves you own this account. It cannot move funds by itself, but a site can use it to sign you in or approve actions, so only sign messages you expect."),
-        div("mt-6 rounded border border-border-primary px-4 py-3").kid(row("Account", vec![account_line(&pr.req.account, pr.accounts)], "", true)),
+        p("mt-4 text-sm text-secondary").text(tr().wallet_sign.message_warn),
+        div("mt-6 rounded border border-border-primary px-4 py-3").kid(row(tr().wallet_sign.account, vec![account_line(&pr.req.account, pr.accounts)], "", true)),
     ];
     v.extend(notes(site));
     v
@@ -413,11 +414,11 @@ fn message_body(pr: &Props, site: &[Risk]) -> Vec<El<Msg>> {
 fn done_body(pr: &Props, st: &State, result: &SignResult) -> Vec<El<Msg>> {
     let message = pr.req.kind == ReqKind::Message;
     let mut d = div("flex flex-col items-start gap-4").kid(p("text-base").text(if message {
-        "Your signature is ready."
+        tr().wallet_sign.sig_ready
     } else if pr.req.execute {
-        "Your transaction went through."
+        tr().wallet_sign.tx_went_through
     } else {
-        "Your signature is ready."
+        tr().wallet_sign.sig_ready
     }));
     if let Load::Ready(review) = pr.load {
         let rows: Vec<&ReviewRow> = review.rows.iter().filter(|r| r.kind != RowKind::Fee).collect();
@@ -426,13 +427,13 @@ fn done_body(pr: &Props, st: &State, result: &SignResult) -> Vec<El<Msg>> {
         }
     }
     if let Some(id) = result.digest.as_deref().filter(|s| !s.is_empty()) {
-        d = d.kid(div("w-full").kid(p("mb-1.5 text-sm text-secondary").text("Transaction ID")).kid(p("break-all font-mono text-sm").text(id)));
+        d = d.kid(div("w-full").kid(p("mb-1.5 text-sm text-secondary").text(tr().wallet_sign.tx_id)).kid(p("break-all font-mono text-sm").text(id)));
     }
     if result.dry_run {
-        d = d.kid(p("text-sm text-secondary").text("Test run. Nothing was sent to the network."));
+        d = d.kid(p("text-sm text-secondary").text(tr().wallet_sign.test_run));
     }
     if let Some(id) = result.digest.as_deref().filter(|s| !s.is_empty()) {
-        d = d.kid(btn_full(if st.copied { "Copied" } else { "Copy ID" }, Variant::Secondary, Size::Md, false, "", Some(Msg::CopyId(id.to_string()))));
+        d = d.kid(btn_full(if st.copied { tr().wallet_sign.copied } else { tr().wallet_sign.copy_id }, Variant::Secondary, Size::Md, false, "", Some(Msg::CopyId(id.to_string()))));
     }
     vec![d]
 }
@@ -457,15 +458,15 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
     let blocked = loading || (failed && !st.anyway) || (needs_ack && !st.acked);
 
     let title = if phase == Phase::Done {
-        if is_msg || !req.execute { "Signed" } else { "Sent" }.to_string()
+        if is_msg || !req.execute { tr().wallet_sign.title_signed } else { tr().wallet_sign.title_sent }.to_string()
     } else {
         req.title.clone().unwrap_or_else(|| {
             if is_msg {
-                "Sign message"
+                tr().wallet_sign.title_sign_message
             } else if req.execute {
-                "Approve transaction"
+                tr().wallet_sign.title_approve_tx
             } else {
-                "Sign transaction"
+                tr().wallet_sign.title_sign_tx
             }
             .to_string()
         })
@@ -480,9 +481,9 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
     let flow_final = pr.flow.is_some_and(|f| f.final_);
     let flow_error = pr.flow.and_then(|f| f.error.clone()).unwrap_or_default();
     let footer: Vec<El<Msg>> = if phase == Phase::Done {
-        vec![btn("Done", Variant::Primary, "flex-1", Some(Msg::Done)).def(true)]
+        vec![btn(tr().common.done, Variant::Primary, "flex-1", Some(Msg::Done)).def(true)]
     } else if phase == Phase::Error && flow_final {
-        vec![p("mr-auto self-center text-sm text-negative").text(&flow_error), btn("Done", Variant::Primary, "", Some(Msg::Done)).def(true)]
+        vec![p("mr-auto self-center text-sm text-negative").text(&flow_error), btn(tr().common.done, Variant::Primary, "", Some(Msg::Done)).def(true)]
     } else if let Some(k) = kind.filter(|k| phase == Phase::Working && (*k != Hw::Passkey || pr.force.is_some() || pr.phone || *pr.passkey != Passkey::Idle)) {
         let panel = match k {
             Hw::Ledger => ledger_panel(pr.ledger),
@@ -491,7 +492,7 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
         };
         vec![panel.map(&Msg::Panel)]
     } else if phase == Phase::Working {
-        vec![btn("Signing", Variant::Dimmed, "flex-1", None), btn("Cancel", Variant::Secondary, "", Some(Msg::Cancel)).def(true)]
+        vec![btn(tr().wallet_sign.signing, Variant::Dimmed, "flex-1", None), btn(tr().common.cancel, Variant::Secondary, "", Some(Msg::Cancel)).def(true)]
     } else {
         let mut col = div("flex w-full flex-col gap-3");
         if phase == Phase::Error {
@@ -500,19 +501,19 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
         // A transaction that could not even be built (not enough of a coin) has nothing to force.
         let can_force = review.is_some_and(|r| r.bytes.is_some() || !r.calls.is_empty());
         if failed && !st.anyway && can_force {
-            col = col.kid(p("text-sm text-secondary").kid(text("Approve is off because this would fail. ")).kid(button("rounded px-1 text-primary underline", Some(Msg::Anyway)).text("Approve anyway")));
+            col = col.kid(p("text-sm text-secondary").kid(text(format!("{} ", tr().wallet_sign.approve_off))).kid(button("rounded px-1 text-primary underline", Some(Msg::Anyway)).text(tr().wallet_sign.approve_anyway)));
         }
         if failed && st.anyway {
-            col = col.kid(p("text-sm text-secondary").text("It will likely fail and still cost the network fee."));
+            col = col.kid(p("text-sm text-secondary").text(tr().wallet_sign.will_likely_fail));
         }
         let main = if blocked {
             btn(
                 if loading {
-                    "Checking"
+                    tr().wallet_sign.checking
                 } else if is_msg {
-                    "Sign"
+                    tr().wallet_sign.sign
                 } else {
-                    "Approve"
+                    tr().wallet_sign.approve
                 },
                 Variant::Dimmed,
                 "flex-1",
@@ -521,11 +522,11 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
         } else {
             btn(
                 if phase == Phase::Error {
-                    "Retry"
+                    tr().common.retry
                 } else if is_msg {
-                    "Sign"
+                    tr().wallet_sign.sign
                 } else {
-                    "Approve"
+                    tr().wallet_sign.approve
                 },
                 Variant::Primary,
                 "flex-1",
@@ -533,7 +534,7 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
             )
             .def(true)
         };
-        col = col.kid(div("flex gap-2").kid(main).kid(btn("Cancel", Variant::Secondary, "", Some(Msg::Cancel)).def(blocked)));
+        col = col.kid(div("flex gap-2").kid(main).kid(btn(tr().common.cancel, Variant::Secondary, "", Some(Msg::Cancel)).def(blocked)));
         if let Some(m) = pr.method.filter(|m| !m.is_empty()) {
             col = col.kid(p("text-sm text-secondary").text(m));
         }
@@ -554,7 +555,7 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
     sheet(
         SheetSpec {
             title,
-            subtitle: (phase != Phase::Done).then(|| format!("{origin_line} · {}", account.map(|a| a.label.as_str()).unwrap_or("Account"))),
+            subtitle: (phase != Phase::Done).then(|| format!("{origin_line} · {}", account.map(|a| a.label.as_str()).unwrap_or(tr().wallet_sign.account))),
             icon: Some(icon_el),
             footer: Some(footer),
             close,
@@ -651,12 +652,12 @@ impl Host {
         let Some((req, _)) = self.flow.take() else { return };
         self.flow = match out {
             Outcome::NotUnlocked => None,
-            Outcome::Signed { failed_on_chain: true, .. } => Some((req, Flow { phase: Phase::Error, error: Some("The network rejected this transaction.".into()), final_: true, result: None })),
+            Outcome::Signed { failed_on_chain: true, .. } => Some((req, Flow { phase: Phase::Error, error: Some(tr().wallet_sign.network_rejected.into()), final_: true, result: None })),
             // the Marketplace and games show their own result: no second Done
             Outcome::Signed { .. } if req.origin.kind != OriginKind::Wallet => None,
             Outcome::Signed { result, .. } => Some((req, Flow { phase: Phase::Done, error: None, final_: false, result: Some(result) })),
             Outcome::Threw { still_queued: false, .. } => None,
-            Outcome::Threw { message, .. } => Some((req, Flow { phase: Phase::Error, error: Some(message.unwrap_or_else(|| "Could not sign. Try again.".into())), final_: false, result: None })),
+            Outcome::Threw { message, .. } => Some((req, Flow { phase: Phase::Error, error: Some(message.unwrap_or_else(|| tr().wallet_sign.could_not_sign.into())), final_: false, result: None })),
         };
     }
 

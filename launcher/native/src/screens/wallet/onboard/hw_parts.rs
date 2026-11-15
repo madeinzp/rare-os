@@ -1,6 +1,7 @@
 //! Pieces the Ledger and Keystone pages share (launcher/src/wallet/ui/onboard/HwParts.tsx): the
 //! error box with the one-line USB permission fix, and the list of device accounts to pick from.
 
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::kit::{addr, btn_full, field, panel, FieldSpec, Size, Variant};
 use crate::screens::wallet::market::sui;
 use crate::screens::wallet::markup::*;
@@ -14,14 +15,14 @@ pub enum ErrMsg {
 
 /// `HwError`: with a fix, the permission note and the command to copy; `retry` adds Try again.
 pub fn hw_error(message: &str, fix: Option<&str>, copied: bool, retry: bool) -> El<ErrMsg> {
-    let mut kids = vec![p("text-sm text-negative").text(if fix.is_some() { "Rare OS needs permission to use this device." } else { message })];
+    let mut kids = vec![p("text-sm text-negative").text(if fix.is_some() { tr().wallet_setup.udev_permission } else { message })];
     if let Some(f) = fix {
-        kids.push(p("text-sm text-secondary").text("Run this once in Konsole, then plug your device in again."));
+        kids.push(p("text-sm text-secondary").text(tr().wallet_setup.udev_run_once));
         kids.push(code("select-text break-all rounded border border-border-primary bg-layer-02 px-3 py-2 font-mono text-xs leading-relaxed").text(f));
-        kids.push(div("").kid(btn_full(if copied { "Copied" } else { "Copy command" }, Variant::Secondary, Size::Md, false, "", Some(ErrMsg::CopyFix))));
+        kids.push(div("").kid(btn_full(if copied { tr().wallet_setup.copied } else { tr().wallet_setup.copy_command }, Variant::Secondary, Size::Md, false, "", Some(ErrMsg::CopyFix))));
     }
     if retry {
-        kids.push(div("").kid(btn_full("Try again", Variant::Secondary, Size::Md, false, "", Some(ErrMsg::Retry)).def(true)));
+        kids.push(div("").kid(btn_full(tr().common.try_again, Variant::Secondary, Size::Md, false, "", Some(ErrMsg::Retry)).def(true)));
     }
     panel(None, None, "flex flex-col gap-3 px-5 py-4", kids)
 }
@@ -91,7 +92,7 @@ pub fn view(pr: &Props, st: &Pick) -> El<Msg> {
         let on = !added && st.picked.contains(&r.address);
         let nth = st.picked.iter().position(|a| *a == r.address).unwrap_or(0);
         let bal = if added {
-            text("Added")
+            text(tr().wallet_setup.added)
         } else {
             match pr.balances.get(&r.address) {
                 Some(m) => sui(Some(*m), 3, false, true, ""),
@@ -105,16 +106,16 @@ pub fn view(pr: &Props, st: &Pick) -> El<Msg> {
                 .role("checkbox")
                 .attr("aria-checked", on.to_string())
                 .kid(span(cn(&["flex size-6 shrink-0 items-center justify-center rounded border", if on { "border-transparent bg-primary text-background" } else { "border-border-light" }])).kid_if(on, || icon("check", "").attr("size", "1rem").attr("stroke-width", "3")))
-                .kid(span("w-24 shrink-0 whitespace-nowrap text-sm text-secondary").text(format!("Account {}", r.index + 1)))
+                .kid(span("w-24 shrink-0 whitespace-nowrap text-sm text-secondary").text(trf!(tr().wallet_setup.account_n, n = r.index + 1)))
                 .kid(addr(&r.address, false, "min-w-0 flex-1 truncate text-base"))
                 .kid(span("shrink-0 text-sm tabular-nums text-secondary").kid(bal)),
         );
         if pr.can_verify && !added {
             let label = match pr.verified.get(&r.address) {
-                Some(Verify::Busy) => "Check device",
-                Some(Verify::Ok) => "Verified",
-                Some(Verify::Bad) => "Does not match",
-                None => "Verify on device",
+                Some(Verify::Busy) => tr().wallet_setup.check_device,
+                Some(Verify::Ok) => tr().wallet_setup.verified,
+                Some(Verify::Bad) => tr().wallet_setup.does_not_match,
+                None => tr().wallet_setup.verify_on_device,
             };
             line = line.kid(btn_full(label, Variant::Secondary, Size::Md, false, "w-40", Some(Msg::Verify(r.address.clone()))));
         }
@@ -127,17 +128,17 @@ pub fn view(pr: &Props, st: &Pick) -> El<Msg> {
         cell
     });
     let n = fresh(pr, st).len();
-    let mut d = div("flex flex-col gap-4").kid(panel(None, None, "divide-y divide-border-primary p-1", rows.collect())).kid(btn(if pr.more { "Reading" } else { "Show more" }, Variant::Ghost, "w-full", Msg::More));
+    let mut d = div("flex flex-col gap-4").kid(panel(None, None, "divide-y divide-border-primary p-1", rows.collect())).kid(btn(if pr.more { tr().wallet_setup.reading } else { tr().wallet_setup.show_more }, Variant::Ghost, "w-full", Msg::More));
     if let Some(e) = pr.error {
         d = d.kid(p("text-sm text-negative").text(e));
     }
     d.kid(btn(
         &if pr.adding {
-            "Adding".to_string()
+            tr().wallet_setup.adding.to_string()
         } else if n <= 1 {
-            "Add account".to_string()
+            tr().wallet_setup.add_account.to_string()
         } else {
-            format!("Add {n} accounts")
+            trf!(tr().wallet_setup.add_accounts, n = n)
         },
         Variant::Primary,
         &cn(&["w-full", when(n == 0 || pr.adding, "pointer-events-none opacity-40")]),

@@ -3,6 +3,7 @@
 //! title; the reading comes from rare_system::media, which keeps it fresh while the sheet is up.
 
 use crate::act::Act;
+use rare_i18n::tr;
 use crate::kit::{self, s, tok, ArtFit, Track, Ty, Ui, T};
 use crate::page::{Acts, Feedback, Fx};
 use crate::state::{State, Tone};
@@ -48,9 +49,9 @@ pub fn view(ui: &mut Ui, acts: &mut Acts) -> Option<El> {
         .child(ui.text(n.sub(), T::new(Ty::Label).c(tok::MUTED).trunc()));
     let head = ui.bx(s().row().items_center().gap(0.8)).child(art(ui, &n, 3.0)).child(names);
     let btns = vec![
-        ibtn(ui, "media-prev", "skip-back", true, acts.tag(Act::Local(PREV)), "Previous", n.can_previous),
-        ibtn(ui, "media-play", if n.playing { "pause" } else { "play" }, true, acts.tag(Act::Local(PLAY)), if n.playing { "Pause" } else { "Play" }, n.can_play_pause),
-        ibtn(ui, "media-next", "skip-forward", true, acts.tag(Act::Local(NEXT)), "Next", n.can_next),
+        ibtn(ui, "media-prev", "skip-back", true, acts.tag(Act::Local(PREV)), tr().quick.previous, n.can_previous),
+        ibtn(ui, "media-play", if n.playing { "pause" } else { "play" }, true, acts.tag(Act::Local(PLAY)), if n.playing { tr().quick.pause } else { tr().common.play }, n.can_play_pause),
+        ibtn(ui, "media-next", "skip-forward", true, acts.tag(Act::Local(NEXT)), tr().common.next, n.can_next),
     ];
     let row = ui.bx(s().grid(&[Track::Fr(1.0), Track::Fr(1.0), Track::Fr(1.0)]).gap(0.5)).group(Group::new("qam-media", [0.0; 4])).kids(btns);
     Some(ui.bx(s().col().gap(0.7).px(0.95).py(0.8)).bg(tok::L2).radius(ui.r(0.5)).child(head).child(row).key(key("qam-media-card")))
@@ -69,7 +70,7 @@ pub fn act(st: &mut State, fx: &mut Fx, code: u32) {
         Box::new(move |st: &mut State, now| {
             if let Err(e) = r {
                 log::info!("media: {e}");
-                st.toast("The player didn't respond.", Tone::Error, now);
+                st.toast(tr().quick.player_no_response, Tone::Error, now);
             }
             st.ver.qs += 1;
         })

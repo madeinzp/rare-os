@@ -9,6 +9,7 @@
 //! worker; a change bumps the settings version so the open section rebuilds.
 
 use rare_discord::Status as DiscordStatus;
+use rare_i18n::{tr, trf, trn};
 use rare_stream::host::{Client, HostStatus};
 use rare_stream::nearby::Nearby;
 use serde_json::Value;
@@ -51,23 +52,23 @@ pub fn host_on() -> bool {
 /// "30 s", "1 min", "2 min".
 pub fn length_label(secs: u32) -> String {
     if secs >= 60 && secs % 60 == 0 {
-        format!("{} min", secs / 60)
+        trf!(tr().features.capture_minutes_short, n = secs / 60)
     } else {
-        format!("{secs} s")
+        trf!(tr().features.capture_seconds_short, n = secs)
     }
 }
 
 /// The Save clip button: "Save last 30 s".
 pub fn save_label(secs: u32) -> String {
-    format!("Save last {}", length_label(secs))
+    trf!(tr().features.capture_save_last, length = length_label(secs))
 }
 
 /// "the last 30 seconds", "the last 2 minutes".
 pub fn last_words(secs: u32) -> String {
     match secs {
-        s if s >= 120 && s % 60 == 0 => format!("the last {} minutes", s / 60),
-        60 => "the last minute".into(),
-        s => format!("the last {s} seconds"),
+        s if s >= 120 && s % 60 == 0 => trn!(tr().features.capture_last_minutes, s / 60),
+        60 => tr().features.capture_last_minute.into(),
+        s => trn!(tr().features.capture_last_seconds, s),
     }
 }
 
@@ -227,7 +228,7 @@ pub fn start(waker: Arc<dyn Fn() + Send + Sync>) {
             rare_stream::nearby::announce(&name, st.running);
             // A device asked to pair: say where to type its PIN (once per request).
             if st.pin_wanted && !last.2 {
-                crate::side::toast("A device wants to pair. Type its PIN in Settings, Capture and streaming.", false);
+                crate::side::toast(tr().features.capture_pair_request, false);
             }
             let now = (want, st.running, st.pin_wanted);
             if now != last {
@@ -257,9 +258,9 @@ pub fn set_replay(on: bool) -> String {
     set("shareClips", on.into());
     refresh(false);
     if on {
-        format!("Instant replay is on. It keeps {} while a game runs.", last_words(replay_seconds()))
+        trf!(tr().features.capture_replay_on, last = last_words(replay_seconds()))
     } else {
-        "Instant replay is off".into()
+        tr().features.capture_replay_off.into()
     }
 }
 
@@ -282,7 +283,7 @@ pub fn act(a: &str, arg: Option<String>) -> Option<(String, bool)> {
         std::thread::spawn(move || {
             let gone = rare_share::prune_clips((gb as u64) << 30, "");
             if !gone.is_empty() {
-                crate::side::toast(&format!("Deleted {} older clip{} to fit {gb} GB", gone.len(), if gone.len() == 1 { "" } else { "s" }), false);
+                crate::side::toast(&trn!(tr().features.capture_clips_deleted, gone.len(), gb = gb), false);
             }
             refresh(false);
         });
@@ -298,17 +299,17 @@ pub fn act(a: &str, arg: Option<String>) -> Option<(String, bool)> {
             let st = rare_discord::status();
             let msg = if a == "discord:mute" {
                 rare_discord::set_muted(!st.muted);
-                if st.muted { "Discord microphone on" } else { "Discord microphone muted" }
+                if st.muted { tr().features.capture_mic_on } else { tr().features.capture_mic_muted }
             } else {
                 rare_discord::set_deafened(!st.deafened);
-                if st.deafened { "Discord sound on" } else { "Discord deafened" }
+                if st.deafened { tr().features.capture_sound_on } else { tr().features.capture_deafened }
             };
             refresh(false);
             return ok(msg);
         }
         "nearby:scan" => {
             refresh(true);
-            return ok("Looking for Rare devices");
+            return ok(tr().features.capture_looking);
         }
         _ => {}
     }
@@ -317,17 +318,17 @@ pub fn act(a: &str, arg: Option<String>) -> Option<(String, bool)> {
         if on && rare_stream::host::find().is_none() {
             // Draws the switch off again.
             refresh(false);
-            return Some(("Streaming this device needs Sunshine, which comes with the next Rare OS update.".into(), true));
+            return Some((tr().features.capture_needs_sunshine.into(), true));
         }
         set("streamHost", on.into());
         refresh(false);
-        return ok(if on { "Starting streaming" } else { "Streaming is off" });
+        return ok(if on { tr().features.capture_stream_starting } else { tr().features.capture_stream_off });
     }
     if a == "streamhost:pin" {
         let pin = arg.unwrap_or_default();
         std::thread::spawn(move || {
             match rare_stream::host::submit_pin(&pin, "Moonlight") {
-                Ok(()) => crate::side::toast("Paired. In Moonlight, pick Rare to play.", false),
+                Ok(()) => crate::side::toast(tr().features.capture_paired, false),
                 Err(e) => crate::side::toast(&e, true),
             }
             std::thread::sleep(Duration::from_millis(800));
@@ -339,7 +340,7 @@ pub fn act(a: &str, arg: Option<String>) -> Option<(String, bool)> {
         let uuid = uuid.to_string();
         std::thread::spawn(move || {
             match rare_stream::host::unpair(&uuid) {
-                Ok(()) => crate::side::toast("Removed. It has to pair again to stream.", false),
+                Ok(()) => crate::side::toast(tr().features.capture_unpaired, false),
                 Err(e) => crate::side::toast(&e, true),
             }
             refresh(false);

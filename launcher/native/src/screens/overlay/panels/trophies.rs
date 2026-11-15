@@ -2,6 +2,7 @@
 //! Steam achievements, the chain's trophy definitions and the player's minted trophies into rows
 //! and summaries. No I/O.
 
+use rare_i18n::tr;
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug)]
@@ -29,7 +30,11 @@ pub struct SteamGame {
 
 /// 0 bronze, 1 silver, 2 gold, 3 platinum.
 pub type Tier = u8;
-pub const TIER_NAME: [&str; 4] = ["Bronze", "Silver", "Gold", "Platinum"];
+#[allow(dead_code)]
+pub fn tier_name(t: Tier) -> &'static str {
+    let o = &tr().overlay;
+    [o.tier_bronze, o.tier_silver, o.tier_gold, o.tier_platinum][usize::from(t).min(3)]
+}
 
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum TrophySource {
@@ -90,9 +95,9 @@ pub enum RowState {
 impl RowState {
     pub fn label(self) -> &'static str {
         match self {
-            RowState::Minted => "Minted",
-            RowState::Unlocked => "Unlocked",
-            RowState::Locked => "Locked",
+            RowState::Minted => tr().overlay.trophy_minted,
+            RowState::Unlocked => tr().overlay.trophy_unlocked,
+            RowState::Locked => tr().overlay.trophy_locked,
         }
     }
     fn order(self) -> u8 {

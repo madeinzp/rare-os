@@ -12,6 +12,7 @@ use rare_library::sdcard::{self, FormatStage};
 use rare_library::storage::{self as lst, Drive, DriveKind, Item, SdCard};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use rare_i18n::{tr, trf, trn};
 
 pub type Waker = Arc<dyn Fn() + Send + Sync>;
 
@@ -153,7 +154,7 @@ pub fn refresh(w: &Waker, fresh: bool) {
         MEASURING.store(false, Ordering::Relaxed);
         if ANNOUNCE.swap(false, Ordering::Relaxed) {
             let (n, bytes) = snapshot().items.map(|v| (v.len(), v.iter().map(|i| i.bytes).sum::<u64>())).unwrap_or((0, 0));
-            toast(format!("Measured again: {n} items, {} in all.", crate::screens::settings::storage::size_text(bytes)), false);
+            toast(trn!(tr().features_more.storage_measured, n, size = crate::screens::settings::storage::size_text(bytes)), false);
         }
     });
 }
@@ -178,10 +179,10 @@ pub fn poll(w: &Waker) {
         let formatting = matches!(before.job, Some(Job::Format(_)) | Some(Job::SetUp));
         if before.read && !formatting {
             match (&before.sd, &sd) {
-                (SdCard::None, SdCard::Ready { .. }) if set_up => toast("SD card ready", false),
-                (SdCard::None, SdCard::Ready { .. }) => toast("SD card ready. Set it up for games in Settings, Storage.", false),
-                (SdCard::None, SdCard::NotReady { .. }) => toast("This SD card needs formatting before it can hold games. Settings, Storage.", false),
-                (SdCard::Ready { .. } | SdCard::NotReady { .. }, SdCard::None) => toast("SD card removed", false),
+                (SdCard::None, SdCard::Ready { .. }) if set_up => toast(tr().features_more.storage_sd_ready, false),
+                (SdCard::None, SdCard::Ready { .. }) => toast(tr().features_more.storage_sd_ready_setup, false),
+                (SdCard::None, SdCard::NotReady { .. }) => toast(tr().features_more.storage_sd_format, false),
+                (SdCard::Ready { .. } | SdCard::NotReady { .. }, SdCard::None) => toast(tr().features_more.storage_sd_removed, false),
                 _ => {}
             }
         }
@@ -217,7 +218,7 @@ fn close_steam() -> Result<bool, String> {
         }
         std::thread::sleep(std::time::Duration::from_millis(500));
     }
-    Err("Steam didn't close. Close it and try again.".into())
+    Err(tr().features_more.storage_steam_open.into())
 }
 
 fn reopen_steam(was: bool) {
@@ -240,8 +241,8 @@ pub fn move_target<'a>(item: &Item, drives: &'a [Drive]) -> Option<&'a Drive> {
 /// "the SD card", "this device", "STICK".
 pub fn place(d: &Drive) -> String {
     match d.kind {
-        DriveKind::Internal => "this device".into(),
-        DriveKind::Sd => "the SD card".into(),
+        DriveKind::Internal => tr().features_more.storage_this_device.into(),
+        DriveKind::Sd => tr().features_more.storage_the_sd.into(),
         DriveKind::Usb => d.label.clone(),
     }
 }
@@ -249,24 +250,24 @@ pub fn place(d: &Drive) -> String {
 /// Moves the game in row `key` to the other drive. The caller checked no game is running.
 pub fn start_move(w: &Waker, key: &str) {
     if busy() {
-        toast("Wait for the current move to finish.", false);
+        toast(tr().features_more.storage_wait_move, false);
         return;
     }
     let snap = snapshot();
     // Every way out says why, so Move never looks like it did nothing.
     let Some(item) = snap.items.as_ref().and_then(|v| v.iter().find(|i| i.key == key)).cloned() else {
-        return toast("Couldn't find that game's files on this device.", true);
+        return toast(tr().features_more.storage_no_files, true);
     };
     if let Some(why) = item.no_move.clone() {
         return toast(why, false);
     }
     let Some(dest) = move_target(&item, &snap.drives).cloned() else {
-        toast("Insert an SD card to move games to it.", false);
+        toast(tr().features_more.storage_insert_to_move, false);
         return;
     };
-    let Some(lib) = rare_library::cache::load() else { return toast("Couldn't read your library. Scan again from the Library tab.", true) };
+    let Some(lib) = rare_library::cache::load() else { return toast(tr().features_more.storage_no_library, true) };
     let Some(game) = item.game_id.as_ref().and_then(|id| lib.games.iter().find(|g| &g.id == id)).cloned() else {
-        return toast("That game isn't in your library anymore.", true);
+        return toast(tr().features_more.storage_not_in_library, true);
     };
     let plan = match movegame::plan(&game, &dest) {
         Ok(p) => p,
@@ -310,7 +311,7 @@ pub fn start_move(w: &Waker, key: &str) {
             Ok(m) => {
                 match &m.warning {
                     Some(wn) => toast(wn.clone(), true),
-                    None => toast(format!("{} is on {} now.", plan.title, to), false),
+                    None => toast(trf!(tr().features_more.storage_moved, game = plan.title, place = to), false),
                 }
                 edit(|s| {
                     if let Some(i) = s.items.as_mut().and_then(|v| v.iter_mut().find(|i| i.key == key)) {
@@ -330,9 +331,9 @@ pub fn start_move(w: &Waker, key: &str) {
             }
             Err(e) if CANCEL.load(Ordering::Relaxed) => {
                 let _ = e;
-                toast(format!("Move cancelled. {} stays where it was.", plan.title), false);
+                toast(trf!(tr().features_more.storage_move_cancelled, game = plan.title), false);
             }
-            Err(e) => toast(format!("Couldn't move {}. {e} It stays where it was.", plan.title), true),
+            Err(e) => toast(trf!(tr().features_more.storage_move_failed, game = plan.title, error = e), true),
         }
         let (drives, sd, set_up) = read_drives();
         edit(|s| {
@@ -386,7 +387,7 @@ pub fn start_set_up(w: &Waker) {
         return;
     }
     let SdCard::Ready { mount, .. } = snapshot().sd else {
-        return toast("Insert an SD card first.", false);
+        return toast(tr().features_more.storage_insert_first, false);
     };
     set_job(Some(Job::SetUp));
     spawn(w, move || set_up(&mount));
@@ -412,14 +413,14 @@ fn set_up(mount: &std::path::Path) {
     });
     match r {
         Ok((_, games)) => {
-            toast("The SD card is ready for games. Steam can install to it, and games you put in its Games folder show up in Rare.", false);
+            toast(tr().features_more.storage_sd_set_up, false);
             let g = games.to_string_lossy().into_owned();
             out(|o| {
                 o.folders.push(g);
                 o.rescan = true;
             });
         }
-        Err(e) => toast(format!("Couldn't set up the SD card. {e}"), true),
+        Err(e) => toast(trf!(tr().features_more.storage_setup_failed, error = e), true),
     }
 }
 
@@ -429,7 +430,7 @@ pub fn clear_cache(w: &Waker, key: &str) {
     spawn(w, move || match lst::clear_cache(&key) {
         Ok(freed) => {
             let z = crate::kit::format::fmt_size(Some(freed as f64));
-            toast(if z.is_empty() { "Cleared the image cache.".to_string() } else { format!("Cleared {z}.") }, false);
+            toast(if z.is_empty() { tr().features_more.storage_cleared_cache.to_string() } else { trf!(tr().features_more.storage_cleared, size = z) }, false);
             edit(|s| {
                 if let Some(v) = s.items.as_mut() {
                     for i in v.iter_mut().filter(|i| i.key == format!("cache:{key}")) {
@@ -483,11 +484,11 @@ pub fn measure(w: &Waker, now: f64) {
         t.measured = now;
     }
     if MEASURING.load(Ordering::Relaxed) {
-        toast("Still measuring.", false);
+        toast(tr().features_more.storage_still_measuring, false);
         return;
     }
     // Measure again says it started and when it is done (the sizes often come back the same).
-    toast("Measuring again.", false);
+    toast(tr().features_more.storage_measuring, false);
     ANNOUNCE.store(true, Ordering::Relaxed);
     refresh(w, true);
 }
@@ -505,7 +506,7 @@ pub fn delete_prefix(w: &Waker, path: &str) {
     let path = path.to_string();
     spawn(w, move || match lst::delete_prefix(std::path::Path::new(&path)) {
         Ok(freed) => {
-            toast(format!("Deleted {}.", crate::screens::settings::storage::size_text(freed)), false);
+            toast(trf!(tr().features_more.storage_deleted, size = crate::screens::settings::storage::size_text(freed)), false);
             edit(|s| {
                 if let Some(v) = s.items.as_mut() {
                     v.retain(|i| i.key != format!("orphan:{path}"));

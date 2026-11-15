@@ -3,6 +3,7 @@
 
 use crate::kit::art::ArtFit;
 use crate::kit::{self, s, tok, Ty, Ui, T};
+use rare_i18n::tr;
 use rare_render::scene::Shadow;
 use rare_render::view::{El, Motion};
 
@@ -16,7 +17,7 @@ pub fn handoff(ui: &mut Ui) -> El {
         .shadow(&Shadow::xl(0.4))
         .enter(Motion::POP)
         .child(logo)
-        .child(ui.text("Opening Steam", T::new(Ty::Row).w(600)))
-        .child(ui.text_s(s().wp(1.0), "Press the Rare button to come back to Rare. Steam stays open in Running until you close it.", T::new(Ty::Body).c(tok::MUTED).wrap().center()));
+        .child(ui.text(tr().shell.opening_steam, T::new(Ty::Row).w(600)))
+        .child(ui.text_s(s().wp(1.0), tr().shell.steam_handoff_body, T::new(Ty::Body).c(tok::MUTED).wrap().center()));
     ui.bx(s().fill().row().items_center().justify_center()).bg(tok::BLACK.alpha(0.55)).child(card)
 }

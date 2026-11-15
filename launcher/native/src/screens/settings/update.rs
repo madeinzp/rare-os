@@ -3,6 +3,7 @@
 
 use super::{config::Config, rows::*, SectionOut, SectionView};
 use crate::screens::overlay::common::*;
+use rare_i18n::{tr, trf, trn};
 use rare_render::Id;
 
 /// What the native side reports (osupdate.rs).
@@ -73,24 +74,24 @@ pub fn size_text(bytes: u64) -> String {
 
 /// "3 hours ago", "yesterday": when the last check ran, in plain words.
 pub fn ago_text(at_sec: Option<f64>, now_ms: f64) -> String {
-    let Some(at) = at_sec.filter(|a| *a != 0.0) else { return "not yet".into() };
+    let Some(at) = at_sec.filter(|a| *a != 0.0) else { return tr().settings_more.upd_not_yet.into() };
     let s = (now_ms / 1000.0 - at).max(0.0).floor();
     if s < 90.0 {
-        return "just now".into();
+        return tr().common.just_now.to_lowercase();
     }
     let m = (s / 60.0).round();
     if m < 60.0 {
-        return format!("{m} minutes ago");
+        return trn!(tr().common.minutes_ago, m as u64);
     }
     let h = (s / 3600.0).round();
     if h < 24.0 {
-        return if h == 1.0 { "1 hour ago".into() } else { format!("{h} hours ago") };
+        return trn!(tr().common.hours_ago, h as u64);
     }
     let d = (s / 86400.0).round();
     if d == 1.0 {
-        "yesterday".into()
+        tr().settings_more.upd_yesterday.into()
     } else {
-        format!("{d} days ago")
+        trn!(tr().common.days_ago, d as u64)
     }
 }
 
@@ -102,90 +103,94 @@ pub struct UpdateLine {
     pub detail: Option<String>,
 }
 
-/// The generic words for a failed check.
+/// The generic words for a failed check (English; the screen reads `upd_check_failed`).
 pub const CHECK_FAILED: &str = "Rare OS could not check for updates. It tries again by itself.";
 
 /// A failed check in plain words, and the raw error to keep behind Details. os-update's own
 /// sentences for free space and battery stay as they are; no network says so; anything else
 /// (a missing or bad signature, a registry error) gets the generic words.
 pub fn failed_words(err: Option<&str>) -> (String, Option<String>) {
-    let Some(e) = err.map(str::trim).filter(|e| !e.is_empty()) else { return (CHECK_FAILED.into(), None) };
+    let Some(e) = err.map(str::trim).filter(|e| !e.is_empty()) else { return (tr().settings_more.upd_check_failed.into(), None) };
     let l = e.to_lowercase();
     if l.starts_with("there is not enough free space") || l.starts_with("the battery is at") {
-        let body = if l.contains("try again") || l.contains("tries again") { e.to_string() } else { format!("{e} It tries again by itself.") };
+        let body = if l.contains("try again") || l.contains("tries again") { e.to_string() } else { trf!(tr().settings_more.upd_retry_suffix, error = e) };
         return (body, None);
     }
     let offline = ["offline", "could not be reached", "resolv", "temporary failure", "network is unreachable", "no route", "dns", "timed out", "timeout", "connection refused"];
     if offline.iter().any(|w| l.contains(w)) {
-        return ("No internet connection. It tries again by itself.".into(), Some(e.to_string()));
+        return (tr().settings_more.upd_offline.into(), Some(e.to_string()));
     }
-    (CHECK_FAILED.into(), Some(e.to_string()))
+    (tr().settings_more.upd_check_failed.into(), Some(e.to_string()))
 }
 
 /// The Updates row's words for a state. `checking` is a check started from this launcher.
 pub fn update_line(u: &OsUpdate, checking: bool, now_ms: f64) -> UpdateLine {
+    let t = &tr().settings_more;
     if u.staged {
         return UpdateLine {
             title: match &u.staged_version {
-                Some(v) => format!("Ready. Restart to update to {v}"),
-                None => "Ready. Restart to update".into(),
+                Some(v) => trf!(t.upd_ready_to, version = v),
+                None => t.upd_ready.into(),
             },
-            body: "It is downloaded and installs while the device restarts. Restart now, or keep playing and do it later.".into(),
+            body: t.upd_ready_body.into(),
             detail: None,
         };
     }
-    let name = |v: &Option<String>| v.as_ref().map(|v| format!("Rare OS {v}")).unwrap_or_else(|| "the update".into());
     if u.busy.as_deref() == Some("downloading") {
         let body = match (u.bytes, u.bytes_total) {
-            (Some(b), Some(t)) if t > 0 => {
-                let pct = ((b as f64 / t as f64) * 100.0).clamp(0.0, 100.0).floor();
-                format!("{} of {} ({pct}%). It downloads in the background, so you can keep playing.", size_text(b.min(t)), size_text(t))
+            (Some(b), Some(tot)) if tot > 0 => {
+                let pct = ((b as f64 / tot as f64) * 100.0).clamp(0.0, 100.0).floor();
+                trf!(t.upd_progress, done = size_text(b.min(tot)), total = size_text(tot), pct = pct)
             }
-            _ => "It downloads in the background, so you can keep playing.".into(),
+            _ => t.upd_downloads_bg.into(),
         };
-        return UpdateLine { title: format!("Downloading {}", name(&u.offer_version)), body, detail: None };
+        return UpdateLine { title: match &u.offer_version {
+                Some(v) => trf!(t.upd_downloading, version = v),
+                None => t.upd_downloading_generic.into(),
+            },
+            body, detail: None };
     }
     if u.busy.is_some() || checking {
-        return UpdateLine { title: "Checking for updates".into(), body: "Looking for a new version. A download goes on in the background.".into(), detail: None };
+        return UpdateLine { title: t.upd_checking.into(), body: t.upd_checking_body.into(), detail: None };
     }
     if let Some(w) = &u.waiting {
         let body = match w.as_str() {
-            "battery" => "It downloads by itself on the charger, or when the battery is at 30% or more. Update now downloads it at 15% or more.",
-            "game" => "It downloads by itself after you finish playing. Update now downloads it during the game.",
-            "metered" => "It downloads by itself on a network that is not metered. Update now downloads it on this one.",
-            _ => "It downloads by itself soon.",
+            "battery" => t.upd_wait_battery,
+            "game" => t.upd_wait_game,
+            "metered" => t.upd_wait_metered,
+            _ => t.upd_wait_soon,
         };
-        return UpdateLine { title: "Update waiting to download".into(), body: body.into(), detail: None };
+        return UpdateLine { title: t.upd_waiting.into(), body: body.into(), detail: None };
     }
     if u.stopped {
-        let done = match (u.bytes, u.bytes_total) {
-            (Some(b), Some(t)) if t > 0 && b > 0 => format!(" {} of {} is already on the device.", size_text(b.min(t)), size_text(t)),
-            _ => String::new(),
+        let body = match (u.bytes, u.bytes_total) {
+            (Some(b), Some(tot)) if tot > 0 && b > 0 => trf!(t.upd_stopped_partial, done = size_text(b.min(tot)), total = size_text(tot)),
+            _ => t.upd_stopped_body.to_string(),
         };
         return UpdateLine {
-            title: "The update stopped before it finished".into(),
-            body: format!("It goes on from where it stopped within the hour, or now with Update now.{done}"),
+            title: t.upd_stopped.into(),
+            body,
             detail: None,
         };
     }
     match u.result.as_deref() {
         Some("skipped") => {
-            return UpdateLine { title: "Rare OS is up to date".into(), body: u.check_error.clone().unwrap_or_else(|| "A version that did not work on this device is skipped.".into()), detail: None };
+            return UpdateLine { title: t.upd_up_to_date.into(), body: u.check_error.clone().unwrap_or_else(|| t.upd_skipped.into()), detail: None };
         }
         Some("unsupported") => {
-            return UpdateLine { title: "Updates are not set up on this device".into(), body: u.check_error.clone().unwrap_or_else(|| "This build has no update source.".into()), detail: None };
+            return UpdateLine { title: t.upd_unsupported.into(), body: u.check_error.clone().unwrap_or_else(|| t.upd_no_source.into()), detail: None };
         }
         _ => {}
     }
     if u.check_ok == Some(false) {
         let (body, detail) = failed_words(u.check_error.as_deref());
-        return UpdateLine { title: "Could not update".into(), body, detail };
+        return UpdateLine { title: t.upd_could_not.into(), body, detail };
     }
-    let checked = match u.checked_at.filter(|a| *a != 0.0) {
-        Some(_) => format!("Last checked {}.", ago_text(u.checked_at, now_ms)),
-        None => "Not checked yet.".into(),
+    let body = match u.checked_at.filter(|a| *a != 0.0) {
+        Some(_) => trf!(t.upd_uptodate_checked, ago = ago_text(u.checked_at, now_ms)),
+        None => t.upd_uptodate_unchecked.to_string(),
     };
-    UpdateLine { title: "Rare OS is up to date".into(), body: format!("{checked} Updates download by themselves and install at the next restart."), detail: None }
+    UpdateLine { title: t.upd_up_to_date.into(), body, detail: None }
 }
 
 /// The staged version to announce once per launch, or None (nothing staged, or already announced).
@@ -299,12 +304,13 @@ fn log_check_error(e: &str) {
 
 impl UpdateRows {
     pub fn build(cx: &mut Cx, nav: &mut Nav, parent: Id, info: SystemInfo, now_ms: f64) -> UpdateRows {
+        let t = &tr().settings_more;
         let panel = panel(cx, parent);
         let title = format!("{} {}", info.os_name, info.update.booted_version.clone().unwrap_or(info.os_version.clone()));
-        setting_row(cx, panel, title.trim(), Some("The version running now."), true);
+        setting_row(cx, panel, title.trim(), Some(t.upd_running), true);
         if let Some(v) = &info.update.fell_back_from {
-            let body = format!("Rare OS {v} did not start properly, so the device went back to this version by itself. {v} does not install again; the next version does.");
-            setting_row(cx, panel, "Back on the previous version", Some(&body), false);
+            let body = trf!(t.upd_fell_back_body, version = v);
+            setting_row(cx, panel, t.upd_fell_back, Some(&body), false);
         }
         let busy = info.checking || info.update.busy.is_some();
         let line = update_line(&info.update, info.checking, now_ms);
@@ -312,7 +318,7 @@ impl UpdateRows {
         let details = match (&line.detail, row_.body) {
             (Some(raw), Some(body)) => {
                 log_check_error(raw);
-                let b = button(cx, row_.right, "Details", Variant::Secondary, Sz::Md, false).hint("Show details").sid("update-details").tag(6);
+                let b = button(cx, row_.right, t.upd_details, Variant::Secondary, Sz::Md, false).hint(t.upd_show_details).sid("update-details").tag(6);
                 let label = match b.kind {
                     Kind::Btn { text, .. } => text,
                     _ => b.id,
@@ -323,41 +329,41 @@ impl UpdateRows {
             _ => None,
         };
         let check_btn = if info.update.staged {
-            let b = button(cx, row_.right, "Restart now", Variant::Primary, Sz::Md, false).hint("Restart to update").sid("updates").tag(1);
+            let b = button(cx, row_.right, t.os_restart_now, Variant::Primary, Sz::Md, false).hint(t.upd_restart_hint).sid("updates").tag(1);
             nav.add(b.group(10))
         } else if info.update.result.as_deref() == Some("unsupported") && !busy {
             // No update source: Update now could only fail the same way. The row says why.
             row_.right
         } else {
             let label = match info.update.busy.as_deref() {
-                Some("downloading") => "Downloading",
-                _ if busy => "Checking",
-                _ => "Update now",
+                Some("downloading") => tr().common.downloading,
+                _ if busy => t.upd_checking_btn,
+                _ => t.upd_now,
             };
-            let b = button(cx, row_.right, label, if busy { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).hint("Check for updates").sid("updates").tag(2);
+            let b = button(cx, row_.right, label, if busy { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).hint(t.upd_check_hint).sid("updates").tag(2);
             nav.add(b.group(10))
         };
         if let (true, Some(notes)) = (info.update.staged, &info.update.notes) {
-            setting_row(cx, panel, "What's new", Some(notes), false);
+            setting_row(cx, panel, t.upd_whats_new, Some(notes), false);
         }
         if let Some(v) = &info.update.previous_version {
-            let body = format!("Go back to Rare OS {v} if this version has a problem. Your games and files stay as they are.");
-            let r = setting_row(cx, panel, "Previous version", Some(&body), false);
-            let b = button(cx, r.right, "Go back", Variant::Secondary, Sz::Md, false).hint("Go back to the previous version").sid("rollback").tag(5);
+            let body = trf!(t.upd_prev_body, version = v);
+            let r = setting_row(cx, panel, t.upd_prev, Some(&body), false);
+            let b = button(cx, r.right, t.upd_go_back, Variant::Secondary, Sz::Md, false).hint(t.upd_go_back_hint).sid("rollback").tag(5);
             nav.add(b.group(10));
         }
         if info.can_restore {
-            let r = setting_row(cx, panel, "Restore previous system", Some("Start the system this device ran before Rare OS. Rare OS stays installed and your files and games are shared."), false);
-            let b = button(cx, r.right, "Restore", Variant::Secondary, Sz::Md, false).hint("Restore previous system").sid("restore-system").tag(3);
+            let r = setting_row(cx, panel, t.os_restore_title, Some(t.upd_restore_body), false);
+            let b = button(cx, r.right, t.upd_restore, Variant::Secondary, Sz::Md, false).hint(t.os_restore_title).sid("restore-system").tag(3);
             nav.add(b.group(10));
         }
         let body = if info.menu_set {
-            "The boot menu shows on the next start, once. Pick an older version there if an update misbehaves."
+            t.upd_boot_set
         } else {
-            "Show the boot menu on the next start, once, to pick an older version or another system."
+            t.upd_boot_body
         };
-        let r = setting_row(cx, panel, "Boot menu", Some(body), false);
-        let b = button(cx, r.right, if info.menu_set { "Set for next start" } else { "Show next start" }, if info.menu_set { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).hint("Boot menu next start").sid("boot-menu").tag(4);
+        let r = setting_row(cx, panel, t.upd_boot, Some(body), false);
+        let b = button(cx, r.right, if info.menu_set { t.upd_boot_btn_set } else { t.upd_boot_btn }, if info.menu_set { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).hint(t.upd_boot_hint).sid("boot-menu").tag(4);
         nav.add(b.group(10));
         UpdateRows { panel, check_btn, info, details }
     }
@@ -371,9 +377,9 @@ impl UpdateRows {
         d.shown = !d.shown;
         let body = if d.shown { format!("{}\n{}", d.plain, d.raw) } else { d.plain.clone() };
         cx.scene.set_text(cx.t, d.body, &body);
-        cx.scene.set_text(cx.t, d.label, if d.shown { "Hide details" } else { "Details" });
+        cx.scene.set_text(cx.t, d.label, if d.shown { tr().settings_more.upd_hide_details } else { tr().settings_more.upd_details });
         if let Some(f) = nav.items.iter_mut().find(|f| f.tag == 6 && f.sid == "update-details") {
-            f.hint = if d.shown { "Hide details".into() } else { "Show details".into() };
+            f.hint = if d.shown { tr().settings_more.upd_hide_details.into() } else { tr().settings_more.upd_show_details.into() };
         }
         true
     }

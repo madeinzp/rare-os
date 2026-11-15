@@ -2,8 +2,9 @@
 //! (rare-library steam_cloud), so the page never waits on the disk; it shows "Checking" until the
 //! answer lands and the card drops out for games without cloud files.
 
-use crate::data::model::{fmt_ago, Game};
+use crate::data::model::Game;
 use crate::kit::{self, Ui};
+use rare_i18n::{tr, trf};
 use crate::page::Fx;
 use rare_library::steam_cloud::{CloudInfo, CloudStatus};
 use rare_render::view::El;
@@ -44,13 +45,13 @@ pub fn load(c: &Cloud, fx: &mut Fx, g: &Game) {
 
 /// (value, sub text) for a status; None hides the card.
 fn text(i: &CloudInfo) -> Option<(&'static str, Option<String>)> {
-    let when = i.synced_at.map(|t| format!("Last sync {}", fmt_ago(Some(t)).trim_start_matches("Played ")));
+    let when = i.synced_at.map(|t| trf!(tr().game.last_sync, when = super::parts::when_ago(t)));
     match i.status {
         CloudStatus::Unsupported => None,
-        CloudStatus::Synced => Some(("Synced", when)),
-        CloudStatus::OutOfDate => Some(("Not synced yet", when)),
-        CloudStatus::Conflict => Some(("Conflict", Some("Steam asks which save to keep".into()))),
-        CloudStatus::Off => Some(("Off", None)),
+        CloudStatus::Synced => Some((tr().game.cloud_synced, when)),
+        CloudStatus::OutOfDate => Some((tr().game.cloud_not_synced, when)),
+        CloudStatus::Conflict => Some((tr().game.cloud_conflict, Some(tr().game.cloud_conflict_sub.into()))),
+        CloudStatus::Off => Some((tr().common.off, None)),
     }
 }
 
@@ -76,12 +77,12 @@ fn has_cloud(appid: u32) -> bool {
 pub fn card(ui: &mut Ui, c: &Cloud, g: &Game) -> Option<El> {
     let id = appid(g)?;
     match c.info.lock().unwrap().as_ref() {
-        None if has_cloud(id) => Some(kit::info_card(ui, "Steam Cloud", "Checking", None, None)),
+        None if has_cloud(id) => Some(kit::info_card(ui, tr().game.steam_cloud, tr().game.checking, None, None)),
         None => None,
         // Unsupported only when the files went away since the first look: keep the space.
         Some(i) => Some(match text(i) {
-            Some((v, sub)) => kit::info_card(ui, "Steam Cloud", v, sub.as_deref(), None),
-            None => kit::info_card(ui, "Steam Cloud", "Not used", None, None),
+            Some((v, sub)) => kit::info_card(ui, tr().game.steam_cloud, v, sub.as_deref(), None),
+            None => kit::info_card(ui, tr().game.steam_cloud, tr().game.cloud_not_used, None, None),
         })
         .filter(|_| has_cloud(id) || text(i).is_some()),
     }

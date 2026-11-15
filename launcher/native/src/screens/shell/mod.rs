@@ -11,7 +11,8 @@ pub mod placeholder;
 
 use crate::kit::art::ArtFit;
 use crate::kit::{self, s, tok, DotTone, GSize, NumKind, NumOptions, Pb, TabItem, Ty, Ui, T};
-use crate::state::{State, Tone, TABS};
+use crate::state::{tabs, State, Tone};
+use rare_i18n::{tr, trf, trn};
 use rare_render::focus::hints::Hint;
 use rare_render::scene::{GradDir, Gradient, Shadow};
 use rare_render::view::{key, El, Motion};
@@ -21,8 +22,19 @@ pub fn clock_text() -> String {
     std::env::var("RR_CLOCK").unwrap_or_else(|_| {
         // A time zone changed in Settings (or by timedated) shows at once.
         rare_system::support::reload_zone();
-        rare_render::platform::clock_text()
+        local_clock(&rare_render::platform::clock_text())
     })
+}
+
+/// The engine's "8:05 PM" written the way the language writes a clock time.
+fn local_clock(en: &str) -> String {
+    let parse = || {
+        let (t, ap) = en.split_once(' ')?;
+        let (h, m) = t.split_once(':')?;
+        let (h, m): (u32, u32) = (h.parse().ok()?, m.parse().ok()?);
+        Some(rare_i18n::fmt::time_hm(h % 12 + if ap == "PM" { 12 } else { 0 }, m))
+    };
+    parse().unwrap_or_else(|| en.to_string())
 }
 
 /// The top bar: header h-[4.25rem] items-center gap-[1.5rem] px-[2.5rem].
@@ -32,7 +44,7 @@ pub fn top_bar(ui: &mut Ui, st: &State, clock: &str) -> El {
     let brand = ui.bx(s().row().items_center().gap(0.6)).child(mark).child(ui.text("rare", T::new(Ty::px(1.35)).w(600).track(-0.02)));
     // Friends gets a dot for unread messages, requests and party invites.
     let news = st.friends.as_ref().is_some_and(|f| f.st.badge() > 0);
-    let items: Vec<TabItem> = TABS.iter().map(|(t, l)| TabItem::new(*l).dot(*t == crate::state::Tab::Friends && news)).collect();
+    let items: Vec<TabItem> = tabs().iter().map(|(t, l)| TabItem::new(*l).dot(*t == crate::state::Tab::Friends && news)).collect();
     let lb = kit::glyph(ui, Pb::Lb, GSize::Sm);
     let rb = kit::glyph(ui, Pb::Rb, GSize::Sm);
     let tabs = top_tabs(ui, &items, st.tab.index().unwrap_or(usize::MAX));
@@ -50,7 +62,7 @@ pub fn top_bar(ui: &mut Ui, st: &State, clock: &str) -> El {
         dev = dev.child(kit::icon(ui, "gamepad-2", 1.15, fg85).name("remote-input"));
     }
     match &st.device {
-        Some(d) if d.wifi.is_none() => dev = dev.child(ui.text("Offline", T::new(Ty::Small).c(tok::MUTED))),
+        Some(d) if d.wifi.is_none() => dev = dev.child(ui.text(tr().common.offline, T::new(Ty::Small).c(tok::MUTED))),
         _ => dev = dev.child(kit::icon(ui, "wifi", 1.15, fg85)),
     }
     if let Some(b) = st.device.as_ref().and_then(|d| d.battery.as_ref()) {
@@ -100,12 +112,11 @@ fn downloads_chip(ui: &mut Ui, st: &State) -> Option<El> {
     let run = items.iter().find(|d| d.active && !d.paused);
     let text = match run {
         Some(d) => format!("{}%", (crate::features::downloads::fraction(d) * 100.0).floor() as u32),
-        None if items.len() == 1 => "Paused".to_string(),
-        None => format!("{} paused", items.len()),
+        None => trn!(tr().shell.downloads_paused, items.len()),
     };
     let fg85 = tok::fg(0.85);
     let chip = ui.bx(s().row().items_center().gap(0.4).px(0.6).py(0.3)).radius(ui.r(0.75)).child(kit::icon(ui, "download", 1.15, fg85)).child(ui.text(text, T::new(Ty::Small).tab().c(fg85)));
-    Some(kit::nav(kit::row_look(chip), DL_TAG, Some("Downloads"), None, false).name("downloads-chip"))
+    Some(kit::nav(kit::row_look(chip), DL_TAG, Some(tr().common.downloads), None, false).name("downloads-chip"))
 }
 
 /// The profile chip's nav tag: A on it opens the profile's Change picture (app.rs).
@@ -146,7 +157,7 @@ fn profile_chip(ui: &mut Ui, st: &State) -> Option<El> {
     }
     // A flat dark backing (no glow) keeps the name and total readable over any game's art.
     let chip = ui.bx(s().row().items_center().gap(0.6).px(0.6).py(0.3).shrink().min0()).bg(tok::BG.alpha(0.62)).radius(ui.r(0.75)).child(pic).child(col);
-    Some(kit::nav(kit::row_look(chip), CHIP_TAG, Some("Change picture"), None, false))
+    Some(kit::nav(kit::row_look(chip), CHIP_TAG, Some(tr().shell.change_picture), None, false))
 }
 
 /// rare.market's status bar: SUI price, network throughput, gas, what is running. Each cell has a
@@ -168,17 +179,17 @@ fn status(ui: &mut Ui, st: &State, crowded: bool) -> El {
     }
     // A crowded hint bar (eight hints and a running game) gives up Gas rather than cut a hint short.
     if let Some(gas) = l.gas.filter(|_| !(crowded && !st.running.is_empty())) {
-        row = row.child(cell(ui, false).child(ui.text("Gas", meta.c(tok::MUTED))).child(ui.text(format!("{} MIST", kit::format::grouped(gas as f64, 0, 0)), meta.tab())).key(key("gas")));
+        row = row.child(cell(ui, false).child(ui.text(tr().shell.gas, meta.c(tok::MUTED))).child(ui.text(format!("{} MIST", kit::format::grouped(gas as f64, 0, 0)), meta.tab())).key(key("gas")));
     }
     if let Some(id) = st.running.first() {
         let text = match st.game(id) {
-            Some(g) => format!("Playing {}", g.title),
-            None if id.starts_with("app:") => format!("{} open", st.run_name(id)),
+            Some(g) => trf!(tr().shell.playing_game, title = g.title),
+            None if id.starts_with("app:") => trf!(tr().shell.app_open, name = st.run_name(id)),
             None if id.starts_with("stream:") => match id.rsplit(':').next().and_then(|n| n.parse::<u32>().ok()).and_then(|n| st.pc.as_ref()?.apps.iter().find(|a| a.id == n)) {
-                Some(a) => format!("Streaming {}", a.name),
-                None => "Game running".into(),
+                Some(a) => trf!(tr().shell.streaming, name = a.name),
+                None => tr().shell.game_running.into(),
             },
-            None => "Game running".into(),
+            None => tr().shell.game_running.into(),
         };
         let d = kit::dot(ui, s(), DotTone::Brand, true);
         row = row.child(cell(ui, false).child(d).child(ui.text(text, meta)).key(key("running")));
@@ -189,7 +200,8 @@ fn status(ui: &mut Ui, st: &State, crowded: bool) -> El {
 /// The bottom bar: border-t border-hair bg-bg text-small text-fg/80, status left, hints right.
 pub fn footer(ui: &mut Ui, st: &State, hints: &[Hint]) -> El {
     let gap = if hints.len() > 7 { 0.45 } else if hints.len() > 6 { 1.0 } else { 1.4 };
-    let mut hrow = ui.bx(s().row().items_center().gap(gap).ml_auto().pr(if hints.len() > 7 { 1.5 } else { 2.5 }));
+    // Long labels (other languages) shrink the hints, then cut them, rather than run off the edge.
+    let mut hrow = ui.bx(s().row().items_center().gap(gap).ml_auto().shrink().min0().pr(if hints.len() > 7 { 1.5 } else { 2.5 }));
     for h in hints {
         hrow = hrow.child(kit::hint(ui, h.b, &h.label, T::new(Ty::Small).c(tok::fg(0.8))).key(key(&(h.b.name(), &h.label))));
     }

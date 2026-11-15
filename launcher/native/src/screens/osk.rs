@@ -5,6 +5,7 @@
 //! features/kblayout.rs, shared with the keyboard over apps. A bottom sheet sliding up over a
 //! dimmed screen; the focused key white.
 
+use rare_i18n::{tr, trf};
 use crate::act::Act;
 use crate::features::kblayout::{self, Field, Host, Key, COLS, SPECIAL_ROW};
 use crate::kit::{self, s, tok, GSize, Pb, Ty, Ui, T};
@@ -107,9 +108,9 @@ pub fn finish(st: &mut State, req: OskReq, value: Option<String>) {
             Ok(url) => {
                 let host = url.split("://").nth(1).and_then(|r| r.split(['/', '?', '#']).next()).unwrap_or("");
                 let host = host.trim_start_matches("www.").to_string();
-                st.osk = Some(OskReq::new("Name for this game", host, None, OskFor::WebGameTitle { url }));
+                st.osk = Some(OskReq::new(tr().osk.name_game, host, None, OskFor::WebGameTitle { url }));
             }
-            Err(e) => st.toast(crate::screens::settings::live::failed("That isn't a web address. Check it and try again.", &e, None), crate::state::Tone::Error, rare_render::clock::secs()),
+            Err(e) => st.toast(crate::screens::settings::live::failed(tr().osk.not_web_address, &e, None), crate::state::Tone::Error, rare_render::clock::secs()),
         },
         (OskFor::WebGameTitle { url }, Some(t)) if !t.trim().is_empty() => {
             st.acts.push(crate::act::Act::AddWebGame { id: None, title: t.trim().to_string(), url, cover: None, hero: None });
@@ -119,8 +120,8 @@ pub fn finish(st: &mut State, req: OskReq, value: Option<String>) {
         (OskFor::Collection { rename, game }, Some(name)) => {
             let now = rare_render::clock::secs();
             let r = match &rename {
-                Some(old) => st.user.rename(old, &name).map(|n| format!("Renamed to {n}")),
-                None => st.user.create(&name, game.as_deref()).map(|n| if game.is_some() { format!("Added to {n}") } else { format!("{n} created") }),
+                Some(old) => st.user.rename(old, &name).map(|n| trf!(tr().osk.renamed_to, name = n)),
+                None => st.user.create(&name, game.as_deref()).map(|n| if game.is_some() { trf!(tr().osk.added_to, name = n) } else { trf!(tr().osk.created, name = n) }),
             };
             match r {
                 Ok(text) => {
@@ -164,7 +165,7 @@ impl Osk {
                     Some(c) => req.value.push_str(c.trim()),
                     // Say so, instead of a key that seems to do nothing.
                     None => st.toast(
-                        "Nothing to paste. Copy some text first.",
+                        tr().osk.nothing_to_paste,
                         crate::state::Tone::Info,
                         rare_render::clock::secs(),
                     ),
@@ -235,7 +236,7 @@ impl Page for Osk {
                         b.focus_look(fl)
                             .transition(rare_render::view::Transition::pro(0.1)),
                         tag,
-                        Some("Type"),
+                        Some(tr().osk.type_key),
                         None,
                         false,
                     )
@@ -286,7 +287,7 @@ impl Page for Osk {
                     b.focus_look(fl)
                         .transition(rare_render::view::Transition::pro(0.1)),
                     tag,
-                    Some("Type"),
+                    Some(tr().osk.type_key),
                     None,
                     false,
                 )
@@ -297,8 +298,8 @@ impl Page for Osk {
         let small = T::new(Ty::Small).c(tok::fg(0.75));
         let hints = ui
             .bx(s().row().justify_end().gap(1.3).mt(0.9))
-            .child(kit::hint(ui, Pb::A, "Type", small))
-            .child(kit::hint(ui, Pb::B, "Cancel", small));
+            .child(kit::hint(ui, Pb::A, tr().osk.type_key, small))
+            .child(kit::hint(ui, Pb::B, tr().common.cancel, small));
         let mut inner = ui
             .bx(s().col().wp(1.0).max_w(64.0).mx_auto())
             .child(ui.text_s(

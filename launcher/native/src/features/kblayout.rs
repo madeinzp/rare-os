@@ -17,6 +17,7 @@
 //! finishes. Held X, and a held A on a key that types, repeat (`repeats`).
 
 use rare_input::Pad;
+use rare_i18n::{tr, trf};
 
 pub const COLS: usize = 10;
 pub const ROWS: usize = 4;
@@ -242,7 +243,7 @@ impl Kb {
         match k {
             Key::Char(c) => c,
             Key::Shift => match self.layer {
-                Layer::Letters => "Shift",
+                Layer::Letters => tr().features_more.key_shift,
                 Layer::Symbols => "#+=",
                 Layer::More => "123",
             },
@@ -253,17 +254,17 @@ impl Kb {
                     "abc"
                 }
             }
-            Key::Space => "Space",
-            Key::Paste => "Paste",
-            Key::Delete => "Delete",
+            Key::Space => tr().features_more.key_space,
+            Key::Paste => tr().features_more.key_paste,
+            Key::Delete => tr().common.delete,
             Key::Done => {
                 if self.host == Host::Launcher {
-                    "Done"
+                    tr().common.done
                 } else {
-                    "Enter"
+                    tr().features_more.key_enter
                 }
             }
-            Key::Close => "Close",
+            Key::Close => tr().common.close,
         }
     }
 
@@ -409,7 +410,7 @@ impl Kb {
     /// The controller line under the keys.
     pub fn hint(&self) -> String {
         let shift = match self.layer {
-            Layer::Letters => "Shift",
+            Layer::Letters => tr().features_more.key_shift,
             Layer::Symbols => "#+=",
             Layer::More => "123",
         };
@@ -419,8 +420,8 @@ impl Kb {
             "abc"
         };
         match self.host {
-            Host::Launcher => format!("A Type    X Delete    Y {shift}    LT {layer}    Menu Done    B Cancel"),
-            Host::Over => format!("A Type    X Delete    Y {shift}    LT {layer}    Menu Enter    View Tab    LB RB Cursor    B Close"),
+            Host::Launcher => trf!(tr().features_more.kb_hint_launcher, shift = shift, layer = layer),
+            Host::Over => trf!(tr().features_more.kb_hint_over, shift = shift, layer = layer),
         }
     }
 }

@@ -2,14 +2,15 @@
 //! controller layout) and the running list View + Menu (or Guide) held brings up
 //! (launcher/src/apps/sheets.tsx). Both are the launcher's standard sheet (trade/parts Sheet).
 
-use super::catalog::{app_by_id, controller_of, controls_for, AppEntry, ControlRow};
-use super::state::{quit_item, rare_way, resume_item, running_items, Apps, RunningItem, Shared};
+use super::catalog::{app_by_id, controller_of, way_label, controls_for, AppEntry, ControlRow};
+use super::state::{quit_item, resume_item, running_items, Apps, RunningItem, Shared};
 use super::tiles::{app_icon, install_bar, live_dot};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
 use rare_render::input::Pad;
 use rare_render::scene::Shadow;
 use rare_render::theme::tok;
+use rare_i18n::{tr, trf};
 use rare_render::{Fit, Id, ImgReq, Node};
 
 /// Quit asks once more (A again within a few seconds), since unsaved progress goes with it.
@@ -40,7 +41,13 @@ fn controls(cx: &mut Cx, parent: Id, rows: &[ControlRow]) {
             if let Some(row_) = pair.get(i) {
                 let key = cx.scene.add(cell, s().row().items_center().w(6.25 * r).no_shrink_().done(), Node::default());
                 if row_.b.contains(' ') || row_.b.contains('-') {
-                    text(cx, key, ty::SMALL, 400, tok::MUTED, row_.b);
+                    let name = match row_.b {
+                        "Right stick" => tr().apps.key_right_stick,
+                        "Left stick" => tr().apps.key_left_stick,
+                        "D-pad" => tr().apps.key_dpad,
+                        other => other,
+                    };
+                    text(cx, key, ty::SMALL, 400, tok::MUTED, name);
                 } else if let Some(g) = glyph_of(row_.b) {
                     glyph(cx, key, g, true);
                 }
@@ -91,13 +98,14 @@ fn app_frame(cx: &mut Cx, parent: Id, app: &AppEntry, with_footer: bool, animate
     let title = cx.scene.add(head, s().row().items_center().gap(0.9 * r).done(), Node::default());
     app_icon(cx, title, app, 2.75);
     text(cx, title, ty::ROW, 600, tok::FG, &app.name);
-    cx.scene.add_text(cx.t, head, s().done(), &app.about, ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
-    if let Some(plan) = &app.plan {
+    cx.scene.add_text(cx.t, head, s().done(), app.about_text(), ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
+    if let Some(plan) = app.plan_text() {
         cx.scene.add_text(cx.t, head, s().mt(0.5 * r).done(), plan, ts(r, ty::SMALL.0, ty::SMALL.1, 500).wrap(), tok::FG);
     }
-    if !app.steps.is_empty() {
+    let steps = app.step_texts();
+    if !steps.is_empty() {
         let list = cx.scene.add(head, s().col().gap(0.35 * r).mt(0.75 * r).done(), Node::default());
-        for (i, step) in app.steps.iter().enumerate() {
+        for (i, step) in steps.iter().enumerate() {
             let line = cx.scene.add(list, s().row().gap(0.5 * r).done(), Node::default());
             let n = cx.scene.add(line, s().w(1.1 * r).no_shrink_().done(), Node::default());
             text(cx, n, ty::SMALL, 600, tok::FG, &format!("{}.", i + 1));
@@ -163,13 +171,13 @@ impl AppSheet {
         let controller = st.as_ref().and_then(|s| s.controller).or(way.controller).unwrap_or(super::catalog::Controller::Pointer);
         let _ = controller_of;
         let line = if running {
-            "Running".to_string()
+            tr().apps.status_running.to_string()
         } else if ready {
-            format!("Opens in {}", st.as_ref().and_then(|s| s.opens_in.clone()).unwrap_or_default())
+            trf!(tr().apps.opens_in, browser = st.as_ref().and_then(|s| s.opens_in.clone()).unwrap_or_default())
         } else if let Some(o) = &offer {
-            format!("Needs {}", o.name)
+            trf!(tr().apps.needs, name = o.name)
         } else {
-            "Can't open on this device".to_string()
+            tr().apps.cant_open.to_string()
         };
         let root = cx.scene.root;
         let frame = app_frame(cx, root, app, true, animate, now);
@@ -193,18 +201,18 @@ impl AppSheet {
                 }
             };
             if running {
-                add(self, cx, "Resume", Variant::Primary, Act::Resume, "Resume", true, false);
-                add(self, cx, "Close", Variant::Secondary, Act::Close, "Close app", false, false);
+                add(self, cx, tr().common.resume, Variant::Primary, Act::Resume, tr().common.resume, true, false);
+                add(self, cx, tr().apps.close_app, Variant::Secondary, Act::Close, tr().apps.close_app_hint, false, false);
             } else if ready {
-                add(self, cx, "Open", Variant::Primary, Act::Open(None), "Open", true, false);
+                add(self, cx, tr().common.open, Variant::Primary, Act::Open(None), tr().common.open, true, false);
                 for &i in &st.as_ref().unwrap().other_ways {
-                    add(self, cx, &format!("Open in {}", app.ways[i].label), Variant::Secondary, Act::Open(Some(i)), "", false, false);
+                    add(self, cx, &trf!(tr().apps.open_in, name = way_label(&app.ways[i])), Variant::Secondary, Act::Open(Some(i)), "", false, false);
                 }
             }
             if let Some(o) = &offer {
                 let v = if ready || running { Variant::Secondary } else { Variant::Primary };
-                let label = if busy { "Installing".to_string() } else { format!("Get {}", o.name) };
-                add(self, cx, &label, v, Act::Install, &format!("Get {}", o.name), !ready && !running, busy);
+                let label = if busy { tr().apps.installing.to_string() } else { trf!(tr().apps.get_name, name = o.name) };
+                add(self, cx, &label, v, Act::Install, &trf!(tr().apps.get_name, name = o.name), !ready && !running, busy);
             }
         }
 
@@ -217,11 +225,11 @@ impl AppSheet {
             let blk = cx.scene.add(body, s().col().gap(0.6 * r).mt(1.1 * r).done(), Node::default());
             let msg = if o.command.is_empty() {
                 // Battle.net: Blizzard's own installer, then its sign-in, in Blizzard's window.
-                format!("Rare gets {} from Blizzard and sets it up for you, no password needed. Then sign in with your Blizzard account in its window.", o.name)
+                trf!(tr().apps.install_blizzard, name = o.name)
             } else if ready {
-                format!("{} is the full desktop app. It installs from Flathub for you only, no password needed.", o.name)
+                trf!(tr().apps.install_flathub_full, name = o.name)
             } else {
-                format!("{} opens in {}. It installs from Flathub for you only, no password needed.", app.name, o.name)
+                trf!(tr().apps.install_flathub_in, app = app.name, browser = o.name)
             };
             cx.scene.add_text(cx.t, blk, s().done(), &msg, ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
             if busy {
@@ -234,7 +242,7 @@ impl AppSheet {
                 cx.scene.add_text(cx.t, w, s().done(), &pct, ts(r, ty::SMALL.0, ty::SMALL.1, 400).tabular(), tok::FG);
                 if o.command.is_empty() && i.progress.is_none() {
                     // Battle.net after its download: Proton's first start comes before Blizzard's window.
-                    let note = "The first time, Rare also downloads Proton (up to 1 GB). Blizzard's window opens when it's ready.";
+                    let note = tr().apps.proton_note;
                     cx.scene.add_text(cx.t, blk, s().done(), note, ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
                 }
             }
@@ -242,20 +250,20 @@ impl AppSheet {
                 cx.scene.add_text(cx.t, blk, s().done(), e, ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::NEG);
             }
             if !o.command.is_empty() {
-                text(cx, blk, ty::LABEL, 400, tok::MUTED, "Or in Desktop mode, in a terminal:");
+                text(cx, blk, ty::LABEL, 400, tok::MUTED, tr().apps.desktop_mode_terminal);
                 let code = cx.scene.add(blk, s().col().px(0.9 * r).py(0.6 * r).done(), Node::bg(tok::L2).radius(0.5 * r));
                 cx.scene.add_text(cx.t, code, s().done(), &o.command, ts(r, ty::META.0, ty::META.1, 400).mono().wrap(), tok::FG);
             }
         }
 
         let ctl = cx.scene.add(body, s().col().mt(1.4 * r).done(), Node::default());
-        cx.scene.add_text(cx.t, ctl, s().mb(0.35 * r).done(), "Controls", ts(r, ty::BODY.0, ty::BODY.1, 600), tok::FG);
+        cx.scene.add_text(cx.t, ctl, s().mb(0.35 * r).done(), tr().apps.controls, ts(r, ty::BODY.0, ty::BODY.1, 600), tok::FG);
         controls(cx, ctl, &controls_for(controller, Some(way)));
         cx.scene.add_text(
             cx.t,
             ctl,
             s().mt(0.8 * r).done(),
-            &format!("{} to come back to Rare, then Resume or Close it.", rare_way(guest)),
+            if guest { tr().apps.come_back_note_guest } else { tr().apps.come_back_note },
             ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(),
             tok::MUTED,
         );
@@ -348,26 +356,26 @@ pub fn running_list(cx: &mut Cx, parent: Id, items: &[RunningItem], armed: Optio
         let info = cx.scene.add(row_, s().col().grow().shrink().done(), Node::default());
         text_tr(cx, info, ty::BODY, 500, tok::FG, &it.name);
         if quitting == Some(it.rid.as_str()) {
-            text(cx, info, ty::SMALL, 400, tok::MUTED, "Quitting...");
+            text(cx, info, ty::SMALL, 400, tok::MUTED, tr().apps.quitting);
         } else if armed == Some(it.rid.as_str()) {
-            text(cx, info, ty::SMALL, 400, tok::MUTED, "Unsaved progress is lost. Press A again to quit.");
+            text(cx, info, ty::SMALL, 400, tok::MUTED, tr().apps.unsaved_lost);
         }
         let disabled = quitting == Some(it.rid.as_str());
         let is_armed = armed == Some(it.rid.as_str());
-        let resume = button(cx, row_, "Resume", Variant::Primary, Sz::Sm, false).tag(i as u32 * 2).hint("Resume");
+        let resume = button(cx, row_, tr().common.resume, Variant::Primary, Sz::Sm, false).tag(i as u32 * 2).hint(tr().common.resume);
         let label = if is_armed {
-            "Quit now"
+            tr().apps.quit_now
         } else if it.app.is_some() {
-            "Close"
+            tr().apps.close_app
         } else {
-            "Quit game"
+            tr().apps.quit_game
         };
         let hint = if is_armed {
-            "Quit now"
+            tr().apps.quit_now
         } else if it.app.is_some() {
-            "Close app"
+            tr().apps.close_app_hint
         } else {
-            "Quit game"
+            tr().apps.quit_game
         };
         let quit = button(cx, row_, label, if is_armed { Variant::Primary } else { Variant::Secondary }, Sz::Sm, false).tag(i as u32 * 2 + 1).hint(hint);
         if disabled {
@@ -416,15 +424,15 @@ impl RunningSheet {
         self.items = running_items(&apps, None);
         self.nav = Nav::default();
         let root = cx.scene.root;
-        let sub = if self.items.is_empty() { None } else { Some("Resume one, or quit it.") };
-        let parts = sheet(cx, root, "Running", sub, false, false, now);
+        let sub = if self.items.is_empty() { None } else { Some(tr().apps.resume_or_quit) };
+        let parts = sheet(cx, root, tr().apps.running_title, sub, false, false, now);
         if !animate {
             cx.scene.n(parts.card).opacity.snap(1.0);
             cx.scene.n(parts.card).ty.snap(0.0);
         }
         self.page = cx.scene.parent(parts.card).unwrap_or(root);
         if self.items.is_empty() {
-            text(cx, parts.body, ty::SMALL, 400, tok::MUTED, "Nothing is running.");
+            text(cx, parts.body, ty::SMALL, 400, tok::MUTED, tr().apps.nothing_running);
         }
         let rows = running_list(cx, parts.body, &self.items, self.armed.as_ref().map(|a| a.0.as_str()), self.quitting.as_deref());
         for row_ in rows {
@@ -434,13 +442,13 @@ impl RunningSheet {
         }
         let line = cx.scene.add(parts.body, s().row().items_center().gap(0.45 * r).mt(0.9 * r).done(), Node::default());
         if apps.guest {
-            text(cx, line, ty::SMALL, 400, tok::MUTED, "Hold");
+            text(cx, line, ty::SMALL, 400, tok::MUTED, tr().apps.footer_hold);
             glyph(cx, line, G::Select, true);
         } else {
-            text(cx, line, ty::SMALL, 400, tok::MUTED, "Press");
+            text(cx, line, ty::SMALL, 400, tok::MUTED, tr().apps.footer_press);
             glyph(cx, line, G::Rare, true);
         }
-        text(cx, line, ty::SMALL, 400, tok::MUTED, "in any game to come back here.");
+        text(cx, line, ty::SMALL, 400, tok::MUTED, tr().apps.footer_after);
         drop(apps);
         focus_tag(cx, &mut self.nav, keep, Some(0), now);
     }

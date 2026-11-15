@@ -5,6 +5,7 @@
 use super::support;
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
+use rare_i18n::{tr, trf};
 use rare_render::input::Pad;
 use rare_render::theme::tok;
 use rare_render::{Id, Node};
@@ -39,7 +40,7 @@ pub struct TzSheet {
 impl TzSheet {
     pub fn new(cx: &mut Cx, zones: Vec<String>, current: Option<String>, now: f64) -> TzSheet {
         let root = cx.scene.root;
-        let sh = sheet(cx, root, "Time zone", Some("Pick your region, then the city nearest you."), false, false, now);
+        let sh = sheet(cx, root, tr().settings_more.sup_time_zone, Some(tr().settings_more.tz_sub), false, false, now);
         let regions = sup::regions(&zones);
         let mut me = TzSheet { nav: Nav::default(), body: sh.body, zones, current, region: None, regions };
         me.show(cx, now);
@@ -53,7 +54,7 @@ impl TzSheet {
         if let Some(t) = right {
             text(cx, row_, ty::SMALL, 400, tok::MUTED, t);
         }
-        self.nav.add(Focusable { id: row_, kind: Kind::Row, group: 1, hint: "Choose".into(), tag, sid })
+        self.nav.add(Focusable { id: row_, kind: Kind::Row, group: 1, hint: tr().settings_more.tz_choose.into(), tag, sid })
     }
 
     fn show(&mut self, cx: &mut Cx, now: f64) {
@@ -65,19 +66,19 @@ impl TzSheet {
         match self.region.clone() {
             None => {
                 if self.regions.is_empty() {
-                    para(cx, self.body, "Couldn't read the list of time zones.", false);
+                    para(cx, self.body, tr().settings_more.tz_cant_read, false);
                 }
                 // The common zones first; still on UTC, focus starts there.
                 let common = sup::common(&self.zones);
                 if !common.is_empty() {
-                    let id = self.list_row(cx, "Common time zones", Some(&format!("{}", common.len())), 1000, "tz-region:Common".into());
+                    let id = self.list_row(cx, tr().settings_more.tz_common, Some(&format!("{}", common.len())), 1000, "tz-region:Common".into());
                     if matches!(self.current.as_deref(), None | Some("UTC") | Some("Etc/UTC")) {
                         focus = Some(id);
                     }
                 }
                 for (i, (name, n)) in self.regions.clone().iter().enumerate() {
                     let here = cur_region.as_deref() == Some(name.as_str());
-                    let right = if here { "Current".to_string() } else if name == "UTC" { String::new() } else { format!("{n}") };
+                    let right = if here { tr().settings_more.language_current.to_string() } else if name == "UTC" { String::new() } else { format!("{n}") };
                     let id = self.list_row(cx, name, Some(&right).filter(|r| !r.is_empty()).map(|r| r.as_str()), i as u32, format!("tz-region:{name}"));
                     if here && focus.is_none() {
                         focus = Some(id);
@@ -88,14 +89,14 @@ impl TzSheet {
                 let r = cx.r();
                 let common = region == "Common";
                 let lab = cx.scene.add(self.body, s().pad(0.0, 0.0, 0.5 * r, 1.0 * r).done(), Node::default());
-                text(cx, lab, ty::LABEL, 500, tok::MUTED, if common { "Common time zones" } else { &region });
+                text(cx, lab, ty::LABEL, 500, tok::MUTED, if common { tr().settings_more.tz_common } else { &region });
                 if !common {
-                    text(cx, lab, ty::SMALL, 400, tok::MUTED, "LB and RB jump a letter");
+                    text(cx, lab, ty::SMALL, 400, tok::MUTED, tr().settings_more.tz_jump);
                 }
                 let list = if common { sup::common(&self.zones) } else { sup::cities(&self.zones, &region) };
                 for (i, z) in list.iter().enumerate() {
                     let here = self.current.as_deref() == Some(z.as_str());
-                    let right = if here { Some("Current") } else if common { Some(sup::region_of(z)) } else { None };
+                    let right = if here { Some(tr().settings_more.language_current) } else if common { Some(sup::region_of(z)) } else { None };
                     let id = self.list_row(cx, &sup::city_name(z), right, i as u32, format!("tz:{z}"));
                     if here {
                         focus = Some(id);
@@ -173,11 +174,76 @@ impl Screen for TzSheet {
     }
 }
 
+// ---------------------------------------------------------------------------- language
+
+/// Settings > System > Language: every language Rare ships, each in its own name. A picks it and
+/// the whole UI switches (`language:<code>`).
+pub struct LangSheet {
+    nav: Nav,
+}
+
+impl LangSheet {
+    pub fn new(cx: &mut Cx, now: f64) -> LangSheet {
+        let root = cx.scene.root;
+        let t = &rare_i18n::tr().settings_more;
+        let sh = sheet(cx, root, t.language, None, false, false, now);
+        let mut me = LangSheet { nav: Nav::default() };
+        let r = cx.r();
+        let cur = rare_i18n::lang();
+        let mut focus = None;
+        for (i, l) in rare_i18n::Lang::ALL.into_iter().enumerate() {
+            let row_ = cx.scene.add(sh.body, s().row().items_center().gap(1.0 * r).min_h(3.25 * r).wp(1.0).px(1.0 * r).py(0.6 * r).done(), Node::default().radius(0.5 * r));
+            cx.scene.add_text(cx.t, row_, s().grow().done(), l.name(), ts(r, ty::BODY.0, ty::BODY.1, 500).truncate(), tok::FG);
+            if l == cur {
+                text(cx, row_, ty::SMALL, 400, tok::MUTED, t.language_current);
+            }
+            let id = me.nav.add(Focusable { id: row_, kind: Kind::Row, group: 1, hint: rare_i18n::tr().common.select.into(), tag: i as u32, sid: format!("lang:{}", l.code()) });
+            if l == cur {
+                focus = Some(id);
+            }
+        }
+        if let Some(f) = focus.or_else(|| me.nav.items.first().map(|f| f.id)) {
+            me.nav.focus(cx.scene, f, now, false);
+        }
+        me
+    }
+}
+
+impl Screen for LangSheet {
+    fn touch_focus(&mut self, cx: &mut Cx, x: f32, y: f32, now: f64) -> bool {
+        self.nav.focus_at(cx.scene, x, y, now)
+    }
+    fn pad(&mut self, cx: &mut Cx, pad: Pad, now: f64) -> Out {
+        match pad {
+            Pad::B => Out::Close,
+            Pad::A => match self.nav.current().and_then(|f| f.sid.strip_prefix("lang:").map(String::from)) {
+                Some(code) => Out::Act(format!("language:{code}")),
+                None => Out::None,
+            },
+            Pad::Up | Pad::Down | Pad::Left | Pad::Right => step(&mut self.nav, cx, pad, now),
+            _ => Out::None,
+        }
+    }
+
+    fn focus_id(&self) -> Option<Id> {
+        self.nav.cur
+    }
+}
+
 // ---------------------------------------------------------------------------- factory reset
 
-const KEEP_GAMES: &str = "Signs out and clears Rare on this device: settings, accounts, wallets, friends, notices, Wi-Fi networks and Bluetooth pairings. Installed games and saves stay.";
-const ERASE_ALL: &str = "Removes everything you added: games, saves, screenshots, files, accounts, wallets and Wi-Fi networks. Rare OS stays installed.";
-const WALLETS: &str = "Wallets on this device are removed. Have the recovery phrase for each one before you go on, or they can't be brought back.";
+/// The word the player types to confirm; the code compares what they type with this.
+const RESET_WORD: &str = "RESET";
+
+fn keep_games() -> &'static str {
+    tr().settings_more.rs_keep_body
+}
+fn erase_all() -> &'static str {
+    tr().settings_more.rs_erase_body
+}
+fn wallets() -> &'static str {
+    tr().settings_more.rs_wallets
+}
 
 pub struct ResetSheet {
     nav: Nav,
@@ -191,7 +257,7 @@ pub struct ResetSheet {
 impl ResetSheet {
     pub fn new(cx: &mut Cx, now: f64) -> ResetSheet {
         let root = cx.scene.root;
-        let sh = sheet(cx, root, "Factory reset", Some("Pick what to keep. The device restarts to reset."), true, true, now);
+        let sh = sheet(cx, root, tr().settings_more.sup_reset, Some(tr().settings_more.rs_sub), true, true, now);
         let mut me = ResetSheet { nav: Nav::default(), body: sh.body, footer: sh.footer.unwrap(), mode: None, done: false, message: None };
         me.show(cx, now);
         me
@@ -206,27 +272,29 @@ impl ResetSheet {
         let f = self.footer;
         match self.mode {
             None => {
-                text(cx, col, ty::BODY, 600, tok::FG, "Keep games");
-                para(cx, col, KEEP_GAMES, false);
-                text(cx, col, ty::BODY, 600, tok::FG, "Erase everything");
-                para(cx, col, ERASE_ALL, false);
-                para(cx, col, WALLETS, true);
-                self.nav.add(button(cx, f, "Keep games", Variant::Secondary, Sz::Md, false).hint("Keep games").tag(1).group(1));
-                self.nav.add(button(cx, f, "Erase everything", Variant::Secondary, Sz::Md, false).hint("Erase everything").tag(2).group(1));
-                let cancel = self.nav.add(button(cx, f, "Cancel", Variant::Secondary, Sz::Md, false).hint("Cancel").tag(9).group(1));
+                let t = &tr().settings_more;
+                text(cx, col, ty::BODY, 600, tok::FG, t.rs_keep);
+                para(cx, col, keep_games(), false);
+                text(cx, col, ty::BODY, 600, tok::FG, t.rs_erase);
+                para(cx, col, erase_all(), false);
+                para(cx, col, wallets(), true);
+                self.nav.add(button(cx, f, t.rs_keep, Variant::Secondary, Sz::Md, false).hint(t.rs_keep).tag(1).group(1));
+                self.nav.add(button(cx, f, t.rs_erase, Variant::Secondary, Sz::Md, false).hint(t.rs_erase).tag(2).group(1));
+                let cancel = self.nav.add(button(cx, f, tr().common.cancel, Variant::Secondary, Sz::Md, false).hint(tr().common.cancel).tag(9).group(1));
                 self.nav.focus(cx.scene, cancel, now, false);
             }
             Some(m) => {
                 let (title, what) = match m {
-                    sup::ResetMode::KeepGames => ("Keep games", KEEP_GAMES),
-                    sup::ResetMode::EraseAll => ("Erase everything", ERASE_ALL),
+                    sup::ResetMode::KeepGames => (tr().settings_more.rs_keep, keep_games()),
+                    sup::ResetMode::EraseAll => (tr().settings_more.rs_erase, erase_all()),
                 };
                 text(cx, col, ty::BODY, 600, tok::FG, title);
                 para(cx, col, what, false);
-                para(cx, col, WALLETS, false);
-                para(cx, col, "The device restarts and resets before Rare opens again. This can't be undone. To go on, type RESET.", true);
-                self.nav.add(button(cx, f, "Type RESET", Variant::Primary, Sz::Md, false).hint("Type RESET").tag(4).group(1));
-                let back = self.nav.add(button(cx, f, "Back", Variant::Secondary, Sz::Md, false).hint("Back").tag(5).group(1));
+                para(cx, col, wallets(), false);
+                para(cx, col, &trf!(tr().settings_more.rs_confirm, word = RESET_WORD), true);
+                let type_it = trf!(tr().settings_more.rs_type, word = RESET_WORD);
+                self.nav.add(button(cx, f, &type_it, Variant::Primary, Sz::Md, false).hint(&type_it).tag(4).group(1));
+                let back = self.nav.add(button(cx, f, tr().common.back, Variant::Secondary, Sz::Md, false).hint(tr().common.back).tag(5).group(1));
                 self.nav.focus(cx.scene, back, now, false);
             }
         }
@@ -270,11 +338,11 @@ impl Screen for ResetSheet {
             return Out::None;
         }
         let (Some(v), Some(m)) = (value, self.mode) else { return Out::None };
-        if v.trim().eq_ignore_ascii_case("reset") {
+        if v.trim().eq_ignore_ascii_case(RESET_WORD) {
             support::request(format!("reset:{}", m.arg()));
             self.done = true;
         } else if !v.trim().is_empty() {
-            self.message = Some("That didn't match. Type RESET to go on.".into());
+            self.message = Some(trf!(tr().settings_more.rs_mismatch, word = RESET_WORD));
         }
         Out::None
     }
@@ -304,21 +372,21 @@ impl LinkSheet {
     pub fn new(cx: &mut Cx, link: &str, now: f64) -> LinkSheet {
         let r = cx.r();
         let root = cx.scene.root;
-        let sh = sheet(cx, root, "Link to your logs", Some("Anyone with the link can download them for a month. It is copied already."), true, false, now);
+        let sh = sheet(cx, root, tr().settings_more.lk_title, Some(tr().settings_more.lk_sub), true, false, now);
         let row_ = cx.scene.add(sh.body, s().row().items_center().gap(1.25 * r).done(), Node::default());
         super::remote::qr_box(cx, row_, link, 9.0);
         let col = cx.scene.add(row_, s().col().grow().gap(0.4 * r).done(), Node::default());
-        para(cx, col, "Scan the code with a phone, or paste the link into your bug report.", false);
+        para(cx, col, tr().settings_more.lk_scan, false);
         cx.scene.add_text(cx.t, col, s().done(), link, ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
         let f = sh.footer.unwrap();
         let mut nav = Nav::default();
-        let copy = button(cx, f, "Copy link", Variant::Primary, Sz::Md, false).hint("Copy link").tag(1).group(1);
+        let copy = button(cx, f, tr().settings_more.lk_copy, Variant::Primary, Sz::Md, false).hint(tr().settings_more.lk_copy).tag(1).group(1);
         let copy_text = match copy.kind {
             Kind::Btn { text, .. } => Some(text),
             _ => None,
         };
         nav.add(copy);
-        let close = nav.add(button(cx, f, "Close", Variant::Secondary, Sz::Md, false).hint("Close").tag(2).group(1));
+        let close = nav.add(button(cx, f, tr().common.close, Variant::Secondary, Sz::Md, false).hint(tr().common.close).tag(2).group(1));
         nav.focus(cx.scene, close, now, false);
         LinkSheet { nav, link: link.to_string(), copy_text }
     }
@@ -335,7 +403,7 @@ impl Screen for LinkSheet {
                 Some(1) => {
                     if crate::app::share_up::copy_link(&self.link) {
                         if let Some(t) = self.copy_text {
-                            cx.scene.set_text(cx.t, t, "Copied");
+                            cx.scene.set_text(cx.t, t, tr().settings_more.lk_copied);
                         }
                     }
                     Out::None

@@ -4,6 +4,7 @@
 //! grows into calls to the backend crates (rare-library, rare-launch, rare-system) as they land.
 //! Calls that can block run on worker threads (app.rs `spawn`), never on the UI thread.
 
+use rare_i18n::{tr, trf};
 use super::model::{ProtonStatus, ProtonTool, UninstallInfo, Battery, Device, Game, Levels, Library, PcApp, PcShelf, Perf, Radios};
 use crate::screens::apps::AppStatus;
 use crate::state::Phase;
@@ -737,15 +738,15 @@ impl DeviceBackend {
     /// What uninstalling `id` removes: a library game, or a ROM ("rom:<system>/<path>").
     fn uninstall_plan(&self, id: &str) -> Result<rare_library::uninstall::Plan, String> {
         if let Some(rest) = id.strip_prefix("rom:") {
-            let (system, rel) = rest.split_once('/').ok_or("That isn't a ROM.")?;
-            let e = rare_library::esde::scan().filter(|e| !e.rom_dir.is_empty()).ok_or("ES-DE's ROM folder isn't set up.")?;
+            let (system, rel) = rest.split_once('/').ok_or(tr().data.not_a_rom)?;
+            let e = rare_library::esde::scan().filter(|e| !e.rom_dir.is_empty()).ok_or(tr().data.esde_rom_folder_missing)?;
             let name = e.recent.iter().find(|r| r.system == system && r.path.as_deref().map(|p| p.trim_start_matches("./")) == Some(rel)).map(|r| r.name.clone()).unwrap_or_else(|| rel.to_string());
             return rare_library::uninstall::plan_rom(std::path::Path::new(&e.rom_dir), system, rel, &name);
         }
         // A ROM in the Emulation folders: its file, or every disc of it.
         if id.starts_with("emu:") {
-            let rom = rare_emu::roms::find(id).ok_or("That game isn't in its ROM folder any more.")?;
-            let (root, folder, rel) = rare_emu::roms::locate(id).ok_or("That isn't a ROM.")?;
+            let rom = rare_emu::roms::find(id).ok_or(tr().data.rom_gone)?;
+            let (root, folder, rel) = rare_emu::roms::locate(id).ok_or(tr().data.not_a_rom)?;
             let mut p = rare_library::uninstall::plan_rom(&root.roms(), &folder, &rel, &rom.title)?;
             p.id = id.to_string();
             let sys_dir = std::fs::canonicalize(root.roms().join(&folder)).map_err(|e| e.to_string())?;
@@ -759,7 +760,7 @@ impl DeviceBackend {
             }
             return Ok(p);
         }
-        let g = self.lib_game(id).ok_or("It isn't in your library anymore.")?;
+        let g = self.lib_game(id).ok_or(tr().data.not_in_library)?;
         let folders: Vec<String> = crate::features::config::get("gameFolders").and_then(|v| serde_json::from_value(v).ok()).unwrap_or_default();
         rare_library::uninstall::plan(&g, &folders)
     }
@@ -992,7 +993,7 @@ fn steam_uninstall(ctx: &rare_core::Ctx, runner: &rare_launch::launch::Runner, a
                 return Ok(());
             }
         }
-        return Err("Steam didn't remove it. Try again.".into());
+        return Err(tr().data.steam_didnt_remove.into());
     }
     let m = manifest.to_path_buf();
     rare_launch::apps::steam_dialog(ctx, runner, &format!("steam://uninstall/{appid}"), move || !m.exists(), Duration::from_secs(1800)).map_err(|e| e.to_string())?;
@@ -1014,10 +1015,10 @@ fn steam_uninstall(ctx: &rare_core::Ctx, runner: &rare_launch::launch::Runner, a
                     return Ok(());
                 }
             }
-            return Err("Steam didn't uninstall it.".into());
+            return Err(tr().data.steam_didnt_uninstall.into());
         }
         if (!away && t0.elapsed() > Duration::from_secs(180)) || t0.elapsed() > Duration::from_secs(1800) {
-            return Err("Steam didn't answer. Open Steam and try again.".into());
+            return Err(tr().data.steam_didnt_answer.into());
         }
     }
 }
@@ -1089,13 +1090,13 @@ impl Backend for DeviceBackend {
     fn verify_start(&self, g: &Game, keep: bool) -> Result<(), String> {
         use crate::features::gamemgmt::verify;
         if self.runner.running().iter().any(|r| r == &g.id) {
-            return Err("Close the game first.".into());
+            return Err(tr().data.close_game_first.into());
         }
         match g.id.strip_prefix("steam:").and_then(|a| a.parse::<u32>().ok()).filter(|_| g.source == "steam" && !g.foreign) {
             // Steam "checks" a game it no longer has and says all is well: say so first.
-            Some(_) if g.install_dir.as_deref().is_some_and(|d| !std::path::Path::new(d).is_dir()) => Err("Steam doesn't have this game installed any more.".into()),
+            Some(_) if g.install_dir.as_deref().is_some_and(|d| !std::path::Path::new(d).is_dir()) => Err(tr().data.steam_not_installed.into()),
             Some(appid) => verify::steam_start(&self.ctx, &self.runner, &g.id, appid, g.size_bytes.unwrap_or(0.0) as u64),
-            None => verify::local_start(&g.id, g.install_dir.as_deref().ok_or("This game has no folder to check.")?, keep),
+            None => verify::local_start(&g.id, g.install_dir.as_deref().ok_or(tr().data.no_folder_to_check)?, keep),
         }
     }
     fn add_game(&self, path: &std::path::Path) -> Result<(String, String), String> {
@@ -1153,7 +1154,7 @@ impl Backend for DeviceBackend {
     }
     fn emu_do(&self, action: &rare_emu::actions::EmuAction) -> Result<(), String> {
         if !self.runner.running().contains(&action.app_id) {
-            return Err("That game isn't running.".into());
+            return Err(tr().data.not_running.into());
         }
         rare_emu::actions::emu_do(&self.ctx, action).map_err(|e| e.to_string())
     }
@@ -1185,7 +1186,7 @@ impl Backend for DeviceBackend {
     fn uninstall(&self, id: &str, keep_saves: bool, tick: &mut dyn FnMut(u64, u64)) -> Result<(), String> {
         use rare_library::uninstall::{self as un, How};
         if self.runner.running().iter().any(|r| r == id) {
-            return Err("Quit it first, then uninstall it.".into());
+            return Err(tr().data.quit_then_uninstall.into());
         }
         if rare_android::package_of(id).is_some() {
             return crate::features::android::uninstall(id);
@@ -1260,8 +1261,8 @@ impl Backend for DeviceBackend {
         rare_launch::apps::resume(&self.ctx, &self.runner, id).map_err(|e| e.to_string())
     }
     fn app_install(&self, id: &str) -> Result<(), String> {
-        let st = rare_launch::apps::statuses().into_iter().find(|s| s.id == id).ok_or("Unknown app")?;
-        let offer = st.offer.ok_or("Nothing to install")?;
+        let st = rare_launch::apps::statuses().into_iter().find(|s| s.id == id).ok_or(tr().data.unknown_app)?;
+        let offer = st.offer.ok_or(tr().data.nothing_to_install)?;
         if offer.flatpak == rare_launch::apps::catalog::BATTLENET {
             return rare_launch::apps::battlenet::start(self.ctx.clone(), self.runner.clone()).map_err(|e| e.to_string());
         }
@@ -1349,17 +1350,17 @@ impl Backend for DeviceBackend {
         let mut g = self.lib_game(id).ok_or_else(|| format!("{id} is not in the library"))?;
         // A ROM starts in its system's emulator as it is installed now.
         let rom = match id.starts_with("emu:") {
-            true => Some(rare_emu::roms::find(id).ok_or("That game isn't in its ROM folder any more. Scan again from the Library.")?),
+            true => Some(rare_emu::roms::find(id).ok_or(tr().data.rom_gone_scan)?),
             false => None,
         };
         if rare_android::package_of(id).is_some() {
             // One Android at a time: a second app would end the first one's session.
             if let Some(other) = self.runner.running().into_iter().find(|r| rare_android::package_of(r).is_some()) {
-                let name = self.lib_game(&other).map(|g| g.title.clone()).unwrap_or_else(|| "the Android app that's open".into());
-                return Err(format!("Quit {name} first. Android runs one app at a time."));
+                let name = self.lib_game(&other).map(|g| g.title.clone()).unwrap_or_else(|| tr().data.open_android_app.into());
+                return Err(trf!(tr().data.android_one_app, name = name));
             }
             if rare_android::jobs::current().is_some() {
-                return Err("Android is busy with an install. Try again when it's done.".into());
+                return Err(tr().data.android_busy.into());
             }
             rare_android::ensure_files().map_err(|e| e.to_string())?;
             rare_android::note_played(id);
@@ -1444,7 +1445,7 @@ impl Backend for DeviceBackend {
         match self.runner.phase(id) {
             "steam" => Phase::Steam,
             "game" => Phase::Game,
-            "answer" => Phase::Answer(self.runner.question(id).unwrap_or("Steam needs an answer before the game can start")),
+            "answer" => Phase::Answer(self.runner.question(id).unwrap_or(tr().data.steam_needs_answer)),
             "playing" => Phase::Playing,
             _ => Phase::None,
         }
@@ -1526,7 +1527,7 @@ impl Backend for DeviceBackend {
     }
     fn set_framegen(&self, f: rare_system::gamefx::FrameGen) -> Result<(), String> {
         let mut s = power_load();
-        rare_system::power::framegen_set_config(&mut s, f).ok_or("No game is running")?;
+        rare_system::power::framegen_set_config(&mut s, f).ok_or(tr().data.no_game_running)?;
         power_save(&s);
         Ok(())
     }

@@ -3,6 +3,7 @@
 //! interactive piece is a focusable; green only for money up and Buy, red only for money down and
 //! Sell.
 
+use rare_i18n::{tr, trf};
 use crate::kit::format::{num_parts, NumKind, NumOptions};
 use crate::kit::{group, num, Btn};
 use crate::screens::market::host::*;
@@ -102,7 +103,7 @@ pub fn side_switch(ui: &mut Ui, items: [(&str, Tone); 2], on: usize, group_name:
         };
         let other = items[1 - i].0;
         let b = ui.bx(s().row().items_center().justify_center().h(2.5)).bg(bg).radius(ui.r(0.25)).child(ui.text(*label, T::new(Ty::Body).w(600).c(fg)).focus_color(tok::FG));
-        g = g.child(fill_nav(b, tag0 + i as u32, Some(&format!("Switch to {label}")), Some(other), false));
+        g = g.child(fill_nav(b, tag0 + i as u32, Some(&trf!(tr().trade.switch_to, label = label)), Some(other), false));
     }
     g
 }
@@ -116,19 +117,19 @@ pub fn tf_chips(ui: &mut Ui, items: &[&str], on: usize, group_name: &str, tag0: 
         // Per-corner radii are an engine request: the end chips round all four corners for now.
         let rad = if i == 0 || i + 1 == n { ui.r(0.25) } else { 0.0 };
         let b = ui.bx(s().row().items_center().justify_center().h(2.25).min_w(2.6).px(0.7)).bg(bg).radius(rad).child(ui.text(*label, T::new(Ty::Meta).w(500).c(fg)).focus_color(tok::FG));
-        g = g.child(fill_nav(b, tag0 + i as u32, Some(&format!("Show {label}")), None, false));
+        g = g.child(fill_nav(b, tag0 + i as u32, Some(&trf!(tr().trade.show_label, label = label)), None, false));
     }
     g
 }
 
 /// `Stepper`: a minus and a plus around `middle` (amount, leverage).
-pub fn stepper(ui: &mut Ui, label: &str, group_name: &str, tag_minus: u32, tag_plus: u32, middle: El) -> El {
+pub fn stepper(ui: &mut Ui, less: &str, more: &str, group_name: &str, tag_minus: u32, tag_plus: u32, middle: El) -> El {
     let btn = |ui: &mut Ui, t: &str, tag: u32, hint: String| {
         let b = ui.bx(s().row().items_center().justify_center().h(2.5).w(3.0)).bg(tok::BUTTON_SECONDARY).radius(ui.r(0.25)).child(ui.text(t, T::new(Ty::Row).w(600).c(tok::MUTED)).focus_color(tok::FG));
         fill_nav(b, tag, Some(&hint), None, false)
     };
-    let minus = btn(ui, "\u{2212}", tag_minus, format!("Less {label}"));
-    let plus = btn(ui, "+", tag_plus, format!("More {label}"));
+    let minus = btn(ui, "\u{2212}", tag_minus, less.to_string());
+    let plus = btn(ui, "+", tag_plus, more.to_string());
     ui.bx(s().row().items_center().gap(0.75)).group(group(group_name, true)).child(minus).child(ui.bx(s().flex(1.0).min0()).child(middle)).child(plus)
 }
 

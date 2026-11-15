@@ -2,6 +2,7 @@
 //! LauncherSwitcher): Home, then what runs now, then recent games; A switches, X twice closes.
 //! Also whether a Rare surface is up over a game, which InputPlumber's intercept mode follows.
 
+use rare_i18n::{tr, trf};
 use super::*;
 use crate::screens::overlay::fixtures::Session;
 use crate::screens::overlay::switcher::{RecentGame, RunItem, Switcher, SwitcherState};
@@ -110,7 +111,7 @@ impl App {
                 Box::new(move |st: &mut State, now| {
                     if let Err(e) = r {
                         log::warn!("switch: {e}");
-                        st.toast("Couldn't switch to it. Try again.", Tone::Error, now);
+                        st.toast(tr().app.switch_failed, Tone::Error, now);
                     }
                 })
             });
@@ -129,7 +130,7 @@ impl App {
                         Ok(()) => st.reopen_switcher = true,
                         Err(e) => {
                             log::warn!("quit {rid}: {e}");
-                            st.toast(format!("Couldn't close {name}."), Tone::Error, now);
+                            st.toast(trf!(tr().app.close_failed, name = name), Tone::Error, now);
                         }
                     }
                 })

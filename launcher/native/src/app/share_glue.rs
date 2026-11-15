@@ -159,7 +159,7 @@ impl App {
                     match r {
                         Ok(c) => {
                             s.page.st.added(c);
-                            self.st.toast("Saved to Share", Tone::Info, now);
+                            self.st.toast(tr().app.saved_to_share, Tone::Info, now);
                         }
                         Err(e) => {
                             s.page.st.error = Some(e);
@@ -182,7 +182,7 @@ impl App {
         let link = result.link.clone();
         let kind = crate::screens::share::format::kind_word(s.page.st.selected_capture().map(|c| c.kind).unwrap_or(rare_share::Kind::Screenshot)).to_string();
         let Some(social) = self.social.clone() else {
-            self.st.toast("Sending to friends needs the live launcher.", Tone::Info, now);
+            self.st.toast(tr().app.sending_needs_live, Tone::Info, now);
             return;
         };
         match crate::screens::share::send_to() {
@@ -290,7 +290,7 @@ impl App {
             }
             "share:go" => {
                 let Some(p) = s.prepared.clone().filter(|p| s.page.st.selected.as_deref() == Some(p.id.as_str())) else {
-                    s.page.st.finished(Err((false, "This capture is not ready to share yet. Try again.".into())));
+                    s.page.st.finished(Err((false, tr().app.capture_not_ready.into())));
                     s.page.changed(&mut cx, now);
                     return;
                 };
@@ -321,7 +321,7 @@ impl App {
                     let link = result.link.clone();
                     std::thread::spawn(move || {
                         if post(&link).is_err() {
-                            let _ = tx.send(Done::Toast("Couldn't open Telegram.".into(), Tone::Error));
+                            let _ = tx.send(Done::Toast(tr().app.telegram_open_failed.into(), Tone::Error));
                             waker();
                         }
                     });

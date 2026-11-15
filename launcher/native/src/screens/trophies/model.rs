@@ -2,23 +2,25 @@
 //! Steam achievements (rare-trophies reads them), the chain's trophy definitions and the player's
 //! minted trophies joined into rows and summaries. No I/O. model.test.ts is ported below.
 
+use rare_i18n::tr;
+
 pub type Tier = u8;
 
 pub fn tier_name(t: Tier) -> &'static str {
     match t {
-        0 => "Bronze",
-        1 => "Silver",
-        2 => "Gold",
-        _ => "Platinum",
+        0 => tr().trophies.bronze,
+        1 => tr().trophies.silver,
+        2 => tr().trophies.gold,
+        _ => tr().trophies.platinum,
     }
 }
 
 /// 0 studio issued, 1 self-reported (Rare attested local data).
 pub fn source_name(s: u8) -> &'static str {
     if s == 0 {
-        "Studio issued"
+        tr().trophies.studio_issued
     } else {
-        "Self-reported"
+        tr().trophies.self_reported
     }
 }
 
@@ -55,7 +57,7 @@ pub struct SteamGame {
 /// Where a game's achievements come from, for the label on cards and pages.
 pub fn source_label(source: &str) -> &'static str {
     match source {
-        "retro" => "Retro trophies",
+        "retro" => tr().trophies.retro_trophies,
         "retroachievements" => "RetroAchievements",
         "epic" => "Epic Games",
         "gog" => "GOG",

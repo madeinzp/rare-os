@@ -3,6 +3,7 @@
 //! Share borrows from sui/ui/CloudSaves.tsx (`fmtWal`, `fmtSuiMist`, `fmtBytes`, `ago`). Pure
 //! functions, unit tested like format.test.ts.
 
+use rare_i18n::{tr, trf, trn};
 use rare_share::{Capture, CaptureGame, Kind};
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
@@ -119,11 +120,19 @@ pub enum DurationId {
 
 pub struct Duration {
     pub id: DurationId,
-    pub label: &'static str,
     pub days: u32,
 }
 
-pub const DURATIONS: [Duration; 2] = [Duration { id: DurationId::Month, label: "1 month", days: 30 }, Duration { id: DurationId::Year, label: "1 year", days: 365 }];
+impl Duration {
+    pub fn label(&self) -> &'static str {
+        match self.id {
+            DurationId::Month => tr().share.duration_month,
+            DurationId::Year => tr().share.duration_year,
+        }
+    }
+}
+
+pub const DURATIONS: [Duration; 2] = [Duration { id: DurationId::Month, days: 30 }, Duration { id: DurationId::Year, days: 365 }];
 
 pub fn duration(id: DurationId) -> &'static Duration {
     DURATIONS.iter().find(|d| d.id == id).unwrap_or(&DURATIONS[0])
@@ -440,8 +449,6 @@ pub fn fmt_bytes(b: u64) -> String {
     }
 }
 
-const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
 /// (month 1..12, day) of a unix day number (UTC).
 fn civil(days: i64) -> (u32, u32) {
     let z = days + 719_468;
@@ -462,16 +469,16 @@ pub fn ago(t_ms: u64, now_ms: u64) -> String {
     }
     let s = (now_ms as f64 - t_ms as f64) / 1000.0;
     if s < 3600.0 {
-        "just now".into()
+        tr().share.ago_just_now.into()
     } else if s < 86_400.0 {
-        format!("{} h ago", js_round(s / 3600.0))
+        trf!(tr().share.ago_hours, n = js_round(s / 3600.0))
     } else if s < 86_400.0 * 2.0 {
-        "yesterday".into()
+        tr().share.ago_yesterday.into()
     } else if s < 86_400.0 * 30.0 {
-        format!("{} days ago", js_round(s / 86_400.0))
+        trn!(tr().share.ago_days, js_round(s / 86_400.0))
     } else {
         let (m, d) = civil((t_ms / 86_400_000) as i64);
-        format!("{} {d}", MONTHS[m as usize - 1])
+        rare_i18n::fmt::date_md(m, d)
     }
 }
 

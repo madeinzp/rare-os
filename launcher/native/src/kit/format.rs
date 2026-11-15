@@ -10,6 +10,8 @@
 //!   share   whole percent or 1 decimal                36%, 4.6%
 //!   amount  a coin quantity                           12.5, 1.25M
 
+use rare_i18n::{tr, trf};
+
 pub const MINUS: &str = "\u{2212}";
 pub const DASH: &str = "--";
 
@@ -370,25 +372,25 @@ pub fn time_ago(t_ms: Option<f64>, now_ms: f64) -> String {
     let Some(t) = t_ms.filter(|t| t.is_finite()) else { return DASH.into() };
     let s = ((now_ms - t) / 1000.0).round().max(0.0) as i64;
     if s < 60 {
-        return format!("{s}s");
+        return trf!(tr().kit.time_s, n = s);
     }
     let m = s / 60;
     if m < 60 {
-        return format!("{m}m");
+        return trf!(tr().kit.time_m, n = m);
     }
     let h = m / 60;
     if h < 24 {
-        return format!("{h}h");
+        return trf!(tr().kit.time_h, n = h);
     }
     let d = h / 24;
     if d < 30 {
-        return format!("{d}d");
+        return trf!(tr().kit.time_d, n = d);
     }
     let mo = d / 30;
     if mo < 12 {
-        return format!("{mo}mo");
+        return trf!(tr().kit.time_mo, n = mo);
     }
-    format!("{}y", d / 365)
+    trf!(tr().kit.time_y, n = d / 365)
 }
 
 /// "8 GB", "512 MB" (components/ui.tsx fmtSize).

@@ -3,6 +3,7 @@
 
 use super::{config::Config, rows::*, SectionOut, SectionView};
 use crate::screens::overlay::common::*;
+use rare_i18n::{tr, trf};
 use rare_render::Id;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default)]
@@ -19,9 +20,11 @@ pub struct ProfileInfo {
 
 /// The Username row's line (UsernameRow).
 pub fn username_body(p: &ProfileInfo) -> String {
-    match &p.username {
-        Some(u) => format!("{u}{}. You can change it once every 30 days.", p.name.as_ref().map(|n| format!(", SuiNS {n}")).unwrap_or_default()),
-        None => "Friends find you by it. Free, and nobody needs a SuiNS name.".into(),
+    let t = &tr().settings;
+    match (&p.username, &p.name) {
+        (Some(u), Some(n)) => trf!(t.username_set_suins, username = u, name = n),
+        (Some(u), None) => trf!(t.username_set, username = u),
+        (None, _) => t.username_none.into(),
     }
 }
 
@@ -30,17 +33,17 @@ pub fn rare_body(p: &ProfileInfo) -> String {
     match &p.address {
         Some(a) => {
             let who = p.username.clone().or_else(|| p.name.clone()).or_else(|| p.label.clone()).unwrap_or_else(|| short(a));
-            format!("Signed in as {who}. One sign-in for Rare Wallet and Rare Marketplace.")
+            trf!(tr().settings.rare_signed_in, who = who)
         }
-        None => "One sign-in for Rare Wallet and Rare Marketplace. Your games work without an account.".into(),
+        None => tr().settings.rare_signed_out.into(),
     }
 }
 
 /// The Steam row's line.
 pub fn steam_body(p: &ProfileInfo) -> String {
     match &p.steam {
-        Some(s) => format!("Signed in as {s}. Sign out or switch accounts in Steam's settings."),
-        None => "Sign in to see your Steam games in Library and start them from Rare.".into(),
+        Some(s) => trf!(tr().settings.steam_signed_in, name = s),
+        None => tr().settings.steam_signed_out.into(),
     }
 }
 
@@ -62,17 +65,18 @@ pub struct AccountLine {
 
 /// What kind of account it is and how it signs, in a few words.
 pub fn kind_text(a: &crate::screens::wallet::types::RareAccount) -> String {
+    let t = &tr().settings;
     match a.kind.as_str() {
-        "native" if a.device && a.hd.is_some() => "Recovery phrase on this SuiPlay, signs with A",
-        "native" if a.device => "Private key on this SuiPlay, signs with A",
-        "native" if a.hd.is_some() => "Recovery phrase, signs with your PIN",
-        "native" => "Private key, signs with your PIN",
-        "passkey" if a.passkey.as_ref().is_some_and(|p| p.pin) => "PIN account, signs here with your PIN, your phone or key is the backup",
-        "passkey" => "Passkey, signs with your phone or PIN",
-        "ledger" => "Ledger",
-        "keystone" => "Keystone",
-        "watch" => "Watch only, cannot sign",
-        _ => "Account",
+        "native" if a.device && a.hd.is_some() => t.acct_recovery_device,
+        "native" if a.device => t.acct_key_device,
+        "native" if a.hd.is_some() => t.acct_recovery_pin,
+        "native" => t.acct_key_pin,
+        "passkey" if a.passkey.as_ref().is_some_and(|p| p.pin) => t.acct_pin_account,
+        "passkey" => t.acct_passkey,
+        "ledger" => t.acct_ledger,
+        "keystone" => t.acct_keystone,
+        "watch" => t.acct_watch,
+        _ => t.acct_generic,
     }
     .into()
 }
@@ -107,14 +111,13 @@ pub fn fixture_lines() -> Vec<AccountLine> {
 
 /// "Signed in to rare.market since Oct 27, 2026" or why not.
 pub fn session_text(l: &AccountLine) -> String {
-    let mut s = l.kind.clone();
-    s.push_str(". ");
-    match l.session {
-        Some(0) => s.push_str("Signed in to rare.market."),
-        Some(at) => s.push_str(&format!("Signed in to rare.market since {}.", date_of(at))),
-        None if l.can_sign => s.push_str("Not signed in to rare.market."),
-        None => s.pop().map(|_| ()).unwrap_or(()),
-    }
+    let t = &tr().settings;
+    let s = match l.session {
+        Some(0) => trf!(t.session_signed_in, kind = l.kind),
+        Some(at) => trf!(t.session_since, kind = l.kind, date = date_of(at)),
+        None if l.can_sign => trf!(t.session_not, kind = l.kind),
+        None => trf!(t.session_kind_only, kind = l.kind),
+    };
     s.trim_end().to_string()
 }
 
@@ -122,15 +125,15 @@ pub fn session_text(l: &AccountLine) -> String {
 pub fn date_of(ms: i64) -> String {
     let iso = crate::screens::wallet::service::iso_of(ms);
     let (y, m, d) = (&iso[0..4], iso[5..7].parse::<usize>().unwrap_or(1), iso[8..10].trim_start_matches('0'));
-    const M: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    format!("{} {d}, {y}", M[(m - 1).min(11)])
+    let month = tr().settings.months_short.split_whitespace().nth((m - 1).min(11)).unwrap_or("");
+    trf!(tr().settings.date_short, month = month, day = d, year = y)
 }
 
 /// The send PIN row's line.
 pub fn send_pin_body(threshold: Option<f64>) -> String {
     match threshold {
-        Some(t) => format!("On. Sends over ${t:.0} ask for it. Everything else signs with A."),
-        None => format!("Off. Accounts on this SuiPlay sign with A alone. Turn it on to ask for a PIN before sends over ${:.0}.", rare_wallet::send_pin::DEFAULT_THRESHOLD_USD),
+        Some(t) => trf!(tr().settings.send_pin_on, amount = format!("{t:.0}")),
+        None => trf!(tr().settings.send_pin_off, amount = format!("{:.0}", rare_wallet::send_pin::DEFAULT_THRESHOLD_USD)),
     }
 }
 
@@ -152,9 +155,6 @@ const T_PIN_SET: u32 = 90;
 const T_PIN_OFF: u32 = 91;
 const T_DEV_PIN: u32 = 92;
 const T_DEV_WORDS: u32 = 93;
-
-/// The PIN accounts' row.
-pub const DEVICE_PIN_BODY: &str = "PIN accounts sign on this SuiPlay with it. 5 wrong PINs lock it until your phone or security key unlocks it.";
 
 impl AccountsSection {
     pub fn build(cx: &mut Cx, nav: &mut Nav, parent: Id, cfg: &Config, now: f64) -> AccountsSection {
@@ -187,11 +187,12 @@ impl AccountsSection {
     pub fn build_lines(cx: &mut Cx, nav: &mut Nav, parent: Id, _cfg: &Config, prof: &ProfileInfo, lines: &[AccountLine], pin: Option<f64>, _now: f64) -> AccountsSection {
         let p = panel(cx, parent);
         let signed_in = prof.address.is_some();
+        let t = &tr().settings;
         let rows: Vec<(&str, &str, String, &str, Variant, u32)> = vec![
-            ("rare-account", "Rare account", rare_body(prof), if signed_in { "Sign out" } else { "Sign in" }, if signed_in { Variant::Secondary } else { Variant::Primary }, if signed_in { 5 } else { 2 }),
-            ("steam", "Steam", steam_body(prof), if prof.steam.is_some() { "Open Steam" } else { "Sign in" }, if prof.steam.is_some() { Variant::Secondary } else { Variant::Primary }, 6),
-            ("wallet", "Rare Wallet", "Balances, collectibles and moving assets from your old SuiPlay wallet.".into(), "Open", Variant::Secondary, 3),
-            ("setup", "Setup", "Go through the first-run steps again: your account, moving assets, Steam and favourites.".into(), "Run setup", Variant::Secondary, 4),
+            ("rare-account", t.row_rare_account, rare_body(prof), if signed_in { tr().common.sign_out } else { tr().common.sign_in }, if signed_in { Variant::Secondary } else { Variant::Primary }, if signed_in { 5 } else { 2 }),
+            ("steam", t.row_steam, steam_body(prof), if prof.steam.is_some() { t.open_steam } else { tr().common.sign_in }, if prof.steam.is_some() { Variant::Secondary } else { Variant::Primary }, 6),
+            ("wallet", t.row_rare_wallet, t.wallet_body.into(), tr().common.open, Variant::Secondary, 3),
+            ("setup", t.row_setup, t.setup_body.into(), t.run_setup, Variant::Secondary, 4),
         ];
         let mut first = true;
         for (i, (sid, title, body, label, v, tag)) in rows.into_iter().enumerate() {
@@ -203,14 +204,14 @@ impl AccountsSection {
             if sid == "steam" {
                 for (j, (store, line, signed)) in crate::features::stores::account_rows().into_iter().enumerate() {
                     let r = setting_row(cx, p, store.name(), Some(&line), false);
-                    let b = button(cx, r.right, if signed { "Sign out" } else { "Sign in" }, if signed { Variant::Secondary } else { Variant::Primary }, Sz::Md, false).sid(store.key()).tag(7 + j as u32);
+                    let b = button(cx, r.right, if signed { tr().common.sign_out } else { tr().common.sign_in }, if signed { Variant::Secondary } else { Variant::Primary }, Sz::Md, false).sid(store.key()).tag(7 + j as u32);
                     nav.add(b.group(10));
                 }
             }
             // The username sits under the Rare account it belongs to.
             if i == 0 && signed_in {
-                let r = setting_row(cx, p, "Username", Some(&username_body(prof)), false);
-                let b = button(cx, r.right, if prof.username.is_some() { "Change" } else { "Pick a username" }, if prof.username.is_some() { Variant::Secondary } else { Variant::Primary }, Sz::Md, false).sid("username").tag(1);
+                let r = setting_row(cx, p, t.row_username, Some(&username_body(prof)), false);
+                let b = button(cx, r.right, if prof.username.is_some() { tr().common.change } else { t.pick_username }, if prof.username.is_some() { Variant::Secondary } else { Variant::Primary }, Sz::Md, false).sid("username").tag(1);
                 nav.add(b.group(10));
             }
         }
@@ -220,37 +221,37 @@ impl AccountsSection {
             let p = panel(cx, parent);
             let mut first = true;
             for (i, l) in lines.iter().enumerate() {
-                let title = if l.main { format!("{} (main)", l.label) } else { l.label.clone() };
+                let title = if l.main { trf!(t.acct_main_title, label = l.label) } else { l.label.clone() };
                 let r = setting_row(cx, p, &title, Some(&session_text(l)), first);
                 first = false;
                 let base = T_ACCOUNT + 3 * i as u32;
                 if l.session.is_some() {
-                    let b = button(cx, r.right, "Sign out", Variant::Secondary, Sz::Md, false).sid(&format!("acct-out-{i}")).tag(base);
+                    let b = button(cx, r.right, tr().common.sign_out, Variant::Secondary, Sz::Md, false).sid(&format!("acct-out-{i}")).tag(base);
                     nav.add(b.group(11));
                 } else if l.main && l.can_sign {
-                    let b = button(cx, r.right, "Sign in", Variant::Primary, Sz::Md, false).sid(&format!("acct-in-{i}")).tag(base + 2);
+                    let b = button(cx, r.right, tr().common.sign_in, Variant::Primary, Sz::Md, false).sid(&format!("acct-in-{i}")).tag(base + 2);
                     nav.add(b.group(11));
                 }
                 if !l.main {
-                    let b = button(cx, r.right, "Make this the main account", Variant::Secondary, Sz::Md, false).sid(&format!("acct-main-{i}")).tag(base + 1);
+                    let b = button(cx, r.right, t.make_main, Variant::Secondary, Sz::Md, false).sid(&format!("acct-main-{i}")).tag(base + 1);
                     nav.add(b.group(11));
                 }
                 addrs.push(l.address.clone());
             }
             let device_pin = if super::live::enabled() { crate::screens::wallet::service::has_device_pin() } else { true };
             if device_pin {
-                let r = setting_row(cx, p, "PIN on this SuiPlay", Some(DEVICE_PIN_BODY), false);
-                let b = button(cx, r.right, "Change PIN", Variant::Secondary, Sz::Md, false).sid("device-pin").tag(T_DEV_PIN);
+                let r = setting_row(cx, p, t.row_device_pin, Some(t.device_pin_body), false);
+                let b = button(cx, r.right, t.change_pin, Variant::Secondary, Sz::Md, false).sid("device-pin").tag(T_DEV_PIN);
                 nav.add(b.group(11));
-                let b = button(cx, r.right, "Recovery words", Variant::Secondary, Sz::Md, false).sid("device-words").tag(T_DEV_WORDS);
+                let b = button(cx, r.right, t.recovery_words, Variant::Secondary, Sz::Md, false).sid("device-words").tag(T_DEV_WORDS);
                 nav.add(b.group(11));
             }
             if lines.iter().any(|l| l.device) || !super::live::enabled() {
-                let r = setting_row(cx, p, "PIN for big sends", Some(&send_pin_body(pin)), false);
+                let r = setting_row(cx, p, t.row_big_sends, Some(&send_pin_body(pin)), false);
                 let b = if pin.is_some() {
-                    button(cx, r.right, "Turn off", Variant::Secondary, Sz::Md, false).sid("send-pin-off").tag(T_PIN_OFF)
+                    button(cx, r.right, tr().common.turn_off, Variant::Secondary, Sz::Md, false).sid("send-pin-off").tag(T_PIN_OFF)
                 } else {
-                    button(cx, r.right, "Set a PIN", Variant::Secondary, Sz::Md, false).sid("send-pin-set").tag(T_PIN_SET)
+                    button(cx, r.right, t.set_pin, Variant::Secondary, Sz::Md, false).sid("send-pin-set").tag(T_PIN_SET)
                 };
                 nav.add(b.group(11));
             }

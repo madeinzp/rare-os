@@ -2,10 +2,11 @@
 //! the logs' link (screens/settings/supportsheets.rs), and what those sheets and the Support
 //! workers hand back (screens/settings/support.rs).
 
+use rare_i18n::tr;
 use super::*;
 use crate::screens::overlay::Screen;
 use crate::screens::settings::support::{self, SheetReq};
-use crate::screens::settings::supportsheets::{LinkSheet, ResetSheet, TzSheet};
+use crate::screens::settings::supportsheets::{LangSheet, LinkSheet, ResetSheet, TzSheet};
 
 impl App {
     /// `support:tz-open`, `support:reset-open`.
@@ -18,11 +19,12 @@ impl App {
                 let current = st.time.and_then(|t| t.zone).or_else(|| rare_system::support::time_info().zone);
                 self.open_support_sheet(move |cx| Box::new(TzSheet::new(cx, zones, current, now)));
             }
+            "support:lang-open" => self.open_support_sheet(move |cx| Box::new(LangSheet::new(cx, now))),
             "support:reset-open" => {
                 if self.fixture || rare_system::support::reset_supported() {
                     self.open_support_sheet(move |cx| Box::new(ResetSheet::new(cx, now)));
                 } else {
-                    self.st.toast("Needs the next system update.", Tone::Info, now);
+                    self.st.toast(tr().app.needs_system_update, Tone::Info, now);
                 }
             }
             _ => {}

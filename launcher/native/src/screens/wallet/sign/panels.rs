@@ -4,6 +4,7 @@
 
 use crate::screens::wallet::kit::{btn, Variant};
 use crate::screens::wallet::markup::*;
+use rare_i18n::{tr, trf, trn};
 
 /// A device error with an optional one-time fix (the udev line for Linux).
 #[derive(Clone, Debug, PartialEq)]
@@ -52,11 +53,10 @@ pub fn chunk_hash(hex: &str, size: usize) -> Vec<String> {
 }
 
 /// What to do with the QR code, in order.
-pub const PHONE_STEPS: [&str; 3] = [
-    "Open the camera on your phone and point it at this code.",
-    "Tap the passkey prompt and pick your Rare passkey.",
-    "Confirm with your face or fingerprint. Keep Bluetooth on, near this SuiPlay.",
-];
+pub fn phone_steps() -> [&'static str; 3] {
+    let t = &tr().wallet_sign;
+    [t.phone_step_1, t.phone_step_2, t.phone_step_3]
+}
 
 fn lead(main: &str, sub: Option<&str>) -> El<PanelMsg> {
     div("min-w-0")
@@ -68,7 +68,7 @@ fn error_block(err: &HwError, device: &str) -> El<PanelMsg> {
     let mut d = div("min-w-0").kid(p("text-base font-semibold text-negative").text(&err.message));
     if let Some(fix) = &err.fix {
         d = d
-            .kid(p("mt-2 text-sm text-secondary").text(format!("Run this once, then plug the {device} in again:")))
+            .kid(p("mt-2 text-sm text-secondary").text(trf!(tr().wallet_sign.run_once_plug, device = device)))
             .kid(pre("mt-1.5 overflow-x-auto rounded border border-border-primary bg-layer-01 px-3 py-2 font-mono text-xs").text(fix));
     }
     d
@@ -77,15 +77,15 @@ fn error_block(err: &HwError, device: &str) -> El<PanelMsg> {
 fn buttons(err: bool) -> El<PanelMsg> {
     let mut row = div("flex gap-2");
     if err {
-        row = row.kid(btn("Retry", Variant::Primary, "flex-1", Some(PanelMsg::Retry)).def(true));
+        row = row.kid(btn(tr().common.retry, Variant::Primary, "flex-1", Some(PanelMsg::Retry)).def(true));
     }
-    row.kid(btn("Cancel", Variant::Secondary, if err { "" } else { "flex-1" }, Some(PanelMsg::Cancel)).def(!err))
+    row.kid(btn(tr().common.cancel, Variant::Secondary, if err { "" } else { "flex-1" }, Some(PanelMsg::Cancel)).def(!err))
 }
 
 pub fn ledger_panel(p_: &LedgerPrompt) -> El<PanelMsg> {
     let top = match &p_.error {
         Some(e) => error_block(e, "Ledger"),
-        None => lead(if p_.message.is_empty() { "Connecting to your Ledger" } else { &p_.message }, p_.device.as_deref().filter(|d| !d.is_empty())),
+        None => lead(if p_.message.is_empty() { tr().wallet_sign.connecting_ledger } else { &p_.message }, p_.device.as_deref().filter(|d| !d.is_empty())),
     };
     div("flex w-full flex-col gap-4").kid(top).kid(buttons(p_.error.is_some()))
 }
@@ -94,7 +94,7 @@ pub fn keystone_panel(k: &KeystonePrompt) -> El<PanelMsg> {
     let err = k.error.is_some();
     let top = match &k.error {
         Some(e) => error_block(e, "Keystone"),
-        None => lead(if k.message.is_empty() { "Connecting to your Keystone" } else { &k.message }, None),
+        None => lead(if k.message.is_empty() { tr().wallet_sign.connecting_keystone } else { &k.message }, None),
     };
     let groups = k.digest_hex.as_deref().filter(|h| !h.is_empty()).map(|h| chunk_hash(h, 8)).unwrap_or_default();
     let mut d = div("flex w-full flex-col gap-4").kid(top);
@@ -103,10 +103,10 @@ pub fn keystone_panel(k: &KeystonePrompt) -> El<PanelMsg> {
             div("")
                 .kid(
                     div("grid grid-cols-4 gap-x-4 gap-y-1.5 rounded border border-border-primary bg-layer-01 px-4 py-3 font-mono text-sm tabular-nums")
-                        .label("Transaction hash")
+                        .label(tr().wallet_sign.transaction_hash)
                         .kids(groups.iter().enumerate().map(|(i, g)| span("").key(i.to_string()).text(g))),
                 )
-                .kid(p("mt-2 text-sm text-secondary").text("Check it matches the hash on your Keystone.")),
+                .kid(p("mt-2 text-sm text-secondary").text(tr().wallet_sign.check_hash)),
         );
     }
     d.kid(buttons(err))
@@ -116,24 +116,24 @@ pub fn passkey_panel(c: &Passkey) -> El<PanelMsg> {
     let top = match c {
         Passkey::Qr { url } => div("flex items-center gap-5").kid(el(Tag::Qr(url.clone()), "size-[10rem] shrink-0 rounded bg-white p-2")).kid(
             div("min-w-0 flex flex-col gap-1.5")
-                .kid(p("text-base font-semibold").text("Sign with your phone"))
-                .kids(PHONE_STEPS.iter().enumerate().map(|(i, s)| p("text-sm text-secondary").key(i.to_string()).text(format!("{}. {s}", i + 1)))),
+                .kid(p("text-base font-semibold").text(tr().wallet_sign.sign_with_phone))
+                .kids(phone_steps().iter().enumerate().map(|(i, s)| p("text-sm text-secondary").key(i.to_string()).text(trf!(tr().wallet_sign.phone_step_n, n = i + 1, step = s)))),
         ),
         Passkey::Status { message } => lead(message, None),
-        Passkey::Pin { attempts_left } => lead("Your security key needs its PIN", attempts_left.map(|n| format!("{n} tries left")).as_deref()),
+        Passkey::Pin { attempts_left } => lead(tr().wallet_sign.key_needs_pin, attempts_left.map(|n| trn!(tr().wallet_sign.tries_left, n as i64)).as_deref()),
         Passkey::Error { message } => p("text-base font-semibold text-negative").text(message),
-        Passkey::Idle => lead("Getting a QR code for your phone", Some("It shows here in a moment. Keep Bluetooth on.")),
+        Passkey::Idle => lead(tr().wallet_sign.getting_qr, Some(tr().wallet_sign.qr_soon)),
     };
     let pin = matches!(c, Passkey::Pin { .. });
     let error = matches!(c, Passkey::Error { .. });
     let mut row = div("flex gap-2");
     if pin {
-        row = row.kid(btn("Enter PIN", Variant::Primary, "flex-1", Some(PanelMsg::EnterPin)).def(true));
+        row = row.kid(btn(tr().wallet_sign.enter_pin, Variant::Primary, "flex-1", Some(PanelMsg::EnterPin)).def(true));
     }
     if error {
-        row = row.kid(btn("Retry", Variant::Primary, "flex-1", Some(PanelMsg::Retry)).def(true));
+        row = row.kid(btn(tr().common.retry, Variant::Primary, "flex-1", Some(PanelMsg::Retry)).def(true));
     }
-    row = row.kid(btn("Cancel", Variant::Secondary, if pin || error { "" } else { "flex-1" }, Some(PanelMsg::Cancel)).def(!pin && !error));
+    row = row.kid(btn(tr().common.cancel, Variant::Secondary, if pin || error { "" } else { "flex-1" }, Some(PanelMsg::Cancel)).def(!pin && !error));
     div("flex w-full flex-col gap-4").kid(top).kid(row)
 }
 

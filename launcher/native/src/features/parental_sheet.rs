@@ -7,6 +7,11 @@ use crate::screens::wallet::kit::{btn, pin_pad, pin_press, sheet, PinPadSpec, Sh
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::sign::unlock::wait_text;
 use crate::state::{State, Tone};
+use rare_i18n::{tr, trf, trn};
+
+fn pin_title(had_pin: bool) -> String {
+    if had_pin { tr().features_more.pin_change_title } else { tr().features_more.pin_set_title }.to_string()
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Msg {
@@ -43,18 +48,18 @@ impl Sheet {
     pub fn view(&self, now: f64) -> El<Msg> {
         let (title, reason) = match (&self.ask, &self.step) {
             (Ask::Check { title, reason, .. }, _) => (title.clone(), reason.clone()),
-            (_, Step::Confirm(_)) => (if self.had_pin { "Change the PIN" } else { "Set a parent's PIN" }.to_string(), "Enter the same PIN again.".to_string()),
-            _ => (if self.had_pin { "Change the PIN" } else { "Set a parent's PIN" }.to_string(), "Pick 4 to 6 digits, then press OK.".to_string()),
+            (_, Step::Confirm(_)) => (pin_title(self.had_pin), tr().features_more.pin_enter_again.to_string()),
+            _ => (pin_title(self.had_pin), tr().features_more.pin_pick_digits.to_string()),
         };
         let waiting = self.waiting(now);
         let pad = pin_pad(PinPadSpec { value: &self.value, min_length: pc::PIN_MIN, disabled: waiting, ..Default::default() }, Msg::Key).on_pad("x", Msg::Key("back")).on_pad("start", Msg::Key("ok"));
         let status = if waiting {
-            Some(span("text-secondary").text(format!("Too many tries. Try again in {}.", wait_text(((self.wait_until - now) * 1000.0) as u64))))
+            Some(span("text-secondary").text(trf!(tr().features_more.pin_too_many, wait = wait_text(((self.wait_until - now) * 1000.0) as u64))))
         } else {
             self.error.as_ref().map(|e| span("text-negative").text(e))
         };
         sheet(
-            SheetSpec { title, subtitle: None, icon: None, footer: Some(vec![btn("Cancel", Variant::Secondary, "flex-1", Some(Msg::Cancel))]), close: Some(Msg::Cancel), width: "28rem" },
+            SheetSpec { title, subtitle: None, icon: None, footer: Some(vec![btn(tr().common.cancel, Variant::Secondary, "flex-1", Some(Msg::Cancel))]), close: Some(Msg::Cancel), width: "28rem" },
             vec![div("flex flex-col items-center gap-5").kid(p("text-center text-base text-secondary").text(&reason)).kid(pad).kid(p("h-5 text-center text-sm").role("status").kid_opt(status))],
         )
     }
@@ -94,7 +99,7 @@ impl Sheet {
                 }
                 Ok(false) => {
                     let n = pc::tries_left();
-                    self.error = Some(format!("Wrong PIN. {n} {} before a wait.", if n == 1 { "try" } else { "tries" }));
+                    self.error = Some(trn!(tr().features_more.pin_wrong, n));
                 }
                 Err(secs) => self.wait_until = now + secs,
             },
@@ -102,18 +107,18 @@ impl Sheet {
                 if pc::valid_pin(&pin) {
                     self.step = Step::Confirm(pin);
                 } else {
-                    self.error = Some("Use 4 to 6 digits.".into());
+                    self.error = Some(tr().features_more.pin_use_digits.into());
                 }
             }
             Step::Confirm(first) => {
                 if *first == pin {
                     pc::set_pin(&pin, now);
-                    st.toast(if self.had_pin { "PIN changed" } else { "PIN set. Parental controls are on." }, Tone::Info, now);
+                    st.toast(if self.had_pin { tr().features_more.pin_changed } else { tr().features_more.pin_set }, Tone::Info, now);
                     self.answer(true);
                     return true;
                 }
                 self.step = Step::New;
-                self.error = Some("The PINs didn't match. Try again.".into());
+                self.error = Some(tr().features_more.pin_mismatch.into());
             }
         }
         false

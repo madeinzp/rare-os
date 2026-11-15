@@ -1,6 +1,7 @@
 //! the Trade API's coin row, trending card and perps card (trade/parts.tsx TokenListRow, TokenCard,
 //! tokenMeta; RootPage's PerpCard) as view elements.
 
+use rare_i18n::{tr, trf};
 use super::fmt::{age, fmt_leverage, perp_px};
 use super::model::{logo_url, PerpMarket, TokenRow};
 use super::ui::{change, coin_logo};
@@ -14,10 +15,10 @@ pub fn token_meta(t: &TokenRow, with_age: bool, now_ms: f64) -> String {
     let mc = num_parts(NumKind::Market, t.mcap, NumOptions::default());
     let mut parts: Vec<String> = Vec::new();
     if let Some(p) = &mc {
-        parts.push(format!("MC {}{}", p.sign, p.body));
+        parts.push(trf!(tr().trade.mc, value = format!("{}{}", p.sign, p.body)));
     }
     if with_age && t.created_ms.is_some_and(|c| c != 0.0) {
-        parts.push(format!("{} old", age(t.created_ms, now_ms)));
+        parts.push(trf!(tr().trade.age_old, age = age(t.created_ms, now_ms)));
     }
     if mc.is_none() && !with_age {
         parts.push(t.name.clone());
@@ -40,7 +41,7 @@ pub fn token_list_row(ui: &mut Ui, t: &TokenRow, meta: Option<String>, tag: u32,
         right = right.child(c);
     }
     let el = ui.bx(s().row().items_center().gap(0.75).h(3.75).wp(1.0).px(0.75)).radius(ui.r(0.5)).child(coin_logo(ui, logo.as_deref(), &t.symbol, 2.5)).child(names).child(right);
-    nav(row_look(el), tag, Some("Trade"), None, def)
+    nav(row_look(el), tag, Some(tr().common.trade), None, def)
 }
 
 /// `TokenCard`: a trending card for a rail.
@@ -54,9 +55,9 @@ pub fn token_card(ui: &mut Ui, t: &TokenRow, tag: u32, def: bool) -> El {
     mid = baseline_pair(ui, mid, price, ch, Ty::Row, Ty::Small);
     let mc = num_parts(NumKind::Market, t.mcap, NumOptions::default()).map(|p| p.body).unwrap_or_default();
     let vol = num_parts(NumKind::Market, t.volume24h, NumOptions::default()).map(|p| p.body).unwrap_or_default();
-    let bottom = ui.bx(s().row().justify_between().gap(0.5).mt(0.25)).child(ui.text(format!("MC {mc}"), T::new(Ty::Label).c(tok::MUTED))).child(ui.text(format!("Vol {vol}"), T::new(Ty::Label).c(tok::MUTED)));
+    let bottom = ui.bx(s().row().justify_between().gap(0.5).mt(0.25)).child(ui.text(trf!(tr().trade.mc, value = mc), T::new(Ty::Label).c(tok::MUTED))).child(ui.text(trf!(tr().trade.vol, value = vol), T::new(Ty::Label).c(tok::MUTED)));
     let el = ui.bx(s().col().w(15.0).p(1.0)).bg(tok::L1).radius(ui.r(0.5)).border(1.0, tok::HAIR).child(top).child(mid).child(bottom);
-    nav(tile(el, 1.06), tag, Some("Trade"), None, def)
+    nav(tile(el, 1.06), tag, Some(tr().common.trade), None, def)
 }
 
 /// Two runs on one baseline in a justify-between row (`flex items-baseline justify-between`).
@@ -85,13 +86,13 @@ pub fn perp_card(ui: &mut Ui, m: &PerpMarket, logo: Option<&str>, tag: u32) -> E
     let names = ui
         .bx(s().col().min0())
         .child(ui.text(m.symbol.clone(), T::new(Ty::Body).w(600).trunc()))
-        .child(ui.text(format!("Up to {}", fmt_leverage(m.max_leverage.unwrap_or(1.0))), T::new(Ty::Label).c(tok::MUTED)));
+        .child(ui.text(trf!(tr().trade.up_to, value = fmt_leverage(m.max_leverage.unwrap_or(1.0))), T::new(Ty::Label).c(tok::MUTED)));
     let top = ui.bx(s().row().items_center().gap(0.75)).child(coin_logo(ui, logo.as_deref(), &m.symbol, 2.0)).child(names);
     let price = Some(ui.text(perp_px(Some(m.price)), T::new(Ty::Row).w(600).tab()));
     let ch = change(ui, m.change_pct, T::new(Ty::Small));
     let mid = baseline_pair(ui, ui.bx(s().row().items_end().justify_between().gap(0.5).mt(1.0)), price, ch, Ty::Row, Ty::Small);
     let el = ui.bx(s().col().w(13.0).p(1.0)).bg(tok::L1).radius(ui.r(0.5)).border(1.0, tok::HAIR).child(top).child(mid);
-    nav(tile(el, 1.06), tag, Some("Trade"), None, false)
+    nav(tile(el, 1.06), tag, Some(tr().common.trade), None, false)
 }
 
 #[cfg(test)]

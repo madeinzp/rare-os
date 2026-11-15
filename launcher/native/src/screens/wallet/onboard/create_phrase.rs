@@ -3,6 +3,7 @@
 //! protect it with a PIN if there is no vault yet. The words live only in this page's `State`
 //! and go with it.
 
+use rare_i18n::{tr, trf};
 use super::flow::{h, plain_error, Failure, Gate};
 use super::pin_setup::{self, PinOptions};
 use super::word_grid::{self, Grid};
@@ -97,17 +98,17 @@ pub fn view(st: &State) -> El<Msg> {
     let wide = st.step == Step::Show && st.words.len() > 12;
     let title = match st.step {
         // From setup, whose page was already "Create your account".
-        Step::Length if crate::features::firstrun::wallet_from_setup() => Some("Your recovery words"),
-        Step::Length => Some("Create your account"),
-        Step::Show => Some("Back up your recovery phrase"),
-        Step::Verify => Some("Check your backup"),
+        Step::Length if crate::features::firstrun::wallet_from_setup() => Some(tr().wallet_setup.your_recovery_words),
+        Step::Length => Some(tr().wallet_setup.create_account),
+        Step::Show => Some(tr().wallet_setup.backup_title),
+        Step::Verify => Some(tr().wallet_setup.check_backup),
         Step::Pin => None,
     };
     let body = match st.step {
         Step::Length => div("flex flex-col gap-6")
-            .kid(p("text-secondary").text("It is kept on this SuiPlay and signs with A, no PIN. You get a list of secret words to write down once. They are the only way to get your account back if you lose this device."))
-            .kid(div("").kid(div("mb-1.5 text-sm text-secondary").text("Length")).kid(segmented(&[("12", "12 words"), ("24", "24 words")], &st.count.to_string(), |v| Msg::Count(if v == "24" { 24 } else { 12 }), "")))
-            .kid(btn("Show my words", Variant::Primary, "w-full", Some(Msg::ShowWords)).def(true)),
+            .kid(p("text-secondary").text(tr().wallet_setup.phrase_intro))
+            .kid(div("").kid(div("mb-1.5 text-sm text-secondary").text(tr().wallet_setup.length)).kid(segmented(&[("12", tr().wallet_setup.words_12), ("24", tr().wallet_setup.words_24)], &st.count.to_string(), |v| Msg::Count(if v == "24" { 24 } else { 12 }), "")))
+            .kid(btn(tr().wallet_setup.show_my_words, Variant::Primary, "w-full", Some(Msg::ShowWords)).def(true)),
         Step::Show => div("flex flex-col gap-5")
             .kid(panel(
                 None,
@@ -115,23 +116,20 @@ pub fn view(st: &State) -> El<Msg> {
                 "flex items-start gap-3 px-5 py-4",
                 vec![
                     icon("triangle-alert", "mt-0.5 shrink-0 text-secondary").attr("size", "1.25rem"),
-                    p("min-w-0 flex-1 text-sm").text("Write these words down in order and keep them private. They never leave this SuiPlay. Anyone with them can take your money, and Rare cannot recover them for you."),
+                    p("min-w-0 flex-1 text-sm").text(tr().wallet_setup.write_down_warning),
                 ],
             ))
             .kid(word_grid::view(&Grid { words: &st.words, cols: None, pick: false, active: None, bad: &BTreeSet::new(), def_index: None }, |_| Msg::WroteIt))
-            .kid(btn("I wrote it down", Variant::Primary, "w-full", Some(Msg::WroteIt)).def(true)),
+            .kid(btn(tr().wallet_setup.i_wrote_it_down, Variant::Primary, "w-full", Some(Msg::WroteIt)).def(true)),
         Step::Verify => {
             let Some(qn) = st.quiz.get(st.q) else { return page(title, None, None, true, "", vec![]) };
             let mut d = div("flex flex-col gap-5")
                 .kid(
-                    p("text-secondary")
-                        .kid(text("Pick word "))
-                        .kid(span("font-semibold text-primary").text(format!("#{}", qn.index + 1)))
-                        .kid(text(format!(" of your phrase. Question {} of {}.", st.q + 1, st.quiz.len()))),
+                    p("text-secondary").text(trf!(tr().wallet_setup.pick_word, n = qn.index + 1, q = st.q + 1, total = st.quiz.len())),
                 )
                 .kid(div("grid grid-cols-3 gap-2").kids(qn.choices.iter().enumerate().map(|(i, w)| btn(w, Variant::Secondary, "w-full font-mono", Some(Msg::Answer(w.clone()))).def(i == 0).key(w))));
             if st.wrong {
-                d = d.kid(p("text-sm text-negative").text(format!("That is not word #{}. Look at your backup and try again.", qn.index + 1)));
+                d = d.kid(p("text-sm text-negative").text(trf!(tr().wallet_setup.wrong_word, n = qn.index + 1)));
             }
             if !st.error.is_empty() {
                 d = d.kid(p("text-sm text-negative").text(&st.error));
@@ -139,7 +137,7 @@ pub fn view(st: &State) -> El<Msg> {
             d
         }
         Step::Pin => {
-            let mut d = div("pt-4").kid(pin_setup::view(&st.pin, "Set a PIN", "It unlocks your recovery phrase on this device. It never leaves it.", st.busy).map(&Msg::Pin));
+            let mut d = div("pt-4").kid(pin_setup::view(&st.pin, tr().wallet_setup.set_a_pin, tr().wallet_setup.phrase_pin_note, st.busy).map(&Msg::Pin));
             if !st.error.is_empty() {
                 d = d.kid(p("mt-4 text-center text-sm text-negative").text(&st.error));
             }
@@ -235,7 +233,7 @@ pub fn added(st: &mut State, res: Result<(), Failure>) {
     match res {
         Ok(()) => st.words.clear(),
         Err(e) => {
-            st.error = plain_error(&e, "Could not save the phrase");
+            st.error = plain_error(&e, tr().wallet_setup.save_phrase_failed);
             st.busy = false;
         }
     }
@@ -275,7 +273,7 @@ mod tests {
         }
         quiz(&mut st, q.clone());
         let v = view(&st);
-        assert_eq!(v.texts()[1..4], ["Pick word ".to_string(), format!("#{}", q[0].index + 1), " of your phrase. Question 1 of 3.".to_string()]);
+        assert_eq!(v.texts()[1], format!("Pick word #{} of your phrase. Question 1 of 3.", q[0].index + 1));
         update(&mut st, Msg::Answer("nope".into()));
         assert!(view(&st).contains_text(&format!("That is not word #{}. Look at your backup and try again.", q[0].index + 1)));
         for qn in &q {

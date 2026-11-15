@@ -2,6 +2,8 @@
 //! where the menu opens, the per-kind rows, the items line, the Switcher's order. Tests mirror
 //! menu.test.ts one to one.
 
+use rare_i18n::{tr, trf, trn};
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum MenuTab {
     Game,
@@ -19,14 +21,14 @@ impl MenuTab {
     /// The tab strip label (RareMenu.tsx LABEL).
     pub fn label(self) -> &'static str {
         match self {
-            MenuTab::Game => "Game",
-            MenuTab::Rare => "Rare",
-            MenuTab::Ask => "Ask Rare",
-            MenuTab::Items => "Items",
-            MenuTab::Market => "Market",
-            MenuTab::Trophies => "Trophies",
-            MenuTab::Friends => "Friends",
-            MenuTab::News => "Notifications",
+            MenuTab::Game => tr().overlay.tab_game,
+            MenuTab::Rare => tr().overlay.tab_rare,
+            MenuTab::Ask => tr().overlay.ask_title,
+            MenuTab::Items => tr().overlay.tab_items,
+            MenuTab::Market => tr().common.market,
+            MenuTab::Trophies => tr().common.trophies,
+            MenuTab::Friends => tr().common.friends,
+            MenuTab::News => tr().common.notifications,
         }
     }
 }
@@ -111,12 +113,12 @@ pub fn fmt_sui2(mist: u128) -> String {
 pub fn items_line(items: &[OverlayItem]) -> String {
     let worth: u128 = items.iter().map(|x| x.floor_mist.unwrap_or(0)).sum();
     let offers = items.iter().filter(|x| x.top_offer_mist.unwrap_or(0) > 0).count();
-    let mut parts = vec![if items.len() == 1 { "1 item".to_string() } else { format!("{} items", items.len()) }];
+    let mut parts = vec![trn!(tr().overlay.items_count, items.len())];
     if worth > 0 {
-        parts.push(format!("worth {} SUI", fmt_sui2(worth)));
+        parts.push(trf!(tr().overlay.items_worth, amount = fmt_sui2(worth)));
     }
     if offers > 0 {
-        parts.push(if offers == 1 { "1 offer".to_string() } else { format!("{offers} offers") });
+        parts.push(trn!(tr().overlay.offers_count, offers));
     }
     parts.join(" · ")
 }
@@ -126,15 +128,15 @@ pub fn playing_for(since: Option<f64>, now: f64) -> Option<String> {
     let since = since?;
     let min = ((now - since) / 60_000.0).floor().max(0.0) as u64;
     Some(if min < 1 {
-        "Just started".to_string()
+        tr().overlay.playing_just_started.to_string()
     } else if min < 60 {
-        format!("Playing for {min} min")
+        trf!(tr().overlay.playing_min, m = min)
     } else {
         let (h, m) = (min / 60, min % 60);
         if m > 0 {
-            format!("Playing for {h} h {m} min")
+            trf!(tr().overlay.playing_h_min, h = h, m = m)
         } else {
-            format!("Playing for {h} h")
+            trf!(tr().overlay.playing_h, h = h)
         }
     })
 }

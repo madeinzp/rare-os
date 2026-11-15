@@ -2,6 +2,7 @@
 //! coin units or as a share of the balance, the balance it draws from, LT/RT stepping, presets, and
 //! the quote that follows the amount (the app fetches it; the ticket says what to ask for).
 
+use rare_i18n::{tr, trn};
 use super::fmt::{normalize_type, step, PCT_LADDER, SUI_LADDER, USD_LADDER};
 
 pub const SUI_TYPE: &str = "0x0000000000000000000000000000000000000000000000000000000000000002::sui::SUI";
@@ -245,7 +246,11 @@ pub fn route_text(q: &Quote) -> String {
         }
     }
     names.truncate(3);
-    format!("{} {}{}", q.hops, if q.hops == 1 { "hop" } else { "hops" }, if names.is_empty() { String::new() } else { format!(" via {}", names.join(", ")) })
+    if names.is_empty() {
+        trn!(tr().trade.hops, q.hops)
+    } else {
+        trn!(tr().trade.hops_via, q.hops, venues = names.join(", "))
+    }
 }
 
 #[cfg(test)]

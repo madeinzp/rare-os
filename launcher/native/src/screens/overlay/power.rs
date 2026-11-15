@@ -1,6 +1,7 @@
 //! The power menu (overlay/PowerMenu.tsx): Sleep, Restart, Turn off over the frozen frame; B backs out.
 
 use super::common::*;
+use rare_i18n::tr;
 use super::fixtures::Session;
 use super::lay::s;
 use rare_render::input::Pad;
@@ -30,17 +31,18 @@ impl PowerMenu {
         );
         fade_in(cx, card, now);
         let head = cx.scene.add(card, s().pad(0.4 * r, 0.0, 0.4 * r, 0.3 * r).done(), Node::default());
-        text(cx, head, ty::ROW, 600, tok::FG, "Power");
+        text(cx, head, ty::ROW, 600, tok::FG, tr().overlay.power);
         let mut nav = Nav::default();
         // Over the launcher the sheet also leaves for Desktop mode (last, as in Settings > System).
-        let labels: &[&str] = if session.game_id.is_some() { &["Sleep", "Restart", "Turn off"] } else { &["Sleep", "Restart", "Turn off", "Desktop mode"] };
+        let (sleep, restart, off, desktop) = (tr().overlay.power_sleep, tr().common.restart, tr().common.turn_off, tr().overlay.power_desktop_mode);
+        let labels: &[&str] = if session.game_id.is_some() { &[sleep, restart, off] } else { &[sleep, restart, off, desktop] };
         for (i, label) in labels.iter().enumerate() {
             let b = button(cx, card, label, Variant::Secondary, Sz::Md, true).tag(i as u32);
             nav.add(b);
         }
         let foot = cx.scene.add(card, s().row().justify_end().gap(1.1 * r).pad(0.4 * r, 0.3 * r, 0.4 * r, 0.0).done(), Node::default());
-        hint(cx, foot, G::A, "Select");
-        hint(cx, foot, G::B, "Back");
+        hint(cx, foot, G::A, tr().common.select);
+        hint(cx, foot, G::B, tr().common.back);
         let first = nav.items[0].id;
         nav.focus(cx.scene, first, now, false);
         PowerMenu { nav }

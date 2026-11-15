@@ -3,6 +3,7 @@
 
 use super::{config::Config, rows::*, SectionOut, SectionView};
 use crate::screens::overlay::common::*;
+use rare_i18n::{tr, trf};
 use rare_render::theme::tok;
 use rare_render::{Id, Node};
 
@@ -39,9 +40,9 @@ pub fn next_scale(s: UiScale) -> UiScale {
 
 pub fn scale_label(s: UiScale) -> &'static str {
     match s {
-        UiScale::Auto => "Automatic",
-        UiScale::Large => "Large",
-        UiScale::Larger => "Larger",
+        UiScale::Auto => tr().settings.ui_auto,
+        UiScale::Large => tr().settings.ui_large,
+        UiScale::Larger => tr().settings.ui_larger,
     }
 }
 
@@ -74,13 +75,14 @@ pub struct DisplayState {
 /// The Docked line for Settings > Display.
 pub fn docked_line(d: Option<&DisplayState>) -> String {
     let Some(d) = d else { return String::new() };
+    let t = &tr().settings;
     if !d.docked {
-        return "Built-in screen".into();
+        return t.built_in_screen.into();
     }
-    let name = d.dock_name.clone().or_else(|| d.active.clone()).unwrap_or_else(|| "external display".into());
+    let name = d.dock_name.clone().or_else(|| d.active.clone()).unwrap_or_else(|| t.external_display.into());
     match &d.dock_mode {
-        Some(m) if !m.is_empty() => format!("Docked to {name} {m}"),
-        _ => format!("Docked to {name}"),
+        Some(m) if !m.is_empty() => trf!(t.docked_to_mode, name = name, mode = m),
+        _ => trf!(t.docked_to, name = name),
     }
 }
 
@@ -91,7 +93,7 @@ pub fn dock_change(prev: Option<&DisplayState>, next: &DisplayState) -> Option<S
         return Some(docked_line(Some(next)));
     }
     if prev.docked && !next.docked {
-        return Some("Back on the built-in screen".into());
+        return Some(tr().settings.back_on_built_in.into());
     }
     if prev.docked && next.docked && (prev.dock_name != next.dock_name || prev.dock_mode != next.dock_mode) {
         return Some(docked_line(Some(next)));
@@ -135,15 +137,16 @@ const WARMTH: (f32, f32, f32) = (10.0, 100.0, 10.0);
 /// Night light: on, how warm, only at night. Its own panel under the screen rows.
 fn build_night(cx: &mut Cx, nav: &mut Nav, parent: Id, rows: &mut RowSet, n: &rare_system::screen::NightLight) {
     let p = panel(cx, parent);
-    rows.switch(cx, nav, p, "night-light", "Night light", "Warmer colours that are easier on the eyes at night. Games too.", n.on, true);
-    rows.slider(cx, nav, p, "night-warmth", "Warmth", Some("Left and right to change."), n.warmth.clamp(10, 100) as f32, WARMTH.0, WARMTH.1, WARMTH.2, "%", false);
-    rows.switch(cx, nav, p, "night-schedule", "Only at night", "On from 9 PM to 7 AM. Off: on all the time while Night light is on.", n.scheduled, false);
+    let t = &tr().settings;
+    rows.switch(cx, nav, p, "night-light", t.row_night_light, t.night_light_body, n.on, true);
+    rows.slider(cx, nav, p, "night-warmth", t.row_warmth, Some(t.left_right), n.warmth.clamp(10, 100) as f32, WARMTH.0, WARMTH.1, WARMTH.2, "%", false);
+    rows.switch(cx, nav, p, "night-schedule", t.row_night_only, t.night_only_body, n.scheduled, false);
 }
 
 /// "4K", "1440p", "1080p", "720p" for a size.
 pub fn tv_size_label(w: u32, h: u32) -> String {
     match (w, h) {
-        (0, _) | (_, 0) => "TV's own".into(),
+        (0, _) | (_, 0) => tr().settings.tv_own.into(),
         (3840, 2160) => "4K".into(),
         (_, h) => format!("{h}p"),
     }
@@ -158,14 +161,14 @@ fn build_tv(cx: &mut Cx, nav: &mut Nav, parent: Id, rows: &mut RowSet, docked: b
     let labels: Vec<String> = sizes.iter().map(|(w, h)| tv_size_label(*w, *h)).collect();
     let lr: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
     let at = sizes.iter().position(|s| *s == (cur.width, cur.height)).unwrap_or(0);
-    rows.choice(cx, nav, p, "tv-size", "Resolution", Some("What games and Rare draw at. The TV shows it full screen. Lower is smoother in heavy games."), &lr, Some(at), true);
+    rows.choice(cx, nav, p, "tv-size", tr().settings.row_resolution, Some(tr().settings.resolution_body), &lr, Some(at), true);
     let mut rates = vec![0];
     rates.extend(rare_system::screen::tv_refreshes(modes));
     if rates.len() > 2 {
-        let labels: Vec<String> = rates.iter().map(|r| if *r == 0 { "TV's own".to_string() } else { format!("{r} Hz") }).collect();
+        let labels: Vec<String> = rates.iter().map(|r| if *r == 0 { tr().settings.tv_own.to_string() } else { format!("{r} Hz") }).collect();
         let lr: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
         let at = rates.iter().position(|r| *r == cur.refresh).unwrap_or(0);
-        rows.choice(cx, nav, p, "tv-refresh", "Refresh rate", Some("How many times a second the TV draws a new picture."), &lr, Some(at), false);
+        rows.choice(cx, nav, p, "tv-refresh", tr().settings.row_refresh, Some(tr().settings.refresh_body), &lr, Some(at), false);
     }
     (sizes, rates)
 }
@@ -181,6 +184,7 @@ impl DisplaySection {
     }
 
     pub fn build_with(cx: &mut Cx, nav: &mut Nav, parent: Id, cfg: &Config, info: &DisplayInfo, _now: f64) -> DisplaySection {
+        let t = &tr().settings;
         let r = cx.r();
         let p = panel(cx, parent);
         let mut rows = RowSet::default();
@@ -191,7 +195,7 @@ impl DisplaySection {
         cx.scene.set_text(cx.t, row_.title, "");
         // The title is a dot and the line, side by side.
         let line = docked_line(info.state.as_ref());
-        let line = if line.is_empty() { "Built-in screen".to_string() } else { line };
+        let line = if line.is_empty() { t.built_in_screen.to_string() } else { line };
         let tp = cx.scene.parent(row_.title).unwrap();
         cx.scene.remove(row_.title);
         let inline = cx.scene.insert(tp, 0, super::super::overlay::lay::s().row().items_center().gap(0.6 * r).done(), Node::default());
@@ -199,11 +203,11 @@ impl DisplaySection {
         cx.scene.add_text(cx.t, inline, super::super::overlay::lay::s().done(), &line, ts(r, ty::BODY.0, ty::BODY.1, 600), tok::FG);
         let (w, h) = info.window;
         let body = if docked {
-            format!("The picture and the sound are on the display. Showing at {}. Unplug the cable to come back to the built-in screen.", size_label(w, h))
+            trf!(t.docked_body, size = size_label(w, h))
         } else if external > 0 {
-            "A display is plugged in and will take over in a moment.".to_string()
+            t.display_coming.to_string()
         } else {
-            "Plug a TV or monitor into the USB-C port and the picture and the sound move to it.".to_string()
+            t.display_plug.to_string()
         };
         if let Some(b) = row_.body {
             cx.scene.set_text(cx.t, b, &body);
@@ -213,15 +217,15 @@ impl DisplaySection {
         }
         let labels: Vec<&str> = UI_SCALES.iter().map(|s| scale_label(*s)).collect();
         let cur = UI_SCALES.iter().position(|s| *s == scale_of(cfg));
-        rows.choice(cx, nav, p, "ui-size", "UI size", Some("Makes text and buttons bigger on top of the automatic size. Kept after a restart."), &labels, cur, false);
+        rows.choice(cx, nav, p, "ui-size", t.row_ui_size, Some(t.ui_size_body), &labels, cur, false);
         if let Some(level) = info.brightness {
-            let body = if level < 10.0 { "Night dim. Darker to look at, but it does not save battery." } else { "Left and right to change." };
-            rows.slider(cx, nav, p, "brightness", "Brightness", Some(body), level, 0.0, 100.0, 5.0, "%", false);
+            let body = if level < 10.0 { t.night_dim } else { t.left_right };
+            rows.slider(cx, nav, p, "brightness", t.row_brightness, Some(body), level, 0.0, 100.0, 5.0, "%", false);
             if let Some(d) = info.dim_idle {
-                rows.choice(cx, nav, p, "dim-idle", "Dim after idle", Some("Dims the screen to 30% after 60 seconds with no input in the launcher. Never in a game."), &["Off", "60 s"], Some(d as usize), false);
+                rows.choice(cx, nav, p, "dim-idle", t.row_dim_idle, Some(t.dim_idle_body), &[tr().common.off, "60 s"], Some(d as usize), false);
             }
         } else if info.brightness.is_none() {
-            setting_row(cx, p, "Screen", Some("This device has no screen brightness to change."), false);
+            setting_row(cx, p, t.row_screen, Some(t.no_brightness), false);
         }
         build_night(cx, nav, parent, &mut rows, &info.screen.night_light);
         let tv = build_tv(cx, nav, parent, &mut rows, docked, info.screen.tv, info.tv_modes.as_deref());

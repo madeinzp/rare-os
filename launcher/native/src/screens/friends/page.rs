@@ -2,6 +2,7 @@
 //! the d-pad moves focus (a list row it lands on is selected and the right side follows), A
 //! activates by tag (on a row: move to the right side), B closes a picker, else leaves.
 
+use rare_i18n::tr;
 use super::model::FriendsData;
 use super::screen::{list_rows, press_tag, still_there, view, Picker, Press, Sel, View, T_ROW};
 use crate::screens::market::host::*;
@@ -177,12 +178,12 @@ impl FriendsPage {
         let it = self.host.nav.current_item();
         let a = it
             .and_then(|f| f.hint_a.clone())
-            .unwrap_or_else(|| "Select".into());
+            .unwrap_or_else(|| tr().common.select.into());
         let mut v = vec![("a", a)];
         if let Some(x) = it.and_then(|f| f.hint_x.clone()) {
             v.push(("x", x));
         }
-        v.push(("b", "Back".into()));
+        v.push(("b", tr().common.back.into()));
         v
     }
 

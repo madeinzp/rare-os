@@ -2,6 +2,7 @@
 //! AddPasskey.tsx: the one answer to a wallet that cannot sign (watch only or no account), a line
 //! and a button that opens the passkey flow in a sheet over whatever is on screen.
 
+use rare_i18n::tr;
 use super::flow::h;
 use super::passkey_flow::{self, Step};
 use crate::screens::wallet::home::lib::Hint;
@@ -14,13 +15,13 @@ pub fn page_view(pr: &passkey_flow::Props, st: &passkey_flow::State) -> El<passk
     let create = pr.create;
     let title = match st.step {
         Step::Pin | Step::Device => None,
-        _ => Some(if create { "Create account" } else { "Sign in with a passkey" }),
+        _ => Some(if create { tr().wallet_setup.create_account_short } else { tr().wallet_setup.sign_in_passkey }),
     };
     let sub = (st.step == Step::Choose).then(|| {
         text(if create {
-            "Make a new wallet protected by a passkey. There are no words to write down."
+            tr().wallet_setup.create_sub_long
         } else {
-            "Use the passkey you made before to get your wallet back."
+            tr().wallet_setup.signin_sub_long
         })
     });
     page(title, sub, None, true, "", vec![passkey_flow::view(pr, st)])
@@ -42,12 +43,16 @@ pub enum Need {
     Items,
 }
 
-fn line(n: Need) -> &'static str {
-    match n {
-        Need::Sell => "Add a passkey to sell.",
-        Need::Buy => "Add a passkey to buy.",
-        Need::Trade => "Add a passkey to trade.",
-        Need::Items => "Sign in with a passkey to see your items.",
+fn line(n: Need, signed_out: bool) -> &'static str {
+    let t = tr().wallet_setup;
+    match (n, signed_out) {
+        (Need::Sell, false) => t.need_sell,
+        (Need::Buy, false) => t.need_buy,
+        (Need::Trade, false) => t.need_trade,
+        (Need::Sell, true) => t.need_sell_signed_out,
+        (Need::Buy, true) => t.need_buy_signed_out,
+        (Need::Trade, true) => t.need_trade_signed_out,
+        (Need::Items, _) => t.need_items,
     }
 }
 
@@ -62,8 +67,8 @@ pub enum Msg {
 
 /// `AddPasskey`: `signed_out` is no account at all (else a watch-only one).
 pub fn add_passkey_view(need: Need, signed_out: bool, class: &str) -> El<Msg> {
-    let l = if signed_out && need != Need::Items { line(need).replace("Add a passkey to", "Sign in with a passkey to") } else { line(need).to_string() };
-    let label = if signed_out { "Sign in" } else { "Add a passkey" };
+    let l = line(need, signed_out);
+    let label = if signed_out { tr().common.sign_in } else { tr().wallet_setup.add_passkey };
     div(cn(&["flex flex-col items-start gap-[0.75rem]", class]))
         .kid(p("text-small text-secondary").text(l))
         .kid(button_el(ButtonSpec::new(label).v(BVariant::Primary).size(BSize::Md).hint(label), Some(Msg::Open)))
@@ -74,10 +79,10 @@ pub fn add_passkey_sheet(pr: &passkey_flow::Props, st: &passkey_flow::State) -> 
     let create = pr.create;
     sheet(
         SheetSpec {
-            title: if create { "Create account" } else { "Add a passkey" }.into(),
-            subtitle: Some(if create { "Make a new wallet protected by a passkey." } else { "Use the passkey you made before." }.into()),
+            title: if create { tr().wallet_setup.create_account_short } else { tr().wallet_setup.add_passkey }.into(),
+            subtitle: Some(if create { tr().wallet_setup.create_sub } else { tr().wallet_setup.signin_sub }.into()),
             icon: None,
-            footer: Some(vec![btn(if create { "Use a passkey I already have" } else { "Create account" }, Variant::Ghost, "", Some(Msg::Switch))]),
+            footer: Some(vec![btn(if create { tr().wallet_setup.use_existing_passkey } else { tr().wallet_setup.create_account_short }, Variant::Ghost, "", Some(Msg::Switch))]),
             close: Some(Msg::Close),
             width: "40rem",
         },

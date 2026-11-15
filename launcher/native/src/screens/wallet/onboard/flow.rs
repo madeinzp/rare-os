@@ -1,25 +1,26 @@
 //! Small helpers the onboarding pages share (launcher/src/wallet/ui/onboard/flow.ts): the hints,
 //! plain error text, the udev fix line, and how a finished flow lands.
 
+use rare_i18n::tr;
 use crate::screens::wallet::home::lib::{hint, Hint};
 
 /// `H`: the hints the onboarding pages show.
 pub mod h {
     use super::*;
     pub fn select() -> Hint {
-        hint("a", "Select")
+        hint("a", tr().common.select)
     }
     pub fn back() -> Hint {
-        hint("b", "Back")
+        hint("b", tr().common.back)
     }
     pub fn type_() -> Hint {
-        hint("a", "Type")
+        hint("a", tr().wallet_setup.hint_type)
     }
     pub fn del() -> Hint {
-        hint("x", "Delete")
+        hint("x", tr().common.delete)
     }
     pub fn ok() -> Hint {
-        hint("start", "Confirm")
+        hint("start", tr().common.confirm)
     }
 }
 
@@ -45,14 +46,14 @@ impl Failure {
 pub fn plain_error(e: &Failure, fallback: &str) -> String {
     if let Some(c) = e.code.as_deref() {
         let known = match c {
-            "cancelled" => Some("Cancelled."),
-            "timeout" => Some("That took too long. Try again."),
-            "ble-off" => Some("Bluetooth is off. Turn it on and try again."),
-            "notfound" => Some("No device found. Check that it is connected and try again."),
-            "busy" => Some("The device is busy. Finish what it is showing, then try again."),
-            "network" => Some("Couldn't reach the network. Check your connection and try again."),
-            "wrong-pin" => Some("That PIN is wrong. Try again."),
-            "unsupported" => Some("This is not supported on this device."),
+            "cancelled" => Some(tr().wallet_setup.err_cancelled),
+            "timeout" => Some(tr().wallet_setup.err_timeout),
+            "ble-off" => Some(tr().wallet_setup.err_ble_off),
+            "notfound" => Some(tr().wallet_setup.err_notfound),
+            "busy" => Some(tr().wallet_setup.err_busy),
+            "network" => Some(tr().wallet_setup.err_network),
+            "wrong-pin" => Some(tr().wallet_setup.err_wrong_pin),
+            "unsupported" => Some(tr().wallet_setup.err_unsupported),
             _ => None,
         };
         if let Some(k) = known {
@@ -65,7 +66,10 @@ pub fn plain_error(e: &Failure, fallback: &str) -> String {
     }
 }
 
-pub const DEFAULT_ERROR: &str = "That didn't go through. Try again.";
+/// The fallback error line.
+pub fn default_error() -> &'static str {
+    tr().wallet_setup.err_default
+}
 
 /// `udevFix`.
 pub fn udev_fix(e: &Failure) -> Option<String> {
@@ -90,10 +94,10 @@ mod tests {
 
     #[test]
     fn errors() {
-        assert_eq!(plain_error(&Failure::code("ble-off"), DEFAULT_ERROR), "Bluetooth is off. Turn it on and try again.");
-        assert_eq!(plain_error(&Failure::msg("Name not found"), DEFAULT_ERROR), "Name not found");
+        assert_eq!(plain_error(&Failure::code("ble-off"), default_error()), "Bluetooth is off. Turn it on and try again.");
+        assert_eq!(plain_error(&Failure::msg("Name not found"), default_error()), "Name not found");
         assert_eq!(plain_error(&Failure::msg(&"x".repeat(200)), "Could not add that address"), "Could not add that address");
-        assert_eq!(plain_error(&Failure::default(), DEFAULT_ERROR), DEFAULT_ERROR);
+        assert_eq!(plain_error(&Failure::default(), default_error()), default_error());
         let u = Failure { code: Some("udev".into()), message: None, fix: Some("pkexec x".into()) };
         assert_eq!(udev_fix(&u).as_deref(), Some("pkexec x"));
     }

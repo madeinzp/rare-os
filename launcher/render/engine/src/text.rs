@@ -45,6 +45,10 @@ pub struct TextStyle {
     pub wrap: bool,
     /// One line, cut with an ellipsis at the box width (Tailwind truncate).
     pub truncate: bool,
+    /// With `truncate`: a line too wide for its box first shrinks (down to `FIT_MIN` of its size,
+    /// same line height), and only then ends in an ellipsis. For labels on buttons, chips and tiles,
+    /// whose length changes with the language.
+    pub fit: bool,
     /// Wrap and cut with an ellipsis after this many lines (Tailwind line-clamp-N); 0 = no clamp.
     pub clamp: u16,
     /// Letter spacing in em (Tailwind tracking).
@@ -63,7 +67,7 @@ pub enum TextAlign {
 
 impl TextStyle {
     pub fn new(size: f32, weight: u16) -> TextStyle {
-        TextStyle { size, line: (size * 1.25).round(), weight, mono: false, tabular: false, wrap: false, truncate: false, clamp: 0, tracking: 0.0, align: TextAlign::Left }
+        TextStyle { size, line: (size * 1.25).round(), weight, mono: false, tabular: false, wrap: false, truncate: false, fit: false, clamp: 0, tracking: 0.0, align: TextAlign::Left }
     }
     pub fn line(mut self, l: f32) -> Self {
         self.line = l;
@@ -84,6 +88,12 @@ impl TextStyle {
     }
     pub fn truncate(mut self) -> Self {
         self.truncate = true;
+        self
+    }
+    /// One line that shrinks to fit its box (to `FIT_MIN`), then truncates.
+    pub fn fit(mut self) -> Self {
+        self.truncate = true;
+        self.fit = true;
         self
     }
     /// Multi-line wrap clamped to `lines`, the last one ending in an ellipsis.
@@ -194,6 +204,32 @@ pub(crate) fn span_opacity(metadata: usize) -> f32 {
 /// Metadata bit of a `truncate` buffer (the ellipsis is switched on only when the line overflows).
 const TRUNCATE_BIT: usize = 1 << 15;
 
+/// Smallest scale a `fit` line shrinks to before it truncates.
+pub const FIT_MIN: f32 = 0.8;
+
+/// Metadata bits 32..48 of a `fit` buffer: its font size in 64ths of a px (0: not fit).
+const FIT_SHIFT: u32 = 32;
+
+fn fit_bits(st: &TextStyle) -> usize {
+    if st.fit && st.truncate && st.clamp == 0 && usize::BITS > 48 {
+        ((st.size * 64.0).round() as usize & 0xFFFF) << FIT_SHIFT
+    } else {
+        0
+    }
+}
+
+/// The font size a `fit` buffer was set with (None: not fit).
+fn fit_size(buf: &Buffer) -> Option<f32> {
+    if usize::BITS <= 48 {
+        return None;
+    }
+    let m = buf.lines.first()?.attrs_list().defaults().metadata;
+    match (m >> FIT_SHIFT) & 0xFFFF {
+        0 => None,
+        v => Some(v as f32 / 64.0),
+    }
+}
+
 /// Whether a buffer was set as one truncated line.
 pub(crate) fn truncates(buf: &Buffer) -> bool {
     buf.lines.first().is_some_and(|l| l.attrs_list().defaults().metadata & TRUNCATE_BIT != 0)
@@ -242,6 +278,18 @@ impl TextSys {
         };
         t.set_look(TextLook::from_env());
         t
+    }
+
+    /// The UI's language for shaping (`en-US`, `ja`, `ko`, `zh-CN`...): Han characters take the
+    /// Japanese, Korean or Chinese CJK face by it. Text set before must be set again.
+    pub fn set_locale(&mut self, locale: &str) {
+        if self.fs.locale() == locale {
+            return;
+        }
+        let old = std::mem::replace(&mut self.fs, FontSystem::new_with_locale_and_db(locale.into(), cosmic_text::fontdb::Database::new()));
+        let (_, db) = old.into_locale_and_db();
+        self.fs = FontSystem::new_with_locale_and_db(locale.into(), db);
+        self.generation += 1;
     }
 
     /// Switches hinting and baseline rounding to `look` (TextSys::new reads RR_TEXT_LOOK).
@@ -303,7 +351,7 @@ impl TextSys {
         // line-clamp is drawn by `paint` (the browser's rule: wrap, then fit "…" on the last line);
         // truncate turns cosmic's ellipsis on in `measure`, only when the line overflows its box.
         buf.set_ellipsize(Ellipsize::None);
-        let trunc = if st.truncate && st.clamp == 0 { TRUNCATE_BIT } else { 0 };
+        let trunc = if st.truncate && st.clamp == 0 { TRUNCATE_BIT | fit_bits(st) } else { 0 };
         let attrs = Self::attrs(st).metadata((st.clamp as usize) << 16 | trunc);
         let align = match st.align {
             TextAlign::Left => None,
@@ -343,9 +391,22 @@ impl TextSys {
         let trunc = truncates(buf);
         if trunc {
             buf.set_ellipsize(Ellipsize::None);
+            let fit = fit_size(buf);
+            let line = buf.metrics().line_height;
+            if let Some(size) = fit.filter(|s| *s != buf.metrics().font_size) {
+                buf.set_metrics(Metrics::new(size, line));
+            }
             buf.set_size(width, None);
             buf.shape_until_scroll(&mut self.fs, false);
-            let over = width.is_some_and(|w| buf.layout_runs().any(|r| r.line_w > w));
+            let widest = |buf: &Buffer| buf.layout_runs().fold(0.0f32, |a, r| a.max(r.line_w));
+            let mut over = width.is_some_and(|w| widest(buf) > w);
+            if let (true, Some(size), Some(w)) = (over, fit, width) {
+                // Shrink in proportion (the advances scale with the size), floored at FIT_MIN.
+                let k = (w / widest(buf)).max(FIT_MIN);
+                buf.set_metrics(Metrics::new((size * k * 4.0).floor() / 4.0, line));
+                buf.shape_until_scroll(&mut self.fs, false);
+                over = widest(buf) > w;
+            }
             if over {
                 buf.set_ellipsize(Ellipsize::End(EllipsizeHeightLimit::Lines(1)));
             }
@@ -613,6 +674,29 @@ mod tests {
         assert!(w <= 160.0 && h <= 25.0, "{w} {h}");
         let run = b.layout_runs().next().unwrap();
         assert!(ends_in_ellipsis(&t, run.glyphs));
+    }
+
+    /// A `fit` label too wide for its box shrinks (no ellipsis) when FIT_MIN is enough, ellipsizes
+    /// past it, and comes back to full size when the box grows again.
+    #[test]
+    fn fit_shrinks_before_it_truncates() {
+        let mut t = sys();
+        let st = TextStyle::new(20.0, 500).fit();
+        let mut b = t.buffer("Открыть «Поделиться»", &st);
+        let (full, _) = t.measure(&mut b, None);
+        let (w, _) = t.measure(&mut b, Some(full * 0.9));
+        assert!(w <= full * 0.9 + 0.1, "{w} vs {}", full * 0.9);
+        assert!(b.metrics().font_size < 20.0);
+        assert!(!ends_in_ellipsis(&t, b.layout_runs().next().unwrap().glyphs));
+        t.measure(&mut b, Some(full * 0.5));
+        assert!(ends_in_ellipsis(&t, b.layout_runs().next().unwrap().glyphs));
+        let (w, _) = t.measure(&mut b, Some(full + 10.0));
+        assert_eq!(b.metrics().font_size, 20.0);
+        assert!((w - full).abs() < 0.1);
+        // Plain truncate never shrinks.
+        let mut p = t.buffer("Открыть «Поделиться»", &TextStyle::new(20.0, 500).truncate());
+        t.measure(&mut p, Some(full * 0.9));
+        assert_eq!(p.metrics().font_size, 20.0);
     }
 
     /// WS 15 / WS 12: a truncating label laid out at exactly its measured width keeps every letter.

@@ -7,6 +7,7 @@
 //! sponsored sends belong to the wallet side.
 
 use super::kit::{done_line, step, working};
+use rare_i18n::{tr, trf, trn};
 use crate::screens::wallet::fmt::format_amount;
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::types::RareAccount;
@@ -181,26 +182,26 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
         Page::To => {
             let actions = match (pr.account, to) {
                 (None, _) => vec![],
-                (Some(_), Some(_)) => vec![btn_l("Continue", BVariant::Primary, true, Msg::Go(Page::From)), btn_l("I don't have an old wallet", BVariant::Ghost, false, Msg::Exit)],
+                (Some(_), Some(_)) => vec![btn_l(tr().common.continue_, BVariant::Primary, true, Msg::Go(Page::From)), btn_l(tr().firstrun.mv_no_old_wallet, BVariant::Ghost, false, Msg::Exit)],
                 (Some(_), None) => vec![
-                    btn_l("Set up your wallet", BVariant::Primary, true, Msg::NeedWallet),
-                    btn_l("Just look at my old wallet", BVariant::Secondary, false, Msg::Go(Page::From)),
-                    btn_l("I don't have one", BVariant::Ghost, false, Msg::Exit),
+                    btn_l(tr().firstrun.mv_set_up_wallet, BVariant::Primary, true, Msg::NeedWallet),
+                    btn_l(tr().firstrun.mv_just_look, BVariant::Secondary, false, Msg::Go(Page::From)),
+                    btn_l(tr().firstrun.mv_dont_have_one, BVariant::Ghost, false, Msg::Exit),
                 ],
             };
             let content = match (pr.account, to) {
                 (Some(Some(a)), Some(t)) => vec![div("flex items-start gap-[2.5rem]").kid(el(Tag::Qr(t.to_string()), "h-[13rem] w-[13rem] shrink-0")).kid(
                     div("min-w-0 flex-1")
-                        .kid(div("text-[0.8rem] font-medium uppercase tracking-[0.1em] text-muted").text("Your new address"))
+                        .kid(div("text-[0.8rem] font-medium uppercase tracking-[0.1em] text-muted").text(tr().firstrun.mv_new_address))
                         .kid(div("mt-[0.3rem] text-[1.05rem] font-semibold").text(&a.label))
                         .kid(div("mt-[0.6rem] max-w-[30rem] break-words font-mono [font-variant-ligatures:none] text-[1.02rem] leading-[1.7] text-fg/90").text(grouped(t)))
-                        .kid(p("mt-[1rem] max-w-[34rem] text-[0.9rem] leading-relaxed text-muted").text("Everything from your old SuiPlay wallet goes here. Next, Rare reads what's in the old wallet and lists exactly what to send, in order.")),
+                        .kid(p("mt-[1rem] max-w-[34rem] text-[0.9rem] leading-relaxed text-muted").text(tr().firstrun.mv_new_address_body)),
                 )],
                 (Some(acct), None) => vec![empty(
-                    "First, a wallet you control",
+                    tr().firstrun.mv_first_wallet_title,
                     Some(text(match acct {
-                        Some(a) => format!("{} is watch-only, so it can't receive with a key you hold. Create a passkey wallet to move your assets into.", a.label),
-                        None => "Your assets need somewhere to go: a Rare Wallet signed in with your passkey. You can still look at what's in your old wallet first.".into(),
+                        Some(a) => trf!(tr().firstrun.mv_watch_only, name = a.label),
+                        None => tr().firstrun.mv_need_wallet.into(),
                     })),
                     vec![],
                     "",
@@ -208,28 +209,28 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
                 _ => vec![],
             };
             step(
-                text("Move your assets to a wallet you control"),
-                Some(text("The wallet your SuiPlay came with signs through its maker's sign-in. If that service stops, what's in it can't move anymore. Moving it now keeps it yours.")),
+                text(tr().firstrun.mv_title),
+                Some(text(tr().firstrun.mv_body)),
                 content,
                 actions,
                 true,
             )
         }
         Page::From => {
-            let mut actions = vec![btn_l(if st.from.is_some() { "Change address" } else { "Enter address" }, BVariant::Primary, true, Msg::EnterFrom)];
+            let mut actions = vec![btn_l(if st.from.is_some() { tr().firstrun.mv_change_address } else { tr().firstrun.mv_enter_address }, BVariant::Primary, true, Msg::EnterFrom)];
             if let Some(f) = &st.from {
-                actions.push(btn_l(&format!("Scan {}", short(f)), BVariant::Secondary, false, Msg::ScanFrom));
+                actions.push(btn_l(&trf!(tr().firstrun.mv_scan_addr, addr = short(f)), BVariant::Secondary, false, Msg::ScanFrom));
             }
             let mut content = vec![match &st.from {
                 Some(f) => div("max-w-[34rem] break-words font-mono [font-variant-ligatures:none] text-[1.02rem] leading-[1.7] text-fg/90").text(grouped(f)),
-                None => div("text-[0.95rem] text-muted").text("A 0x address, or a name ending in .sui if you set one."),
+                None => div("text-[0.95rem] text-muted").text(tr().firstrun.mv_address_hint),
             }];
             if let Some(e) = &st.error {
                 content.push(p("mt-[1rem] text-small text-neg").text(e));
             }
             step(
-                text("Which wallet came with your SuiPlay?"),
-                Some(text("Enter its address. On the SuiPlay's original system it's under Wallet, at the top. Rare only reads it: nothing moves until you approve it in that wallet.")),
+                text(tr().firstrun.mv_which_wallet),
+                Some(text(tr().firstrun.mv_which_wallet_body)),
                 content,
                 actions,
                 true,
@@ -240,19 +241,18 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
                 vec![]
             } else if pr.scan.is_some() {
                 let first = match to {
-                    Some(_) => button_el(ButtonSpec::new("See the move plan").v(BVariant::Primary).size(BSize::Lg).def(true).disabled(pr.plan.is_none_or(|p| p.empty)), Some(Msg::Go(Page::Plan))),
-                    None => btn_l("Set up your wallet to move these", BVariant::Primary, true, Msg::NeedWallet),
+                    Some(_) => button_el(ButtonSpec::new(tr().firstrun.mv_see_plan).v(BVariant::Primary).size(BSize::Lg).def(true).disabled(pr.plan.is_none_or(|p| p.empty)), Some(Msg::Go(Page::Plan))),
+                    None => btn_l(tr().firstrun.mv_set_up_to_move, BVariant::Primary, true, Msg::NeedWallet),
                 };
-                vec![first, btn_l("Scan again", BVariant::Secondary, false, Msg::ScanFrom), btn_l("Different wallet", BVariant::Ghost, false, Msg::Go(Page::From))]
+                vec![first, btn_l(tr().firstrun.scan_again, BVariant::Secondary, false, Msg::ScanFrom), btn_l(tr().firstrun.mv_different_wallet, BVariant::Ghost, false, Msg::Go(Page::From))]
             } else {
-                vec![btn_l("Try again", BVariant::Primary, true, Msg::ScanFrom), btn_l("Different wallet", BVariant::Ghost, false, Msg::Go(Page::From))]
+                vec![btn_l(tr().common.try_again, BVariant::Primary, true, Msg::ScanFrom), btn_l(tr().firstrun.mv_different_wallet, BVariant::Ghost, false, Msg::Go(Page::From))]
             };
             let body = st.from.as_ref().map(|f| {
-                let mut b = span("").kid(text("Wallet ")).kid(span("num text-fg/80").text(short(f)));
-                if let Some(n) = pr.scan.and_then(|s| s.default_name.as_ref()) {
-                    b = b.kid(text(format!(" ({n})")));
+                match pr.scan.and_then(|s| s.default_name.as_ref()) {
+                    Some(n) => span("").text(trf!(tr().firstrun.mv_wallet_read_named, addr = short(f), name = n)),
+                    None => span("").text(trf!(tr().firstrun.mv_wallet_read, addr = short(f))),
                 }
-                b.kid(text(". Read from the Sui network; nothing has moved."))
             });
             let mut content = Vec::new();
             if let Some(s) = &st.stage {
@@ -264,48 +264,48 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
             if let (Some(s), None) = (pr.scan, &st.stage) {
                 content.push(scan_results(s, pr.plan, pr.tz_min));
             }
-            step(text(if st.stage.is_some() { "Reading your old wallet" } else { "What's in your old wallet" }), body, content, actions, true)
+            step(text(if st.stage.is_some() { tr().firstrun.mv_reading } else { tr().firstrun.mv_whats_in }), body, content, actions, true)
         }
         Page::Plan => {
             let (Some(plan), Some(_)) = (pr.plan, pr.scan) else { return div("h-full") };
             let title = if plan.empty {
                 if st.checks > 0 {
-                    "Everything that can move has moved"
+                    tr().firstrun.mv_all_moved
                 } else {
-                    "Nothing to move"
+                    tr().firstrun.mv_nothing_to_move
                 }
             } else {
-                "Send these, in this order"
+                tr().firstrun.mv_send_these
             };
             let body = if plan.empty {
                 if plan.stuck.is_empty() {
-                    "The old wallet is empty. Rare keeps an eye on it in case something new arrives."
+                    tr().firstrun.mv_empty_body
                 } else {
-                    "What's left can't be sent by anyone but its own app. Rare keeps an eye on the old wallet in case something new arrives."
+                    tr().firstrun.mv_left_body
                 }
             } else {
-                "Sign these in your old SuiPlay wallet while it still works. Each one sends to your new address. Come back here and check again when you're done."
+                tr().firstrun.mv_plan_body
             };
             let mut actions = vec![if plan.empty {
                 btn_l(pr.exit_label, BVariant::Primary, true, Msg::Exit)
             } else {
-                button_el(ButtonSpec::new("Check again").v(BVariant::Primary).size(BSize::Lg).def(true).disabled(st.stage.is_some()), Some(Msg::CheckAgain))
+                button_el(ButtonSpec::new(tr().firstrun.mv_check_again).v(BVariant::Primary).size(BSize::Lg).def(true).disabled(st.stage.is_some()), Some(Msg::CheckAgain))
             }];
             if !plan.empty {
-                actions.push(btn_l("Finish later", BVariant::Ghost, false, Msg::Exit));
+                actions.push(btn_l(tr().firstrun.mv_finish_later, BVariant::Ghost, false, Msg::Exit));
             }
             let mut c = div("flex flex-col gap-[1rem]");
             if let Some(s) = &st.stage {
                 c = c.kid(working(true, Some(s)));
             }
             if plan.empty && st.checks > 0 {
-                c = c.kid(done_line(vec![text(format!("Moved to {}", short(&plan.to)))]));
+                c = c.kid(done_line(vec![text(trf!(tr().firstrun.mv_moved_to, addr = short(&plan.to)))]));
             }
             if let Some(n) = plan.fee_note.as_ref().filter(|_| !plan.empty) {
                 c = c.kid(p("text-small text-warn").text(n));
             }
             if pr.covered && !plan.empty {
-                c = c.kid(p("text-small text-muted").text("Rare covers the fees for these moves."));
+                c = c.kid(p("text-small text-muted").text(tr().firstrun.mv_fees_covered));
             }
             if !plan.empty {
                 c = c.kid(
@@ -314,21 +314,21 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
                         .kid(
                             div("flex flex-col items-center rounded-card border border-hair bg-l1 p-[1rem] text-center")
                                 .kid(el(Tag::Qr(plan.to.clone()), "h-[11rem] w-[11rem]"))
-                                .kid(div("mt-[0.7rem] text-[0.85rem] font-semibold").text("Send to"))
+                                .kid(div("mt-[0.7rem] text-[0.85rem] font-semibold").text(tr().firstrun.mv_send_to))
                                 .kid(div("mt-[0.2rem] break-all font-mono [font-variant-ligatures:none] text-[0.72rem] leading-relaxed text-muted").text(&plan.to)),
                         ),
                 );
                 c = c.kid(p("max-w-[44rem] text-[0.86rem] leading-relaxed text-muted").text(
-                    "Already on Rare OS? The original system stays on this SuiPlay in the boot menu: hold Shift while it powers on (with a USB-C keyboard), pick it, send, then restart into Rare OS.",
+                    tr().firstrun.mv_boot_menu,
                 ));
             }
             if !plan.stuck.is_empty() {
-                let mut s = div("flex flex-col gap-[0.4rem]").kid(h2("text-[0.92rem] font-semibold").text("Stays behind"));
+                let mut s = div("flex flex-col gap-[0.4rem]").kid(h2("text-[0.92rem] font-semibold").text(tr().firstrun.mv_stays_behind));
                 for x in plan.stuck.iter().take(BATCH_ROWS) {
                     s = s.kid(div("text-[0.86rem]").key(&x.id).kid(span("text-fg/90").text(&x.label)).kid(span("text-muted").text(format!(": {}", x.reason))));
                 }
                 if plan.stuck.len() > BATCH_ROWS {
-                    s = s.kid(div("text-[0.82rem] text-muted").text(format!("and {} more", plan.stuck.len() - BATCH_ROWS)));
+                    s = s.kid(div("text-[0.82rem] text-muted").text(trf!(tr().firstrun.and_more, n = plan.stuck.len() - BATCH_ROWS)));
                 }
                 c = c.kid(s);
             }
@@ -349,7 +349,7 @@ fn batch(b: &Batch, covered: bool, st: &State) -> El<Msg> {
         lines = lines.kid(span("flex gap-[0.6rem] text-[0.86rem]").key(format!("{}{}", l.kind, l.id)).kid(span("min-w-0 truncate text-fg/90").text(&l.label)).kid_opt(l.detail.as_ref().map(|d| span("min-w-0 truncate text-muted").text(d))));
     }
     if b.lines.len() > BATCH_ROWS {
-        lines = lines.kid(span("text-[0.82rem] text-muted").text(format!("and {} more", b.lines.len() - BATCH_ROWS)));
+        lines = lines.kid(span("text-[0.82rem] text-muted").text(trf!(tr().firstrun.and_more, n = b.lines.len() - BATCH_ROWS)));
     }
     let mut mid = span("min-w-0 flex-1").kid(span("block text-[0.98rem] font-semibold").text(&b.title)).kid(lines);
     if let Some(err) = sent.filter(|s| covered && *s != "sending" && *s != "sent") {
@@ -360,9 +360,9 @@ fn batch(b: &Batch, covered: bool, st: &State) -> El<Msg> {
         .kid(mid);
     if covered {
         card = card.kid(span("shrink-0 self-center").kid(if sent == Some("sent") {
-            span("text-[0.86rem] text-muted").text("Sent")
+            span("text-[0.86rem] text-muted").text(tr().firstrun.mv_sent)
         } else {
-            button_el(ButtonSpec::new(if sent == Some("sending") { "Sending" } else { "Send" }).size(BSize::Sm).disabled(sent == Some("sending")), Some(Msg::SendCovered(b.index)))
+            button_el(ButtonSpec::new(if sent == Some("sending") { tr().firstrun.mv_sending } else { tr().common.send }).size(BSize::Sm).disabled(sent == Some("sending")), Some(Msg::SendCovered(b.index)))
         }));
     }
     // the card itself is focusable (data-nav tabIndex 0): A does nothing on it
@@ -381,7 +381,7 @@ fn row_el(left: El<Msg>, right: Option<String>) -> El<Msg> {
 }
 
 fn more(n: usize) -> Option<El<Msg>> {
-    (n > MAX_ROWS).then(|| div("text-[0.82rem] text-muted").text(format!("and {} more", n - MAX_ROWS)))
+    (n > MAX_ROWS).then(|| div("text-[0.82rem] text-muted").text(trf!(tr().firstrun.and_more, n = n - MAX_ROWS)))
 }
 
 fn scan_results(scan: &Scan, plan: Option<&Plan>, tz_min: i32) -> El<Msg> {
@@ -390,18 +390,18 @@ fn scan_results(scan: &Scan, plan: Option<&Plan>, tz_min: i32) -> El<Msg> {
     let nothing = scan.coins.is_empty() && scan.nfts.is_empty() && scan.kiosks.is_empty() && scan.staked.is_empty() && scan.names.is_empty();
     let mut d = div("flex flex-col gap-[1rem]");
     if nothing {
-        d = d.kid(empty("Nothing to move", Some(text(if scan.soulbound.is_empty() { "This wallet is empty." } else { "Only items that can't be sent are in this wallet." })), vec![], ""));
+        d = d.kid(empty(tr().firstrun.mv_nothing_to_move, Some(text(if scan.soulbound.is_empty() { tr().firstrun.mv_wallet_empty } else { tr().firstrun.mv_only_stuck })), vec![], ""));
     }
     let mut g = div("grid grid-cols-2 items-start gap-[0.9rem]").attr("data-nav-group", "scan-sections");
     if !scan.coins.is_empty() {
         let mut rows: Vec<El<Msg>> = scan.coins.iter().take(MAX_ROWS).map(|c| row_el(text(&c.symbol), Some(format_amount(c.raw, c.decimals)))).collect();
         rows.extend(more(scan.coins.len()));
-        g = g.kid(section_box("Coins", Some(scan.coins.len().to_string()), rows));
+        g = g.kid(section_box(tr().firstrun.mv_coins, Some(scan.coins.len().to_string()), rows));
     }
     if !scan.nfts.is_empty() {
         let mut rows: Vec<El<Msg>> = scan.nfts.iter().take(MAX_ROWS).map(|n| row_el(text(&n.name), Some(n.collection.clone()))).collect();
         rows.extend(more(scan.nfts.len()));
-        g = g.kid(section_box("Collectibles", Some(scan.nfts.len().to_string()), rows));
+        g = g.kid(section_box(tr().firstrun.mv_collectibles, Some(scan.nfts.len().to_string()), rows));
     }
     if !scan.kiosks.is_empty() {
         let rows = scan
@@ -410,18 +410,18 @@ fn scan_results(scan: &Scan, plan: Option<&Plan>, tz_min: i32) -> El<Msg> {
             .map(|k| {
                 let mut b = div("flex flex-col gap-[0.2rem]")
                     .key(&k.kiosk_id)
-                    .kid(row_el(text(format!("{} {}", if k.personal { "Personal kiosk" } else { "Kiosk" }, short(&k.kiosk_id))), (k.profits > 0).then(|| format!("{} in sales", sui(k.profits)))));
+                    .kid(row_el(text(if k.personal { trf!(tr().firstrun.mv_personal_kiosk, id = short(&k.kiosk_id)) } else { trf!(tr().firstrun.mv_kiosk, id = short(&k.kiosk_id)) }), (k.profits > 0).then(|| trf!(tr().firstrun.mv_in_sales, amount = sui(k.profits)))));
                 for it in k.items.iter().take(MAX_ROWS) {
-                    let parts: Vec<String> = [it.listed.map(|l| format!("Listed {}", sui(l))), it.locked.then(|| "Locked".to_string())].into_iter().flatten().collect();
+                    let parts: Vec<String> = [it.listed.map(|l| trf!(tr().firstrun.mv_listed, amount = sui(l))), it.locked.then(|| tr().firstrun.mv_locked.to_string())].into_iter().flatten().collect();
                     b = b.kid(row_el(span("pl-[0.9rem] text-fg/80").text(&it.name), (!parts.is_empty()).then(|| parts.join(", "))));
                 }
                 b.kid_opt(more(k.items.len()))
             })
             .collect();
-        g = g.kid(section_box("Kiosks", Some(format!("{}, {kiosk_items} items", scan.kiosks.len())), rows));
+        g = g.kid(section_box(tr().firstrun.mv_kiosks, Some(trn!(tr().firstrun.mv_kiosks_summary, kiosk_items, kiosks = scan.kiosks.len())), rows));
     }
     if !scan.staked.is_empty() {
-        g = g.kid(section_box("Staked SUI", Some(scan.staked.len().to_string()), vec![row_el(text("Total staked"), Some(sui(staked))), div("text-[0.82rem] text-muted").text("Moves as it is and keeps earning.")]));
+        g = g.kid(section_box(tr().firstrun.mv_staked, Some(scan.staked.len().to_string()), vec![row_el(text(tr().firstrun.mv_total_staked), Some(sui(staked))), div("text-[0.82rem] text-muted").text(tr().firstrun.mv_staked_note)]));
     }
     if !scan.names.is_empty() {
         let mut rows: Vec<El<Msg>> = scan
@@ -430,11 +430,11 @@ fn scan_results(scan: &Scan, plan: Option<&Plan>, tz_min: i32) -> El<Msg> {
             .take(MAX_ROWS)
             .map(|n| {
                 let l = crate::screens::wallet::fmt::local(n.expires_ms, tz_min);
-                row_el(text(&n.domain), Some(format!("Until {} {}", crate::screens::wallet::fmt::MONTHS[(l.month - 1) as usize], l.year)))
+                row_el(text(&n.domain), Some(trf!(tr().firstrun.mv_until, date = rare_i18n::fmt::month_year(l.year as i32, l.month))))
             })
             .collect();
         rows.extend(more(scan.names.len()));
-        g = g.kid(section_box("SuiNS names", Some(scan.names.len().to_string()), rows));
+        g = g.kid(section_box(tr().firstrun.mv_suins_names, Some(scan.names.len().to_string()), rows));
     }
     if !scan.soulbound.is_empty() {
         let stuck: Vec<Stuck> = match plan {
@@ -447,11 +447,11 @@ fn scan_results(scan: &Scan, plan: Option<&Plan>, tz_min: i32) -> El<Msg> {
             .map(|s| div("").key(&s.id).kid(div("truncate text-fg/90").text(&s.label)).kid_if(!s.reason.is_empty(), || div("text-[0.8rem] leading-relaxed text-muted").text(&s.reason)))
             .collect();
         rows.extend(more(scan.soulbound.len()));
-        g = g.kid(section_box("Can't move", Some(scan.soulbound.len().to_string()), rows));
+        g = g.kid(section_box(tr().firstrun.mv_cant_move, Some(scan.soulbound.len().to_string()), rows));
     }
     d = d.kid(g);
     if scan.truncated {
-        d = d.kid(p("text-[0.86rem] text-muted").text("This wallet holds more objects than Rare reads at once. Move these first, then check again for the rest."));
+        d = d.kid(p("text-[0.86rem] text-muted").text(tr().firstrun.mv_truncated));
     }
     d
 }
@@ -512,7 +512,7 @@ pub fn update(pr: &Props, st: &mut State, msg: Msg) -> Option<Effect> {
 
 fn run(st: &mut State, address: String, again: bool) -> Option<Effect> {
     st.error = None;
-    st.stage = Some("Starting".into());
+    st.stage = Some(tr().firstrun.mv_starting.into());
     Some(Effect::Scan { address, again })
 }
 
@@ -521,7 +521,7 @@ pub fn from_entered(pr: &Props, st: &mut State, res: Result<String, ()>) -> Opti
     match res {
         Ok(a) => {
             if to_address(pr) == Some(a.as_str()) {
-                st.error = Some("That's your new wallet. Enter the address of the wallet your SuiPlay came with.".into());
+                st.error = Some(tr().firstrun.mv_is_new_wallet.into());
                 return None;
             }
             st.from = Some(a.clone());
@@ -529,7 +529,7 @@ pub fn from_entered(pr: &Props, st: &mut State, res: Result<String, ()>) -> Opti
             run(st, a, false)
         }
         Err(()) => {
-            st.error = Some(crate::screens::wallet::fmt::failed("Couldn't open that wallet."));
+            st.error = Some(crate::screens::wallet::fmt::failed(tr().firstrun.mv_open_failed));
             None
         }
     }
@@ -543,7 +543,7 @@ pub fn scanned(st: &mut State, ok: bool, again: bool) {
             st.checks += 1;
         }
     } else {
-        st.error = Some("Couldn't read that wallet. Check the address and try again.".into());
+        st.error = Some(tr().firstrun.mv_read_failed.into());
     }
 }
 
@@ -601,7 +601,7 @@ mod tests {
         let v = view(&pr, &st);
         let t = v.texts();
         assert!(t.contains(&"What's in your old wallet".to_string()));
-        assert!(t.contains(&" (old.sui)".to_string()));
+        assert!(t.iter().any(|x| x.contains("(old.sui)")));
         assert!(t.contains(&"Personal kiosk 0x0000...00k1".to_string()));
         assert!(t.contains(&"Listed 3 SUI, Locked".to_string()));
         assert!(t.contains(&"Only Quests can move it.".to_string()));

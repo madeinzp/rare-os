@@ -3,6 +3,7 @@
 //! a card it paints at once from that card (name, price, the card's art at the width it was drawn)
 //! and the full item fills in when it arrives.
 
+use rare_i18n::{tr, trf};
 use super::buy::{buy_sheet, BuyState, Phase, T_BUY, T_CLOSE, T_DONE, T_PASSKEY, T_SECOND};
 use super::data::Answers;
 use super::host::*;
@@ -110,8 +111,8 @@ pub fn view(ui: &mut Ui, a: &Answers, id: &str, card: Option<&ItemCard>, thumb: 
     let page = ui.bx(s().fill().col().pt(1.0)).scrolls_y(key(&format!("mk-item-{frame}")));
     let Some((item, pending)) = item_of(a, id, card) else {
         if a.failed(&paths::item(id)) {
-            let open = btn(ui, s(), "Open on rare.market", T_OPEN, V::Secondary, Sz::Lg, true, false);
-            return page.child(empty(ui, "Could not load this item", None, Some(open), false));
+            let open = btn(ui, s(), tr().market.open_on_rare_market, T_OPEN, V::Secondary, Sz::Lg, true, false);
+            return page.child(empty(ui, tr().market.item_failed, None, Some(open), false));
         }
         return page;
     };
@@ -146,49 +147,49 @@ pub fn view(ui: &mut Ui, a: &Answers, id: &str, card: Option<&ItemCard>, thumb: 
         meta = meta.child(rarity_badge(ui, s(), r, false));
     }
     meta = meta.child(ui.bx(s().h(1.25).w_px(1.0)).bg(tok::BORDER_LIGHT));
-    let owner = baseline_row(ui, s().ml_auto().gap(0.3), vec![(t(SM).c(tok::MUTED), "Owned by".into()), (t(SM).mono(), mf::short_addr(c.owner.as_deref()))]);
+    let owner = baseline_row(ui, s().ml_auto().gap(0.3), vec![(t(SM).c(tok::MUTED), tr().market.owned_by.into()), (t(SM).mono(), mf::short_addr(c.owner.as_deref()))]);
     meta = meta.child(owner);
 
     // ---- the buy box
-    let mut boxx = ui.bx(bw(s().col().mt(1.0).p(1.0), 1.0)).bg(tok::L2).radius(ui.r(0.75)).border(1.0, BORDER).child(ui.text(if listing.is_some() { "Total price" } else { "Not listed" }, t(BASE)));
+    let mut boxx = ui.bx(bw(s().col().mt(1.0).p(1.0), 1.0)).bg(tok::L2).radius(ui.r(0.75)).border(1.0, BORDER).child(ui.text(if listing.is_some() { tr().market.total_price } else { tr().market.not_listed }, t(BASE)));
     if let Some(l) = &listing {
         let price = baseline_row(ui, s().mt(0.25).gap(0.375), vec![(t(XL4).w(700).tab(), mf::fmt_sui(total.as_deref(), SuiOpts { dp: 4, ..Default::default() })), (t(XL).w(600), "SUI".into())]);
         let usd = mf::fmt_usd(mf::mist_to_usd(total.as_deref(), a.sui_usd()));
-        let mut on = ui.bx(s().row().items_center().gap(0.375).mt(0.25)).child(ui.text("Listed on", t(SM).c(tok::MUTED)));
+        let mut on = ui.bx(s().row().items_center().gap(0.375).mt(0.25)).child(ui.text(tr().market.listed_on, t(SM).c(tok::MUTED)));
         if let Some(v) = venue_mark(ui, &l.venue, 0.875) {
             on = on.child(v);
         }
         on = on.child(ui.text(mf::venue_name(Some(&l.venue)), t(SM).c(tok::MUTED)));
         boxx = boxx.child(price).child(ui.text(format!("({usd})"), t(BASE).c(tok::MUTED).tab())).child(on);
     } else {
-        boxx = boxx.child(ui.text_s(s().mt(0.25), "The owner has not listed this item.", t(SM).c(tok::MUTED)));
+        boxx = boxx.child(ui.text_s(s().mt(0.25), tr().market.owner_not_listed, t(SM).c(tok::MUTED)));
     }
     let mut btns = ui.bx(s().row().gap(0.75).mt(0.75));
     if owned(a, c) {
-        btns = btns.child(btn(ui, s().grow(), if listing.is_some() { "Change price or cancel" } else { "List or sell" }, T_MANAGE, V::Primary, Sz::Lg, true, false));
-        btns = btns.child(btn(ui, s(), "Open on rare.market", T_OPEN, V::Secondary, Sz::Lg, false, false));
+        btns = btns.child(btn(ui, s().grow(), if listing.is_some() { tr().market.change_or_cancel } else { tr().market.list_or_sell }, T_MANAGE, V::Primary, Sz::Lg, true, false));
+        btns = btns.child(btn(ui, s(), tr().market.open_on_rare_market, T_OPEN, V::Secondary, Sz::Lg, false, false));
     } else if listing.is_some() {
-        btns = btns.child(btn(ui, s().grow(), "Buy now", T_BUY_NOW, V::Primary, Sz::Lg, true, false));
-        let cart_label = if super::cart::contains(&c.id) { format!("In cart ({})", super::cart::count()) } else { "Add to cart".to_string() };
+        btns = btns.child(btn(ui, s().grow(), tr().market.buy_now, T_BUY_NOW, V::Primary, Sz::Lg, true, false));
+        let cart_label = if super::cart::contains(&c.id) { trf!(tr().market.in_cart, n = super::cart::count()) } else { tr().market.add_to_cart.to_string() };
         btns = btns.child(btn(ui, s(), &cart_label, T_CART, V::Secondary, Sz::Lg, false, false));
-        btns = btns.child(btn(ui, s(), "Open on rare.market", T_OPEN, V::Secondary, Sz::Lg, false, false));
+        btns = btns.child(btn(ui, s(), tr().market.open_on_rare_market, T_OPEN, V::Secondary, Sz::Lg, false, false));
     } else {
-        btns = btns.child(btn(ui, s().grow(), "Open on rare.market", T_OPEN, V::Secondary, Sz::Lg, true, false));
+        btns = btns.child(btn(ui, s().grow(), tr().market.open_on_rare_market, T_OPEN, V::Secondary, Sz::Lg, true, false));
     }
     boxx = boxx.child(btns);
     let semi = t(Ty::Body).w(500);
     let mut stats: Vec<(&str, El)> = Vec::new();
     if listing.is_some() {
-        stats.push(("All-in price", sui(ui, s(), total.as_deref(), 3, false, semi)));
+        stats.push((tr().market.all_in_price, sui(ui, s(), total.as_deref(), 3, false, semi)));
     }
     if floor.is_some() {
-        stats.push(("Floor price", sui(ui, s(), floor.as_deref(), 3, false, semi)));
+        stats.push((tr().market.floor_price, sui(ui, s(), floor.as_deref(), 3, false, semi)));
     }
     if let Some(d) = floor_diff(total.as_deref(), floor.as_deref()) {
-        stats.push(("Floor diff", ui.text(d, semi.tab())));
+        stats.push((tr().market.floor_diff, ui.text(d, semi.tab())));
     }
     if let Some(o) = c.top_offer_mist.as_deref() {
-        stats.push(("Top offer", sui(ui, s(), Some(o), 3, false, semi)));
+        stats.push((tr().market.top_offer, sui(ui, s(), Some(o), 3, false, semi)));
     }
     if !stats.is_empty() {
         let n = stats.len();
@@ -233,14 +234,14 @@ pub fn view(ui: &mut Ui, a: &Answers, id: &str, card: Option<&ItemCard>, thumb: 
             traits = traits.child(g);
         }
         None if pending => traits = traits.child(ui.bx(s().h(5.0))),
-        None => traits = traits.child(empty(ui, "No traits", None, None, true)),
+        None => traits = traits.child(empty(ui, tr().market.no_traits, None, None, true)),
     }
 
     // ---- activity
     let ev = a.page::<MarketEvent>(&paths::events(&EventQuery { item: Some(id), ..Default::default() }, 12));
     let mut act = ui.bx(bw(s().col().p(0.5), 1.0)).bg(tok::L2).radius(ui.r(0.5)).border(1.0, BORDER);
     match ev {
-        Some(p) if p.data.is_empty() => act = act.child(empty(ui, "No activity yet", None, None, true)),
+        Some(p) if p.data.is_empty() => act = act.child(empty(ui, tr().market.no_activity, None, None, true)),
         p => {
             act = act.child(event_head(ui, false));
             for (i, e) in p.map(|p| p.data).unwrap_or_default().iter().enumerate() {
@@ -255,9 +256,9 @@ pub fn view(ui: &mut Ui, a: &Answers, id: &str, card: Option<&ItemCard>, thumb: 
         .child(ui.text(c.name.clone(), t(XL2).w(700)))
         .child(meta)
         .child(boxx)
-        .child(h2(ui, "Traits"))
+        .child(h2(ui, tr().market.traits))
         .child(traits)
-        .child(h2(ui, "Activity"))
+        .child(h2(ui, tr().market.activity))
         .child(act);
     if let Some(d) = item.description.as_deref().filter(|d| !d.is_empty()) {
         right = right.child(ui.text_s(s().pt(1.0), d.to_string(), t(SM).c(tok::MUTED).wrap()));
@@ -373,13 +374,13 @@ impl MkPage for ItemPage {
 
     fn hints(&self) -> Vec<(&'static str, String)> {
         if self.buying {
-            vec![("a", "Select".into()), ("b", "Close".into())]
+            vec![("a", tr().common.select.into()), ("b", tr().common.close.into())]
         } else {
-            let mut h = vec![("a", "Select".to_string())];
+            let mut h = vec![("a", tr().common.select.to_string())];
             if super::cart::count() > 0 {
-                h.push(("start", format!("Cart ({})", super::cart::count())));
+                h.push(("start", trf!(tr().market.cart_hint, n = super::cart::count())));
             }
-            h.extend([("y", "Search".to_string()), ("b", "Back".into())]);
+            h.extend([("y", tr().common.search.to_string()), ("b", tr().common.back.into())]);
             h
         }
     }

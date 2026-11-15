@@ -6,6 +6,7 @@
 
 use super::extras_data::{self as data, Dlc, NewsItem, ParaKind, Remote, Source};
 use crate::act::Act;
+use rare_i18n::{tr, trf};
 use crate::data::model::Game;
 use crate::kit::{self, s, tok, ArtFit, Btn as B, BtnIcon, Ty, Ui, T};
 use crate::page::{Acts, Btn, Feedback, Fx};
@@ -185,7 +186,7 @@ impl Extras {
             MANUAL => {
                 let url = self.inner.lock().unwrap().remote.as_ref().and_then(|r| r.manual.clone());
                 if let Some(u) = url {
-                    st.toast("Opening the manual", Tone::Info, now);
+                    st.toast(tr().game.opening_manual, Tone::Info, now);
                     fx.run(Act::OpenWeb(u));
                 }
             }
@@ -214,14 +215,14 @@ impl Extras {
                     if let Err(e) = r {
                         log::warn!("steam store {id}: {e}");
                         st.handoff_until = None;
-                        st.toast("Couldn't open Steam. Try again.", Tone::Error, now);
+                        st.toast(tr().game.steam_open_failed, Tone::Error, now);
                     }
                 })
             });
             return;
         }
         if st.is_running(&g.id) {
-            st.toast("Close the game first to change its DLC.", Tone::Info, now);
+            st.toast(tr().game.dlc_close_first, Tone::Info, now);
             return;
         }
         let on = off;
@@ -241,7 +242,7 @@ impl Extras {
             }
             Self::bump(&ver);
             Box::new(move |st: &mut State, now| match r {
-                Ok(()) => st.toast(if on { format!("{name} is on") } else { format!("{name} is off") }, Tone::Info, now),
+                Ok(()) => st.toast(if on { trf!(tr().game.dlc_on, name = name) } else { trf!(tr().game.dlc_off, name = name) }, Tone::Info, now),
                 Err(e) => {
                     log::warn!("dlc {appid}/{}: {e}", d.appid);
                     st.toast(e, Tone::Error, now);
@@ -333,7 +334,7 @@ impl Extras {
                     inn.shots.retain(|s| s.id != c.id);
                     inn.shots.len()
                 };
-                st.toast("Screenshot deleted", Tone::Info, now);
+                st.toast(tr().game.shot_deleted, Tone::Info, now);
                 if left == 0 {
                     self.mode = Mode::Page;
                     self.back_to = None;
@@ -345,7 +346,7 @@ impl Extras {
             }
             Err(e) => {
                 log::warn!("delete {}: {e}", c.id);
-                st.toast("Couldn't delete that screenshot.", Tone::Error, now);
+                st.toast(tr().game.shot_delete_failed, Tone::Error, now);
             }
         }
     }
@@ -363,18 +364,18 @@ impl Extras {
         match self.mode {
             Mode::Page => None,
             Mode::Viewer(_) => Some(vec![
-                hint(Key::Lb, "Previous"),
-                hint(Key::Rb, "Next"),
-                hint(Key::X, if self.armed.is_some() { "Press again to delete" } else { "Delete" }),
-                hint(Key::Y, "Share"),
-                hint(Key::B, "Back"),
+                hint(Key::Lb, tr().game.previous),
+                hint(Key::Rb, tr().common.next),
+                hint(Key::X, if self.armed.is_some() { tr().game.press_again_delete } else { tr().common.delete }),
+                hint(Key::Y, tr().common.share),
+                hint(Key::B, tr().common.back),
             ]),
             Mode::Reader(_) => {
                 let mut v = Vec::new();
                 if self.reading().is_some_and(|n| !n.url.is_empty()) {
-                    v.push(hint(Key::Y, "Open in browser"));
+                    v.push(hint(Key::Y, tr().game.open_in_browser));
                 }
-                v.push(hint(Key::B, "Back"));
+                v.push(hint(Key::B, tr().common.back));
                 Some(v)
             }
         }
@@ -437,29 +438,29 @@ impl Extras {
                     let t = tag(acts, SHOT + i as u32);
                     let pic = kit::art(ui, s().fill(), &[c.path.clone()], 16.0, 9.0, ArtFit::Cover(0.5), None);
                     let b = ui.bx(s().wh(16.0, 9.0)).bg(tok::L2).radius(ui.r(0.5)).clip().child(pic);
-                    kit::nav(kit::tile(b, 1.06), t, Some("View"), None, false).key(key(&c.id))
+                    kit::nav(kit::tile(b, 1.06), t, Some(tr().common.view), None, false).key(key(&c.id))
                 })
                 .collect();
             let n = inn.shots.len().to_string();
-            col.push(kit::rail(ui, s(), "game-shots", Some("Screenshots"), Some(&n), tiles).key(key("game-shots")));
+            col.push(kit::rail(ui, s(), "game-shots", Some(tr().game.screenshots), Some(&n), tiles).key(key("game-shots")));
         }
         if let Some(r) = inn.remote.as_ref() {
             // News.
             if !r.news.is_empty() {
-                let label = if matches!(inn.src, Some(Source::Sui(_))) { "Updates" } else { "News" };
+                let label = if matches!(inn.src, Some(Source::Sui(_))) { tr().game.updates } else { tr().game.news };
                 let cards: Vec<El> = r.news.iter().enumerate().map(|(i, n)| news_card(ui, acts, &mut tag, i, n)).collect();
                 col.push(kit::rail(ui, s(), "game-news", Some(label), None, cards).key(key("game-news")));
             }
             // DLC.
             if !r.dlc.is_empty() && steam_appid(g).is_some() {
                 let owned = r.dlc.iter().filter(|d| inn.dlc.owned(d.appid)).count();
-                let note = if owned > 0 { format!("{owned} of {} owned", r.dlc.len()) } else { format!("{} in the store", r.dlc.len()) };
+                let note = if owned > 0 { trf!(tr().game.dlc_owned, owned = owned, n = r.dlc.len()) } else { trf!(tr().game.dlc_in_store, n = r.dlc.len()) };
                 let mut list: Vec<(usize, &Dlc)> = r.dlc.iter().enumerate().collect();
                 // Owned first, then the store's order.
                 list.sort_by_key(|(i, d)| (!inn.dlc.owned(d.appid), *i));
                 let running = st.is_running(&g.id);
                 let cards: Vec<El> = list.into_iter().map(|(i, d)| dlc_card(ui, acts, &mut tag, i, d, &inn.dlc, inn.busy, running)).collect();
-                col.push(kit::rail(ui, s(), "game-dlc", Some("DLC"), Some(&note), cards).key(key("game-dlc")));
+                col.push(kit::rail(ui, s(), "game-dlc", Some(tr().game.dlc), Some(&note), cards).key(key("game-dlc")));
             }
             // Manual.
             if r.manual.is_some() {
@@ -469,9 +470,9 @@ impl Extras {
                     .bg(tok::L1)
                     .radius(ui.r(0.5))
                     .child(kit::icon(ui, "book-open", 1.4, tok::fg(0.8)))
-                    .child(ui.text_s(s().mt_auto(), "Game manual", T::new(Ty::Body).w(600)))
-                    .child(ui.text("Opens in the browser", T::new(Ty::Meta).c(tok::MUTED)));
-                col.push(kit::rail(ui, s(), "game-guides", Some("Manual"), None, vec![kit::nav(kit::tile(c, 1.03), t, Some("Read"), None, false)]).key(key("game-guides")));
+                    .child(ui.text_s(s().mt_auto(), tr().game.game_manual, T::new(Ty::Body).w(600)))
+                    .child(ui.text(tr().game.opens_in_browser, T::new(Ty::Meta).c(tok::MUTED)));
+                col.push(kit::rail(ui, s(), "game-guides", Some(tr().game.manual), None, vec![kit::nav(kit::tile(c, 1.03), t, Some(tr().game.read), None, false)]).key(key("game-guides")));
             }
         }
         drop(inn);
@@ -488,14 +489,14 @@ fn shots_of(id: &str) -> Vec<Capture> {
 
 fn news_card(ui: &mut Ui, acts: &mut Acts, tag: &mut impl FnMut(&mut Acts, u32) -> u32, i: usize, n: &NewsItem) -> El {
     let t = tag(acts, NEWS + i as u32);
-    let head = format!("{} \u{b7} {}", n.feed, data::date_label(n.date));
+    let head = format!("{} \u{b7} {}", data::feed_text(&n.feed), data::date_label(n.date));
     let c = ui
         .bx(s().col().w(22.0).h(9.0).p(1.0).gap(0.35))
         .bg(tok::L1)
         .radius(ui.r(0.5))
         .child(ui.text(head.trim_end_matches(" \u{b7} ").to_string(), T::new(Ty::Label).w(500).c(tok::MUTED).trunc()))
         .child(ui.text_s(s().wp(1.0), n.title.clone(), T::new(Ty::Body).w(600).wrap().clamp(3)));
-    kit::nav(kit::tile(c, 1.03), t, Some("Read"), None, false).key(key(&n.id))
+    kit::nav(kit::tile(c, 1.03), t, Some(tr().game.read), None, false).key(key(&n.id))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -504,15 +505,15 @@ fn dlc_card(ui: &mut Ui, acts: &mut Acts, tag: &mut impl FnMut(&mut Acts, u32) -
     let owned = st.owned(d.appid);
     let off = st.disabled.contains(&d.appid);
     let (line, a) = if busy == Some(d.appid) {
-        ("Changing, Steam restarts".to_string(), None)
+        (tr().game.dlc_changing.to_string(), None)
     } else if off {
-        ("Turned off".to_string(), (!running).then_some("Turn on"))
+        (tr().game.dlc_turned_off.to_string(), (!running).then_some(tr().common.turn_on))
     } else if st.switchable(d.appid) {
-        ("Installed".to_string(), (!running).then_some("Turn off"))
+        (tr().common.installed.to_string(), (!running).then_some(tr().common.turn_off))
     } else if owned {
-        ("Owned".to_string(), Some("View in Steam"))
+        (tr().game.dlc_owned_one.to_string(), Some(tr().game.view_in_steam))
     } else {
-        (d.price.clone().unwrap_or_else(|| "In the Steam store".into()), Some("View in Steam"))
+        (d.price.clone().map(|p| if p == "Free" { tr().game.dlc_free.to_string() } else { p }).unwrap_or_else(|| tr().game.dlc_store_one.into()), Some(tr().game.view_in_steam))
     };
     let pic = kit::art(ui, s().fill(), &d.art, 18.0, 8.4, ArtFit::Cover(0.5), Some(ui.bx(s().fill()).bg(tok::L2)));
     let mut art = ui.bx(s().wh(18.0, 8.4)).bg(tok::L2).clip().child(pic);
@@ -534,10 +535,10 @@ fn viewer(ui: &mut Ui, acts: &mut Acts, g: &Game, c: &Capture, i: usize, n: usiz
     let (w, h) = (ui.w / ui.rem, ui.h / ui.rem);
     let pic = kit::art(ui, s().fill(), &[c.path.clone()], w, h - 3.0, ArtFit::Contain(0.5, 0.5), None);
     let when = data::date_label((c.created_ms / 1000) as i64);
-    let line = format!("{} \u{b7} {} of {n}{}", g.title, i + 1, if when.is_empty() { String::new() } else { format!(" \u{b7} {when}") });
+    let line = format!("{}{}", trf!(tr().game.viewer_pos, game = g.title, i = i + 1, n = n), if when.is_empty() { String::new() } else { format!(" \u{b7} {when}") });
     let mut cap = ui.bx(s().abs(None, None, Some(0.75), Some(2.5)).row().items_center().gap(0.75).px(1.0).py(0.5)).bg(tok::BG.alpha(0.75)).radius(ui.r(0.5)).child(ui.text(line, T::new(Ty::Small).w(500).c(tok::fg(0.85))));
     if armed {
-        cap = cap.child(ui.text("Press X again to delete", T::new(Ty::Small).w(600).c(tok::ATTN)));
+        cap = cap.child(ui.text(tr().game.press_x_delete, T::new(Ty::Small).w(600).c(tok::ATTN)));
     }
     // The caption sits inside the focused picture so it draws over it.
     let t = acts.game(Act::Local(STILL), &g.id);
@@ -546,14 +547,14 @@ fn viewer(ui: &mut Ui, acts: &mut Acts, g: &Game, c: &Capture, i: usize, n: usiz
 }
 
 fn reader(ui: &mut Ui, acts: &mut Acts, n: &NewsItem) -> El {
-    let head = format!("{} \u{b7} {}", n.feed, data::date_label(n.date));
+    let head = format!("{} \u{b7} {}", data::feed_text(&n.feed), data::date_label(n.date));
     let mut col = ui
         .bx(s().col().gap(0.5).wp(1.0).max_w(52.0))
         .child(ui.text(head.trim_end_matches(" \u{b7} ").to_string(), T::new(Ty::Small).w(500).c(tok::MUTED)))
         .child(ui.text_s(s().wp(1.0).mb(1.0), n.title.clone(), T::new(Ty::Px(2.0, 2.5)).w(700).wrap()));
     if n.body.is_empty() {
         let t = acts.tag(Act::Local(PARA));
-        col = col.child(kit::nav(kit::row_look(ui.bx(s().px(0.75).py(0.5)).radius(ui.r(0.5)).child(ui.text_s(s().wp(1.0), "This post has no text here. Y opens it in the browser.", T::new(Ty::Body).c(tok::MUTED).wrap()))), t, None, None, true));
+        col = col.child(kit::nav(kit::row_look(ui.bx(s().px(0.75).py(0.5)).radius(ui.r(0.5)).child(ui.text_s(s().wp(1.0), tr().game.post_no_text, T::new(Ty::Body).c(tok::MUTED).wrap()))), t, None, None, true));
     }
     for (k, p) in n.body.iter().enumerate().take(400) {
         let t = acts.tag(Act::Local(PARA + k as u32));
@@ -567,7 +568,7 @@ fn reader(ui: &mut Ui, acts: &mut Acts, n: &NewsItem) -> El {
         col = col.child(kit::nav(kit::row_look(el), t, None, None, k == 0));
     }
     if !n.url.is_empty() {
-        let b = kit::button(ui, B::new("Open in browser", acts.tag(Act::OpenWeb(n.url.clone()))).ghost().icon(BtnIcon::Lucide("external-link", 1.0, false)));
+        let b = kit::button(ui, B::new(tr().game.open_in_browser, acts.tag(Act::OpenWeb(n.url.clone()))).ghost().icon(BtnIcon::Lucide("external-link", 1.0, false)));
         col = col.child(ui.bx(s().row().mt(1.25)).child(b));
     }
     ui.bx(s().fill())

@@ -4,6 +4,7 @@
 
 use crate::screens::wallet::kit::{btn, field, pin_pad, pin_press, sheet, FieldSpec, PinPadSpec, SheetSpec, Variant};
 use crate::screens::wallet::markup::*;
+use rare_i18n::{tr, trf, trn};
 
 const MAX_TRIES: u32 = 5;
 
@@ -11,16 +12,17 @@ const MAX_TRIES: u32 = 5;
 pub fn wrong_message(failures: Option<u32>, what: &str) -> String {
     let n = failures.unwrap_or(0);
     let left = MAX_TRIES.saturating_sub(n).max(1);
-    format!("Wrong {what}. {left} {} before a wait.", if left == 1 { "try" } else { "tries" })
+    let s = if what == "passphrase" { tr().wallet_sign.wrong_passphrase } else { tr().wallet_sign.wrong_pin };
+    trn!(s, left)
 }
 
 /// `waitText`: "12 s", "2 min".
 pub fn wait_text(ms: u64) -> String {
     let s = ms.div_ceil(1000).max(1);
     if s >= 60 {
-        format!("{} min", s.div_ceil(60))
+        trn!(tr().wallet_sign.wait_minutes, s.div_ceil(60))
     } else {
-        format!("{s} s")
+        trn!(tr().wallet_sign.wait_seconds, s)
     }
 }
 
@@ -88,22 +90,22 @@ pub fn view(pending: &Pending, kind: VaultKind, st: &State, now: u64) -> El<Msg>
     let wait = st.until.saturating_sub(now);
     let waiting = st.until > 0 && wait > 0;
     let entry = match kind {
-        VaultKind::Passphrase => div("w-full").kid(field(FieldSpec { label: Some("Passphrase"), value: &st.value, secret: true, def: true, ..Default::default() }, Msg::Type)),
+        VaultKind::Passphrase => div("w-full").kid(field(FieldSpec { label: Some(tr().wallet_sign.passphrase), value: &st.value, secret: true, def: true, ..Default::default() }, Msg::Type)),
         VaultKind::Pin => pin_pad(PinPadSpec { value: &st.value, disabled: st.busy || waiting, ..Default::default() }, Msg::Key).on_pad("x", Msg::Key("back")).on_pad("start", Msg::Key("ok")),
     };
     let status = if waiting {
-        Some(p("max-w-[26rem] text-center text-sm text-secondary").role("status").text(format!("Too many tries. Try again in {}.", wait_text(wait))))
+        Some(p("max-w-[26rem] text-center text-sm text-secondary").role("status").text(trf!(tr().wallet_sign.too_many_tries, wait = wait_text(wait))))
     } else {
         st.error.as_ref().map(|e| p("max-w-[26rem] text-center text-sm text-negative").role("status").text(e))
     };
     let mut footer = Vec::new();
     if pending.phone {
-        footer.push(btn(pending.phone_label.as_deref().unwrap_or("Use my phone instead"), Variant::Secondary, "flex-1", Some(Msg::Phone)));
+        footer.push(btn(pending.phone_label.as_deref().unwrap_or(tr().wallet_sign.use_phone_instead), Variant::Secondary, "flex-1", Some(Msg::Phone)));
     }
-    footer.push(btn("Cancel", Variant::Secondary, "flex-1", Some(Msg::Cancel)));
+    footer.push(btn(tr().common.cancel, Variant::Secondary, "flex-1", Some(Msg::Cancel)));
     sheet(
         SheetSpec {
-            title: pending.title.clone().unwrap_or_else(|| "Unlock Rare Wallet".into()),
+            title: pending.title.clone().unwrap_or_else(|| tr().wallet_sign.unlock_wallet_title.into()),
             subtitle: None,
             icon: None,
             footer: Some(footer),
@@ -167,7 +169,7 @@ pub fn on_result(st: &mut State, kind: VaultKind, res: Result<(), UnlockError>, 
                 UnlockError::Wrong { retry_after_ms, .. } if retry_after_ms > 0 => st.until = now + retry_after_ms,
                 UnlockError::Wrong { failures, .. } => st.error = Some(wrong_message(failures, if kind == VaultKind::Passphrase { "passphrase" } else { "PIN" })),
                 UnlockError::Throttled { retry_after_ms } => st.until = now + retry_after_ms.unwrap_or(5000),
-                UnlockError::Other(m) => st.error = Some(m.unwrap_or_else(|| "Could not unlock".into())),
+                UnlockError::Other(m) => st.error = Some(m.unwrap_or_else(|| tr().wallet_sign.could_not_unlock.into())),
             }
         }
     }

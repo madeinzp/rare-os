@@ -2,6 +2,7 @@
 //! when the player already has games for it, its size; Set up (the ticked ones), All, or Later.
 //! The same choice is in Library, Emulation.
 
+use rare_i18n::{tr, trn};
 use super::kit::step;
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::ui::{button_el, BSize, BVariant, ButtonSpec};
@@ -22,10 +23,9 @@ fn sub(c: &Choice) -> String {
         return s;
     }
     s.push_str(&format!(" \u{b7} {} MB", c.size_mb));
-    match c.roms {
-        0 => {}
-        1 => s.push_str(" \u{b7} 1 game"),
-        n => s.push_str(&format!(" \u{b7} {n} games")),
+    if c.roms > 0 {
+        s.push_str(" \u{b7} ");
+        s.push_str(&trn!(tr().common.games_n, c.roms));
     }
     s
 }
@@ -37,7 +37,7 @@ fn row(c: &Choice, on: bool, first: bool) -> El<Msg> {
         .attr("aria-checked", (on || c.installed).to_string())
         .key(&c.id)
         .kid(span("min-w-0 flex-1").kid(span("block truncate text-body font-semibold").text(&c.plays)).kid(span("mt-[0.15rem] block truncate text-small text-muted").text(sub(c))))
-        .kid(if c.installed { span("shrink-0 text-small text-muted").text("Installed") } else { check(on) })
+        .kid(if c.installed { span("shrink-0 text-small text-muted").text(tr().common.installed) } else { check(on) })
 }
 
 /// A tick box: filled with a check when on.
@@ -57,31 +57,30 @@ pub fn view(choices: &[Choice], picked: &[String]) -> El<Msg> {
     let size = size_text(choices, picked);
     let content = vec![div("flex flex-col gap-[0.5rem]").attr("data-nav-group", "emu-choice").attr("data-nav-remember", "").kids(rows)];
     let note = if all_in {
-        "Every emulator is installed. Controls are set for the SuiPlay's buttons.".to_string()
+        tr().firstrun.emu_all_installed.to_string()
     } else if n == 0 {
-        "Nothing ticked. Tick the systems you play, or set up everything.".to_string()
+        tr().firstrun.emu_nothing_ticked.to_string()
     } else {
         size
     };
     let label = match n {
-        0 => "Set up".to_string(),
-        1 => "Set up 1 emulator".to_string(),
-        n => format!("Set up {n} emulators"),
+        0 => tr().firstrun.set_up.to_string(),
+        n => trn!(tr().firstrun.set_up_n, n),
     };
     let actions = if all_in {
-        vec![button_el(ButtonSpec::new("Continue").v(BVariant::Primary).size(BSize::Lg).def(true), Some(Msg::Later))]
+        vec![button_el(ButtonSpec::new(tr().common.continue_).v(BVariant::Primary).size(BSize::Lg).def(true), Some(Msg::Later))]
     } else {
         vec![
             button_el(ButtonSpec::new(&label).v(BVariant::Primary).size(BSize::Lg).disabled(n == 0), (n > 0).then_some(Msg::Now)),
-            button_el(ButtonSpec::new("All").v(BVariant::Ghost).size(BSize::Lg), Some(Msg::All)),
-            button_el(ButtonSpec::new("Later").v(BVariant::Ghost).size(BSize::Lg), Some(Msg::Later)),
+            button_el(ButtonSpec::new(tr().common.all).v(BVariant::Ghost).size(BSize::Lg), Some(Msg::All)),
+            button_el(ButtonSpec::new(tr().firstrun.later).v(BVariant::Ghost).size(BSize::Lg), Some(Msg::Later)),
         ]
     };
     let mut actions = actions;
     actions.push(span("ml-[0.5rem] min-w-0 flex-1 truncate text-small text-muted").text(note));
     step(
-        text("Emulators"),
-        Some(text("Rare installs the emulators for the systems you pick and sets every button for the SuiPlay. Games you copy into Emulation/roms show up in Library. You can change this any time in Library, Emulation.")),
+        text(tr().firstrun.emulators_title),
+        Some(text(tr().firstrun.emulators_body)),
         content,
         actions,
         false,

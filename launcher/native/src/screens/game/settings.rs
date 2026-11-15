@@ -3,12 +3,13 @@
 //! Controls, and the Steam Deck / ProtonDB line.
 
 use crate::act::Act;
+use rare_i18n::{tr, trf};
 use crate::data::compat::Compat;
 use crate::data::gameset;
 use crate::data::model::Game;
 use crate::kit::{self, s, tok, Btn as B, Ty, Ui, T};
 use crate::page::{Acts, Feedback, Fx};
-use crate::screens::settings::controls::ACTIONS;
+use crate::screens::settings::controls::actions;
 use crate::state::{OptionItem, OptionsSpec, State, Tone};
 use rare_render::focus::Group;
 use rare_render::view::El;
@@ -22,7 +23,7 @@ const ARGS: u32 = 1001;
 const ENV: u32 = 1002;
 const LC: u32 = 1010;
 const RC: u32 = 1011;
-/// + 0 follows Settings, + 1.. is ACTIONS[i - 1].
+/// + 0 follows Settings, + 1.. is actions()[i - 1].
 const LC_PICK: u32 = 1100;
 const RC_PICK: u32 = 1200;
 
@@ -91,7 +92,7 @@ pub fn compat_texts(sh: &Shared) -> Vec<String> {
 }
 
 fn action_label(a: Option<&str>) -> &'static str {
-    a.and_then(|a| ACTIONS.iter().find(|(k, _)| *k == a)).map(|(_, l)| *l).unwrap_or("Capture")
+    a.and_then(|a| actions().into_iter().find(|(k, _)| *k == a)).map(|(_, l)| l).unwrap_or(tr().game.action_capture)
 }
 
 /// What Settings > Controls has for LC or RC.
@@ -107,7 +108,7 @@ fn global(lc: bool) -> String {
 fn short(v: &str) -> String {
     let v = v.trim();
     if v.is_empty() {
-        return "None".into();
+        return tr().common.none.into();
     }
     if v.chars().count() > 26 {
         format!("{}\u{2026}", v.chars().take(25).collect::<String>())
@@ -129,34 +130,34 @@ pub fn view(ui: &mut Ui, sh: &Shared, acts: &mut Acts, g: &Game) -> Option<El> {
         (i.steam.clone(), i.loaded, i.saving)
     };
     let label = |ui: &mut Ui, t: &str| ui.text_s(s().mr(0.4).w(7.5), t.to_string(), T::new(Ty::Small).w(600));
-    let mut launch = vec![label(ui, "Launch options")];
+    let mut launch = vec![label(ui, tr().game.launch_options)];
     if steam.is_some() {
         // Always a button, so the row keeps its height while Steam's file is read.
         let b = match (&steam_opts, loaded) {
-            (Some(v), _) => Some(B::new(short(v), acts.tag(Act::Local(STEAM_OPTS))).disabled(saving).hint("Edit")),
-            (None, false) => Some(B::new("Reading Steam", acts.tag(Act::None)).disabled(true)),
+            (Some(v), _) => Some(B::new(short(v), acts.tag(Act::Local(STEAM_OPTS))).disabled(saving).hint(tr().common.edit)),
+            (None, false) => Some(B::new(tr().game.reading_steam, acts.tag(Act::None)).disabled(true)),
             // No Steam to edit: say so, no button that can't be pressed.
             (None, true) => None,
         };
         match b {
             Some(b) => launch.push(kit::button(ui, b.ghost())),
-            None => launch.push(ui.text("Steam isn't set up on this device.", T::new(Ty::Small).c(tok::MUTED))),
+            None => launch.push(ui.text(tr().game.no_steam, T::new(Ty::Small).c(tok::MUTED))),
         }
         if saving {
-            launch.push(ui.text("Restarting Steam", T::new(Ty::Meta).c(tok::MUTED)));
+            launch.push(ui.text(tr().game.restarting_steam, T::new(Ty::Meta).c(tok::MUTED)));
         }
     } else {
-        launch.push(kit::button(ui, B::new(format!("Arguments: {}", short(&set.args)), acts.tag(Act::Local(ARGS))).ghost().hint("Edit")));
-        launch.push(kit::button(ui, B::new(format!("Environment: {}", short(&set.env)), acts.tag(Act::Local(ENV))).ghost().hint("Edit")));
+        launch.push(kit::button(ui, B::new(trf!(tr().game.arguments_value, value = short(&set.args)), acts.tag(Act::Local(ARGS))).ghost().hint(tr().common.edit)));
+        launch.push(kit::button(ui, B::new(trf!(tr().game.environment_value, value = short(&set.env)), acts.tag(Act::Local(ENV))).ghost().hint(tr().common.edit)));
     }
     let side = |lc: bool, v: &Option<String>| match v {
         Some(a) => action_label(Some(a)).to_string(),
-        None => format!("{} (Controls)", action_label(Some(&global(lc)))),
+        None => trf!(tr().game.action_global, action = action_label(Some(&global(lc)))),
     };
     let controls = vec![
-        label(ui, "Controls"),
-        kit::button(ui, B::new(format!("LC: {}", side(true, &set.lc)), acts.tag(Act::Local(LC))).ghost().hint("Change")),
-        kit::button(ui, B::new(format!("RC: {}", side(false, &set.rc)), acts.tag(Act::Local(RC))).ghost().hint("Change")),
+        label(ui, tr().game.controls),
+        kit::button(ui, B::new(trf!(tr().game.lc_value, value = side(true, &set.lc)), acts.tag(Act::Local(LC))).ghost().hint(tr().common.change)),
+        kit::button(ui, B::new(trf!(tr().game.rc_value, value = side(false, &set.rc)), acts.tag(Act::Local(RC))).ghost().hint(tr().common.change)),
     ];
     let row = |ui: &mut Ui, kids: Vec<El>| ui.bx(s().row().wrap().items_center().gap(0.5)).kids(kids);
     let a = row(ui, launch);
@@ -169,21 +170,21 @@ pub fn answers(sh: &Arc<Shared>, st: &mut State, fx: &mut Fx, g: &Game) {
     let now = rare_render::clock::secs();
     if let Some(Some(v)) = st.take_answer(ASK_ARGS) {
         gameset::update(&g.id, |s| s.args = v.trim().to_string());
-        st.toast("Saved. Used the next time the game starts.", Tone::Info, now);
+        st.toast(tr().game.saved_next_start, Tone::Info, now);
     }
     if let Some(Some(v)) = st.take_answer(ASK_ENV) {
         match gameset::parse_env(&v) {
             Ok(_) => {
                 gameset::update(&g.id, |s| s.env = v.trim().to_string());
-                st.toast("Saved. Used the next time the game starts.", Tone::Info, now);
+                st.toast(tr().game.saved_next_start, Tone::Info, now);
             }
-            Err(bad) => st.toast(format!("{bad} is not NAME=value. Nothing was saved."), Tone::Error, now),
+            Err(bad) => st.toast(trf!(tr().game.env_bad, bad = bad), Tone::Error, now),
         }
     }
     if let Some(Some(v)) = st.take_answer(ASK_STEAM) {
         let Some(appid) = steam_appid(g) else { return };
         if st.is_running(&g.id) || !st.running.is_empty() {
-            st.toast("Close the running game first.", Tone::Error, now);
+            st.toast(tr().game.close_running_first, Tone::Error, now);
             return;
         }
         let v = v.trim().to_string();
@@ -200,7 +201,7 @@ pub fn answers(sh: &Arc<Shared>, st: &mut State, fx: &mut Fx, g: &Game) {
                     }
                 });
                 match r {
-                    Ok(()) => st.toast("Launch options saved in Steam", Tone::Info, now),
+                    Ok(()) => st.toast(tr().game.steam_opts_saved, Tone::Info, now),
                     Err(e) => {
                         log::warn!("launch options: {e}");
                         st.toast(e, Tone::Error, now)
@@ -216,26 +217,26 @@ pub fn act(sh: &Shared, st: &mut State, fx: &mut Fx, g: &Game, code: u32) {
     match code {
         STEAM_OPTS => {
             let cur = sh.inner.lock().unwrap().steam.clone().unwrap_or_default();
-            st.ask_text(ASK_STEAM, "Steam launch options", cur, Some("DXVK_HUD=fps %command% -dx11"));
+            st.ask_text(ASK_STEAM, tr().game.steam_opts_title, cur, Some("DXVK_HUD=fps %command% -dx11"));
         }
-        ARGS => st.ask_text(ASK_ARGS, "Arguments for this game", gameset::get(&g.id).args, Some("-windowed -skipintro")),
-        ENV => st.ask_text(ASK_ENV, "Environment for this game", gameset::get(&g.id).env, Some("DXVK_HUD=fps PROTON_USE_WINED3D=1")),
+        ARGS => st.ask_text(ASK_ARGS, tr().game.args_title, gameset::get(&g.id).args, Some("-windowed -skipintro")),
+        ENV => st.ask_text(ASK_ENV, tr().game.env_title, gameset::get(&g.id).env, Some("DXVK_HUD=fps PROTON_USE_WINED3D=1")),
         LC | RC => {
             let lc = code == LC;
             let set = gameset::get(&g.id);
             let cur = if lc { set.lc } else { set.rc };
             let base = if lc { LC_PICK } else { RC_PICK };
-            let mut items = vec![OptionItem { label: format!("Same as Controls ({})", action_label(Some(&global(lc)))), on: Some(cur.is_none()), act: Act::Local(base) }];
-            for (i, (k, l)) in ACTIONS.iter().enumerate() {
+            let mut items = vec![OptionItem { label: trf!(tr().game.same_as_controls, action = action_label(Some(&global(lc)))), on: Some(cur.is_none()), act: Act::Local(base) }];
+            for (i, (k, l)) in actions().iter().enumerate() {
                 items.push(OptionItem { label: l.to_string(), on: Some(cur.as_deref() == Some(*k)), act: Act::Local(base + 1 + i as u32) });
             }
             fx.fb(Feedback::Open);
-            st.options = Some(OptionsSpec { title: format!("{} in {}", if lc { "LC" } else { "RC" }, g.title), sub: Some("Used while this game runs".into()), items });
+            st.options = Some(OptionsSpec { title: trf!(tr().game.button_in_game, button = if lc { "LC" } else { "RC" }, game = g.title), sub: Some(tr().game.used_while_running.into()), items });
         }
-        c if (LC_PICK..LC_PICK + 1 + ACTIONS.len() as u32).contains(&c) || (RC_PICK..RC_PICK + 1 + ACTIONS.len() as u32).contains(&c) => {
+        c if (LC_PICK..LC_PICK + 1 + actions().len() as u32).contains(&c) || (RC_PICK..RC_PICK + 1 + actions().len() as u32).contains(&c) => {
             let lc = c < RC_PICK;
             let i = (c - if lc { LC_PICK } else { RC_PICK }) as usize;
-            let v = if i == 0 { None } else { Some(ACTIONS[i - 1].0.to_string()) };
+            let v = if i == 0 { None } else { Some(actions()[i - 1].0.to_string()) };
             gameset::update(&g.id, |s| if lc { s.lc = v } else { s.rc = v });
         }
         _ => {}

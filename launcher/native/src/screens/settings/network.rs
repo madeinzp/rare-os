@@ -3,6 +3,7 @@
 use super::{config::Config, rows::*, SectionOut, SectionView};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
+use rare_i18n::{tr, trf};
 use rare_render::theme::tok;
 use rare_render::{Id, Node};
 
@@ -85,12 +86,13 @@ pub fn bars_for(signal: u32) -> u32 {
 /// The Wi-Fi row's line.
 pub fn wifi_body(net: Option<&NetStatus>) -> String {
     match net {
-        None => "Checking".into(),
-        Some(n) if !n.managed => "Managed outside Rare OS. Change networks in desktop mode.".into(),
+        None => tr().settings_more.net_checking.into(),
+        Some(n) if !n.managed => tr().settings_more.net_managed_outside.into(),
         Some(n) => match &n.wifi {
-            Some(w) => format!("Connected to {w}{}.", if n.online { "" } else { ", no internet" }),
-            None if n.online => "Connected to the internet.".into(),
-            None => "Not connected.".into(),
+            Some(w) if n.online => trf!(tr().settings_more.net_connected_to, name = w),
+            Some(w) => trf!(tr().settings_more.net_connected_no_internet, name = w),
+            None if n.online => tr().settings_more.net_connected_internet.into(),
+            None => tr().settings_more.net_not_connected.into(),
         },
     }
 }
@@ -100,14 +102,14 @@ pub fn bluetooth_body(bt: &Option<BluetoothAdapter>) -> &'static str {
     match bt {
         Some(b) if b.present => {
             if b.powered {
-                "On. Pair controllers and headphones below."
+                tr().settings_more.net_bt_on_body
             } else if b.blocked {
-                "Off, and blocked by a switch or airplane mode."
+                tr().settings_more.net_bt_blocked
             } else {
-                "Off."
+                tr().settings_more.net_bt_off
             }
         }
-        _ => "No Bluetooth adapter found on this device.",
+        _ => tr().settings_more.net_bt_none,
     }
 }
 
@@ -140,7 +142,7 @@ impl NetworkSection {
         let managed = info.net.as_ref().map(|n| n.managed).unwrap_or(false);
         let row_ = setting_row(cx, p1, "Wi-Fi", Some(&wifi_body(info.net.as_ref())), true);
         if managed {
-            let b = button(cx, row_.right, if info.scanning { "Scanning" } else { "Scan again" }, if info.scanning || info.joining.is_some() { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).hint("Scan").sid("wifi").tag(1);
+            let b = button(cx, row_.right, if info.scanning { tr().settings_more.net_scanning } else { tr().settings_more.net_scan_again }, if info.scanning || info.joining.is_some() { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).hint(tr().settings_more.net_scan).sid("wifi").tag(1);
             nav.add(b.group(10));
         }
         if let Some(e) = &info.error {
@@ -150,14 +152,14 @@ impl NetworkSection {
         }
         // A hotel or airport network that wants a sign-in (features/portal.rs).
         if managed && crate::features::portal::needs_sign_in() {
-            let pr = setting_row(cx, p1, "This network needs a sign-in", Some("Open its sign-in page to get online."), false);
-            let b = button(cx, pr.right, "Sign in", Variant::Secondary, Sz::Md, false).hint("Sign in").sid("wifi-portal").tag(5);
+            let pr = setting_row(cx, p1, tr().settings_more.net_needs_sign_in, Some(tr().settings_more.net_needs_sign_in_body), false);
+            let b = button(cx, pr.right, tr().common.sign_in, Variant::Secondary, Sz::Md, false).hint(tr().common.sign_in).sid("wifi-portal").tag(5);
             nav.add(b.group(10));
         }
         let active = info.nets.as_ref().and_then(|n| n.iter().find(|x| x.active)).cloned();
         if let (true, Some(a)) = (managed, &active) {
-            let fr = setting_row(cx, p1, "Forget this network", Some(&format!("{} is not joined automatically after this.", a.ssid)), false);
-            let b = button(cx, fr.right, "Forget", Variant::Secondary, Sz::Md, false).sid("wifi-forget").tag(2);
+            let fr = setting_row(cx, p1, tr().settings_more.net_forget_title, Some(&trf!(tr().settings_more.net_forget_body, name = a.ssid)), false);
+            let b = button(cx, fr.right, tr().settings_more.net_forget, Variant::Secondary, Sz::Md, false).sid("wifi-forget").tag(2);
             nav.add(b.group(10));
         }
         // Bluetooth
@@ -165,12 +167,12 @@ impl NetworkSection {
             let br = setting_row(cx, p1, "Bluetooth", Some(bluetooth_body(bt)), false);
             if let Some(b) = bt.as_ref().filter(|b| b.present) {
                 if !b.powered {
-                    let btn = button(cx, br.right, "Turn on", Variant::Secondary, Sz::Md, false).sid("bluetooth").tag(3);
+                    let btn = button(cx, br.right, tr().common.turn_on, Variant::Secondary, Sz::Md, false).sid("bluetooth").tag(3);
                     nav.add(btn.group(10));
                 } else {
                     let st = cx.scene.add(br.right, s().row().items_center().gap(0.5 * r).done(), Node::default());
                     dot(cx, st, tok::MUTED);
-                    text(cx, st, ty::SMALL, 400, tok::MUTED, "On");
+                    text(cx, st, ty::SMALL, 400, tok::MUTED, tr().common.on);
                 }
             }
         }
@@ -178,26 +180,26 @@ impl NetworkSection {
         if let Some(Some(b)) = &info.bt {
             if b.present && b.powered {
                 let p3 = panel(cx, parent);
-                let row_ = setting_row(cx, p3, "Devices", Some(if info.bt_scanning { "Looking for controllers and headphones. Put yours in pairing mode." } else { "Put a controller or headphones in pairing mode, then look for devices." }), true);
-                let btn = button(cx, row_.right, if info.bt_scanning { "Looking" } else { "Look for devices" }, if info.bt_scanning || info.bt_busy.is_some() { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).hint("Look for devices").sid("bt-scan").tag(4);
+                let row_ = setting_row(cx, p3, tr().settings_more.net_devices, Some(if info.bt_scanning { tr().settings_more.net_devices_looking } else { tr().settings_more.net_devices_idle }), true);
+                let btn = button(cx, row_.right, if info.bt_scanning { tr().settings_more.net_looking } else { tr().settings_more.net_look_for_devices }, if info.bt_scanning || info.bt_busy.is_some() { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).hint(tr().settings_more.net_look_for_devices).sid("bt-scan").tag(4);
                 nav.add(btn.group(10));
                 for (i, d) in info.bt_devices.iter().enumerate() {
                     let state = if info.bt_busy.as_deref() == Some(d.addr.as_str()) {
-                        "Working"
+                        tr().settings_more.net_working
                     } else if d.connected {
-                        "Connected"
+                        tr().common.connected
                     } else if d.paired {
-                        "Paired"
+                        tr().settings_more.net_paired
                     } else {
-                        "Not paired"
+                        tr().settings_more.net_not_paired
                     };
                     let r2 = setting_row(cx, p3, &d.name, Some(state), false);
-                    let label = if d.connected { "Disconnect" } else if d.paired { "Connect" } else { "Pair" };
+                    let label = if d.connected { tr().common.disconnect } else if d.paired { tr().common.connect } else { tr().settings_more.net_pair };
                     let v = if d.connected || info.bt_busy.is_some() { Variant::Dimmed } else { Variant::Secondary };
                     let v = if d.connected { Variant::Secondary } else { v };
                     nav.add(button(cx, r2.right, label, v, Sz::Md, false).hint(label).sid(&format!("bt:{}", d.addr)).tag(200 + i as u32).group(10));
                     if d.paired {
-                        nav.add(button(cx, r2.right, "Forget", Variant::Secondary, Sz::Md, false).hint("Forget").sid(&format!("btf:{}", d.addr)).tag(300 + i as u32).group(10));
+                        nav.add(button(cx, r2.right, tr().settings_more.net_forget, Variant::Secondary, Sz::Md, false).hint(tr().settings_more.net_forget).sid(&format!("btf:{}", d.addr)).tag(300 + i as u32).group(10));
                     }
                 }
             }
@@ -206,7 +208,7 @@ impl NetworkSection {
             let p2 = panel(cx, parent);
             let nets = info.nets.clone().unwrap_or_default();
             if nets.is_empty() && !info.scanning && info.nets.is_some() {
-                setting_row(cx, p2, "No networks found", Some("Move closer to your router, then scan again."), true);
+                setting_row(cx, p2, tr().settings_more.net_none_found, Some(tr().settings_more.net_none_found_body), true);
             }
             for (i, n) in nets.iter().enumerate() {
                 let row_ = cx.scene.add(p2, s().row().items_center().gap(1.0 * r).min_h(3.75 * r).wp(1.0).px(1.4 * r).py(0.7 * r).done(), Node::default());
@@ -217,16 +219,16 @@ impl NetworkSection {
                 cx.scene.add_text(cx.t, row_, s().grow().done(), &n.ssid, ts(r, ty::BODY.0, ty::BODY.1, 500).truncate(), tok::FG);
                 let joining_this = info.joining.as_deref() == Some(n.ssid.as_str());
                 if joining_this {
-                    text(cx, row_, ty::SMALL, 400, tok::MUTED, "Joining");
+                    text(cx, row_, ty::SMALL, 400, tok::MUTED, tr().settings_more.net_joining);
                 } else if n.active {
-                    text(cx, row_, ty::SMALL, 400, tok::MUTED, "Connected");
+                    text(cx, row_, ty::SMALL, 400, tok::MUTED, tr().common.connected);
                 } else if n.secure {
-                    text(cx, row_, ty::SMALL, 400, tok::MUTED, "Password");
+                    text(cx, row_, ty::SMALL, 400, tok::MUTED, tr().settings_more.net_password);
                 }
                 signal_bars(cx, row_, n.signal);
                 // The network in use is only shown (Forget this network above acts on it).
                 if !n.active {
-                    let hint = if info.joining.is_some() { "Joining" } else { "Join" };
+                    let hint = if info.joining.is_some() { tr().settings_more.net_joining } else { tr().settings_more.net_join };
                     nav.add(Focusable { id: row_, kind: Kind::Row, group: 11, hint: hint.into(), tag: 100 + i as u32, sid: format!("net:{}", n.ssid) });
                 }
             }
@@ -299,8 +301,8 @@ mod tests {
         assert_eq!(bluetooth_body(&None), "No Bluetooth adapter found on this device.");
         let b = |p, w, bl| Some(BluetoothAdapter { present: p, powered: w, blocked: bl });
         assert_eq!(bluetooth_body(&b(false, false, false)), "No Bluetooth adapter found on this device.");
-        assert_eq!(bluetooth_body(&b(true, true, false)), "On. Pair controllers and headphones below.");
-        assert_eq!(bluetooth_body(&b(true, false, true)), "Off, and blocked by a switch or airplane mode.");
+        assert_eq!(bluetooth_body(&b(true, true, false)), tr().settings_more.net_bt_on_body);
+        assert_eq!(bluetooth_body(&b(true, false, true)), tr().settings_more.net_bt_blocked);
         assert_eq!(bluetooth_body(&b(true, false, false)), "Off.");
     }
 }

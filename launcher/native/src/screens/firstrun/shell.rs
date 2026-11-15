@@ -4,17 +4,20 @@
 //! left, a 6 px dot per step top right (current white, done 40 %, next 15 %); B goes back a step,
 //! Y skips setup. The step on screen is saved in the config, so a restart resumes there.
 
+use rare_i18n::{tr, trf};
 use crate::screens::signin::brand_mark;
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::ui::{button_el, hint_el, load_bar, BSize, ButtonSpec, BVariant};
 
 pub const STEPS: [&str; 9] = ["welcome", "wifi", "time", "passkey", "picture", "steam", "stores", "emulators", "controller"];
 
-/// lib/locales.ts: English only for now.
-pub const LANGUAGES: [(&str, &str); 1] = [("en", "English")];
+/// The languages Rare ships, each in its own name.
+pub fn languages() -> impl Iterator<Item = (&'static str, &'static str)> {
+    rare_i18n::Lang::ALL.into_iter().map(|l| (l.code(), l.name()))
+}
 
 pub fn language_name(code: Option<&str>) -> &'static str {
-    LANGUAGES.iter().find(|(c, _)| Some(*c) == code).map(|(_, n)| *n).unwrap_or(LANGUAGES[0].1)
+    code.and_then(rare_i18n::Lang::from_code).unwrap_or(rare_i18n::Lang::En).name()
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -29,7 +32,7 @@ pub struct State {
 
 impl Default for State {
     fn default() -> Self {
-        State { i: 0, hist: Vec::new(), finishing: false, lang: "en".into(), picking_lang: false }
+        State { i: 0, hist: Vec::new(), finishing: false, lang: rare_i18n::lang().code().into(), picking_lang: false }
     }
 }
 
@@ -89,7 +92,7 @@ pub fn view_with<M: Clone>(st: &State, main: Option<El<M>>, act_live: bool, f: &
     }
     let dots = span("ml-auto flex items-center gap-[0.5rem]")
         .role("progressbar")
-        .label(&format!("Step {} of {}", st.i + 1, STEPS.len()))
+        .label(&trf!(tr().firstrun.step_of, n = st.i + 1, total = STEPS.len()))
         .kids(STEPS.iter().enumerate().map(|(k, s)| span(cn(&["h-[0.375rem] w-[0.375rem] rounded-full transition-colors duration-200", if k == st.i { "bg-fg" } else if k < st.i { "bg-fg/40" } else { "bg-fg/15" }])).key(*s)));
     root = root.kid(
         el(Tag::Div, "relative flex h-[4.5rem] shrink-0 items-center gap-[1.5rem] px-[4rem]")
@@ -98,21 +101,21 @@ pub fn view_with<M: Clone>(st: &State, main: Option<El<M>>, act_live: bool, f: &
             .kid(dots),
     );
     let body = if st.finishing {
-        div("flex h-full items-center text-row text-muted").kid(text("Getting your games ready")).kid(load_bar(true, "top-[4.5rem]"))
+        div("flex h-full items-center text-row text-muted").kid(text(tr().firstrun.getting_ready)).kid(load_bar(true, "top-[4.5rem]"))
     } else if let Some(m) = main {
         m
     } else {
         welcome_view(st).map(f)
     };
     root = root.kid(el(Tag::Div, "rise relative min-h-0 flex-1 px-[4rem]").attr("data-tag", "main").key(st.step()).kid(body));
-    let mut foot = el(Tag::Div, cn(&["relative flex h-[3rem] shrink-0 items-center justify-end gap-[1.5rem] px-[4rem] text-small text-fg/80", when(!welcome, "border-t border-hair")])).attr("data-tag", "footer").kid(hint_el("a", "Select"));
+    let mut foot = el(Tag::Div, cn(&["relative flex h-[3rem] shrink-0 items-center justify-end gap-[1.5rem] px-[4rem] text-small text-fg/80", when(!welcome, "border-t border-hair")])).attr("data-tag", "footer").kid(hint_el("a", tr().common.select));
     if st.i > 0 {
-        foot = foot.kid(hint_el("b", "Back"));
+        foot = foot.kid(hint_el("b", tr().common.back));
     }
     // The controller check lights Y instead (it is the last step: Continue finishes the same way).
     let skip = st.step() != "controller";
     if skip {
-        foot = foot.kid(hint_el("y", "Skip setup"));
+        foot = foot.kid(hint_el("y", tr().firstrun.skip_setup));
     }
     root = root.kid(foot);
     // A registered step handles B itself; the welcome's B does nothing.
@@ -129,23 +132,23 @@ fn main_is_welcome(st: &State) -> bool {
 
 fn welcome_view(st: &State) -> El<Msg> {
     let mut d = div("flex h-full max-w-[40rem] flex-col justify-center pb-[2rem]")
-        .kid(h1("text-[3.75rem] font-semibold leading-[1.02] tracking-[-0.04em]").text("Welcome to Rare OS"))
+        .kid(h1("text-[3.75rem] font-semibold leading-[1.02] tracking-[-0.04em]").text(tr().firstrun.welcome_title))
         .kid(
             div("mt-[2.5rem] flex flex-wrap gap-[0.75rem]")
                 .attr("data-nav-group", "firstrun-actions")
                 .attr("data-nav-remember", "")
-                .kid(button_el(ButtonSpec::new("Get started").v(BVariant::Primary).size(BSize::Lg).def(true).class("min-w-[11rem]"), Some(Msg::Next)))
-                .kid(button_el(ButtonSpec::new(language_name(Some(&st.lang))).size(BSize::Lg).v(BVariant::Ghost).hint("Language"), Some(Msg::PickLanguage))),
+                .kid(button_el(ButtonSpec::new(tr().firstrun.get_started).v(BVariant::Primary).size(BSize::Lg).def(true).class("min-w-[11rem]"), Some(Msg::Next)))
+                .kid(button_el(ButtonSpec::new(language_name(Some(&st.lang))).size(BSize::Lg).v(BVariant::Ghost).hint(tr().firstrun.language), Some(Msg::PickLanguage))),
         );
     if st.picking_lang {
-        d = d.kid(div("fade mt-[1rem] flex w-[22rem] flex-col gap-[0.4rem]").attr("data-nav-group", "firstrun-language").role("radiogroup").kids(LANGUAGES.iter().map(|(code, name)| {
-            let on = *code == st.lang;
+        d = d.kid(div("fade mt-[1rem] flex w-[22rem] flex-col gap-[0.4rem]").attr("data-nav-group", "firstrun-language").role("radiogroup").kids(languages().map(|(code, name)| {
+            let on = code == st.lang;
             button(cn(&["flex items-center justify-between rounded-card border px-[1.2rem] py-[0.8rem] text-left text-body", if on { "border-line-2 bg-l2" } else { "border-hair bg-l1" }]), Some(Msg::Language(code.to_string())))
                 .def(on)
                 .role("radio")
                 .attr("aria-checked", on.to_string())
-                .key(*code)
-                .kid(text(*name))
+                .key(code)
+                .kid(text(name))
                 .kid_if(on, || icon("check", "").attr("size", "1rem").attr("stroke-width", "2.5"))
         })));
     }

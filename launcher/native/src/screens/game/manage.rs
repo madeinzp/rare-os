@@ -3,6 +3,7 @@
 //! plain words on the same line, Rename (the keyboard) and Art (the art page).
 
 use crate::act::Act;
+use rare_i18n::{tr, trf};
 use crate::data::model::Game;
 use crate::features::gamemgmt::verify::{self, Phase, Status};
 use crate::features::gamemgmt::GamePerf;
@@ -69,16 +70,26 @@ fn can_check(g: &Game) -> bool {
 }
 
 const FPS: [Option<u32>; 5] = [None, Some(60), Some(30), Some(20), Some(15)];
-const MODES: [(Mode, &str); 3] = [(Mode::Off, "Off"), (Mode::Fsr, "FSR"), (Mode::Nis, "NIS")];
-const SHARP: [(u32, &str); 3] = [(4, "Soft"), (10, "Medium"), (16, "Sharp")];
+fn modes() -> [(Mode, &'static str); 3] {
+    [(Mode::Off, tr().common.off), (Mode::Fsr, "FSR"), (Mode::Nis, "NIS")]
+}
+fn sharp() -> [(u32, &'static str); 3] {
+    [(4, tr().game.sharp_soft), (10, tr().game.sharp_medium), (16, tr().game.sharp_sharp)]
+}
 const SIZES: [(u32, u32, &str); 3] = [(0, 0, "1200p"), (1280, 800, "800p"), (960, 600, "600p")];
 const HZ: [Option<u32>; 3] = [None, Some(60), Some(40)];
 /// Frame generation (lsfg-vk): multipliers (1 is off) and flow scales.
-const MULTS: [(u8, &str); 3] = [(1, "Off"), (2, "2x"), (3, "3x")];
+fn mults() -> [(u8, &'static str); 3] {
+    [(1, tr().common.off), (2, "2x"), (3, "3x")]
+}
 const FLOWS: [(u8, &str); 3] = [(50, "50%"), (75, "75%"), (100, "100%")];
 /// Filters (vkBasalt): CAS sharpening and the colour LUT.
-const SHARPEN: [&str; 4] = ["Off", "Low", "Medium", "High"];
-const COLOURS: [&str; 3] = ["Natural", "Vivid", "Bold"];
+fn sharpen_names() -> [&'static str; 4] {
+    [tr().common.off, tr().game.level_low, tr().game.sharp_medium, tr().game.level_high]
+}
+fn colour_names() -> [&'static str; 3] {
+    [tr().game.colour_natural, tr().game.colour_vivid, tr().game.colour_bold]
+}
 /// Rows from here on are frame generation and filters (notes go under them).
 const FX_ROWS: usize = 6;
 
@@ -103,33 +114,33 @@ fn now_of(p: &GamePerf) -> (GamePower, Upscale) {
 fn rows(p: &GamePerf) -> Vec<Row> {
     let (g, u) = now_of(p);
     let w = |x: f32| format!("{} W", x.round());
-    let mut power = vec![format!("Quiet {}", w(p.watts[0])), format!("Balanced {}", w(p.watts[1])), format!("Performance {}", w(p.watts[2]))];
+    let mut power = vec![trf!(tr().game.power_quiet_w, watts = w(p.watts[0])), trf!(tr().game.power_balanced_w, watts = w(p.watts[1])), trf!(tr().game.power_performance_w, watts = w(p.watts[2]))];
     let power_on = match g.profile {
         Profile::Quiet => Some(0),
         Profile::Balanced => Some(1),
         Profile::Performance => Some(2),
         Profile::Custom => {
-            power.push(format!("Custom {}", w(g.tdp.unwrap_or(15.0) as f32)));
+            power.push(trf!(tr().game.power_custom_w, watts = w(g.tdp.unwrap_or(15.0) as f32)));
             Some(3)
         }
     };
-    let sharp_on = SHARP.iter().enumerate().min_by_key(|(_, (v, _))| (*v as i64 - u.sharpness as i64).abs()).map(|(i, _)| i);
+    let sharp_on = sharp().iter().enumerate().min_by_key(|(_, (v, _))| (*v as i64 - u.sharpness as i64).abs()).map(|(i, _)| i);
     let fg = g.framegen.unwrap_or_default();
     let fl = g.filters.unwrap_or_default();
     let fg_usable = matches!(p.fx.framegen, FgStatus::Ready | FgStatus::OldBranch);
     let strs = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
     vec![
-        row("Power", power, power_on, false),
-        row("Frame limit", FPS.iter().map(|f| f.map(|n| format!("{n} fps")).unwrap_or_else(|| "Off".into())).collect(), FPS.iter().position(|f| *f == g.fps), false),
-        row("Upscaling", MODES.iter().map(|m| m.1.to_string()).collect(), MODES.iter().position(|m| m.0 == u.mode), false),
-        row("Sharpness", SHARP.iter().map(|m| m.1.to_string()).collect(), sharp_on.filter(|_| u.mode != Mode::Off), u.mode == Mode::Off),
-        row("Render size", SIZES.iter().map(|m| m.2.to_string()).collect(), SIZES.iter().position(|m| m.0 == u.width && m.1 == u.height), false),
-        row("Refresh rate", HZ.iter().map(|h| h.map(|n| format!("{n} Hz")).unwrap_or_else(|| "Screen default".into())).collect(), HZ.iter().position(|h| *h == g.refresh), false),
-        row("Frame generation", MULTS.iter().map(|m| m.1.to_string()).collect(), Some(MULTS.iter().position(|m| m.0 == fg.mult.min(3)).unwrap_or(0)).filter(|_| fg_usable), !fg_usable),
-        row("Flow scale", FLOWS.iter().map(|m| m.1.to_string()).collect(), FLOWS.iter().position(|m| m.0 == fg.flow).filter(|_| fg_usable && fg.on()), !(fg_usable && fg.on())),
-        row("Sharpening", strs(&SHARPEN), Some(fl.sharpen.min(3) as usize).filter(|_| p.fx.filters), !p.fx.filters),
-        row("Colour", strs(&COLOURS), Some(fl.color.min(2) as usize).filter(|_| p.fx.filters), !p.fx.filters),
-        Row { hidden: p.fx.reshade == 0 && !fl.reshade, ..row("ReShade", strs(&["Off", "On"]), Some(fl.reshade as usize).filter(|_| p.fx.filters), !p.fx.filters) },
+        row(tr().game.row_power, power, power_on, false),
+        row(tr().game.row_frame_limit, FPS.iter().map(|f| f.map(|n| format!("{n} fps")).unwrap_or_else(|| tr().common.off.into())).collect(), FPS.iter().position(|f| *f == g.fps), false),
+        row(tr().game.row_upscaling, modes().iter().map(|m| m.1.to_string()).collect(), modes().iter().position(|m| m.0 == u.mode), false),
+        row(tr().game.row_sharpness, sharp().iter().map(|m| m.1.to_string()).collect(), sharp_on.filter(|_| u.mode != Mode::Off), u.mode == Mode::Off),
+        row(tr().game.row_render_size, SIZES.iter().map(|m| m.2.to_string()).collect(), SIZES.iter().position(|m| m.0 == u.width && m.1 == u.height), false),
+        row(tr().game.row_refresh_rate, HZ.iter().map(|h| h.map(|n| format!("{n} Hz")).unwrap_or_else(|| tr().game.screen_default.into())).collect(), HZ.iter().position(|h| *h == g.refresh), false),
+        row(tr().game.row_frame_generation, mults().iter().map(|m| m.1.to_string()).collect(), Some(mults().iter().position(|m| m.0 == fg.mult.min(3)).unwrap_or(0)).filter(|_| fg_usable), !fg_usable),
+        row(tr().game.row_flow_scale, FLOWS.iter().map(|m| m.1.to_string()).collect(), FLOWS.iter().position(|m| m.0 == fg.flow).filter(|_| fg_usable && fg.on()), !(fg_usable && fg.on())),
+        row(tr().game.row_sharpening, strs(&sharpen_names()), Some(fl.sharpen.min(3) as usize).filter(|_| p.fx.filters), !p.fx.filters),
+        row(tr().game.row_colour, strs(&colour_names()), Some(fl.color.min(2) as usize).filter(|_| p.fx.filters), !p.fx.filters),
+        Row { hidden: p.fx.reshade == 0 && !fl.reshade, ..row("ReShade", strs(&[tr().common.off, tr().common.on]), Some(fl.reshade as usize).filter(|_| p.fx.filters), !p.fx.filters) },
     ]
 }
 
@@ -139,26 +150,26 @@ fn fx_notes(p: &GamePerf) -> (Vec<&'static str>, bool) {
     let mut v = Vec::new();
     let ask_steam = match p.fx.framegen {
         FgStatus::NoLayer => {
-            v.push("Frame generation comes with the next Rare OS update.");
+            v.push(tr().game.fx_no_layer);
             false
         }
         FgStatus::NoDll => {
-            v.push("Frame generation runs on Lossless Scaling, which you buy and install from Steam. Then pick its lsfg-vk beta in Steam: Properties, Betas.");
+            v.push(tr().game.fx_no_dll);
             true
         }
         FgStatus::OldBranch => {
-            v.push("Lossless Scaling is installed. If frame generation does not start, pick its lsfg-vk beta in Steam: Properties, Betas.");
+            v.push(tr().game.fx_old_branch);
             true
         }
         FgStatus::Ready => {
-            v.push("Frame generation works in Vulkan and Proton games. Turn it on before the game starts; 2x, 3x and Off then switch while you play.");
+            v.push(tr().game.fx_ready);
             false
         }
     };
     if p.fx.filters {
-        v.push("Sharpening, colour and ReShade apply the next time the game starts.");
+        v.push(tr().game.fx_filters_next);
         if p.fx.reshade == 0 && !g.filters.is_some_and(|f| f.reshade) {
-            v.push("For ReShade shaders, put .fx files in ~/.local/share/rare/reshade/Shaders.");
+            v.push(tr().game.fx_reshade_dir);
         }
     }
     (v, ask_steam)
@@ -174,11 +185,11 @@ fn pressed(p: &GamePerf, row: usize, i: usize) -> GamePower {
             None => g,
         },
         1 => GamePower { fps: FPS[i], ..g },
-        2 => GamePower { upscale: Some(Upscale { mode: MODES[i].0, ..u }), ..g },
-        3 => GamePower { upscale: Some(Upscale { sharpness: SHARP[i].0, ..u }), ..g },
+        2 => GamePower { upscale: Some(Upscale { mode: modes()[i].0, ..u }), ..g },
+        3 => GamePower { upscale: Some(Upscale { sharpness: sharp()[i].0, ..u }), ..g },
         4 => GamePower { upscale: Some(Upscale { width: SIZES[i].0, height: SIZES[i].1, ..u }), ..g },
         5 => GamePower { refresh: HZ[i], ..g },
-        6 => GamePower { framegen: Some(FrameGen { mult: MULTS[i].0, ..g.framegen.unwrap_or_default() }), ..g },
+        6 => GamePower { framegen: Some(FrameGen { mult: mults()[i].0, ..g.framegen.unwrap_or_default() }), ..g },
         7 => GamePower { framegen: Some(FrameGen { flow: FLOWS[i].0, ..g.framegen.unwrap_or_default() }), ..g },
         // Filters all off are no filters (nothing kept for them).
         8 => GamePower { filters: Some(Filters { sharpen: i as u8, ..g.filters.unwrap_or_default() }).filter(Filters::on), ..g },
@@ -237,25 +248,25 @@ impl Manage {
         let running = st.is_running(&g.id);
         let busy = self.verify.as_ref().is_some_and(|s| s.busy());
         let mut kids = vec![
-            ui.text_s(s().mr(0.4).w(7.5), "Manage", T::new(Ty::Small).w(600)),
+            ui.text_s(s().mr(0.4).w(7.5), tr().game.manage, T::new(Ty::Small).w(600)),
             {
                 let t = acts.tag(Act::Local(ACT_PERF));
                 self.perf_tag.set(Some(t));
-                kit::button(ui, B::new("Performance", t).ghost().hint("This game's performance"))
+                kit::button(ui, B::new(tr().game.performance, t).ghost().hint(tr().game.performance_hint))
             },
         ];
         if can_check(g) {
-            kids.push(kit::button(ui, B::new("Check files", acts.tag(Act::Local(ACT_CHECK))).ghost().disabled(busy || running).hint("Check files")));
+            kids.push(kit::button(ui, B::new(tr().game.check_files, acts.tag(Act::Local(ACT_CHECK))).ghost().disabled(busy || running).hint(tr().game.check_files)));
         } else if g.installed && super::stores::managed(g) {
             // Epic and GOG: the store's own check, which fetches what is missing or broken (its
             // progress shows under the game's buttons).
             let checking = crate::features::stores::job(&g.id).is_some();
-            kids.push(kit::button(ui, B::new("Check files", acts.tag(Act::Legacy(format!("stores:verify:{}", g.id)))).ghost().disabled(checking || running).hint("Check files")));
+            kids.push(kit::button(ui, B::new(tr().game.check_files, acts.tag(Act::Legacy(format!("stores:verify:{}", g.id)))).ghost().disabled(checking || running).hint(tr().game.check_files)));
         }
-        kids.push(kit::button(ui, B::new("Rename", acts.tag(Act::Local(ACT_RENAME))).ghost()));
-        kids.push(kit::button(ui, B::new("Art", acts.tag(Act::Local(ACT_ART))).ghost().hint("Change art")));
+        kids.push(kit::button(ui, B::new(tr().game.rename, acts.tag(Act::Local(ACT_RENAME))).ghost()));
+        kids.push(kit::button(ui, B::new(tr().game.art, acts.tag(Act::Local(ACT_ART))).ghost().hint(tr().game.art_hint)));
         if self.verify.as_ref().is_some_and(|s| s.phase == Phase::Differs) {
-            kids.push(kit::button(ui, B::new("Keep as the good copy", acts.tag(Act::Local(ACT_KEEP))).ghost()));
+            kids.push(kit::button(ui, B::new(tr().game.keep_good_copy, acts.tag(Act::Local(ACT_KEEP))).ghost()));
         }
         // The check's line sits at the end of the same row, so nothing moves when it shows.
         let failed = self.verify.as_ref().is_some_and(|v| v.phase == Phase::Failed);
@@ -272,15 +283,15 @@ impl Manage {
         let p = self.perf.lock().unwrap().clone();
         let mut body = Vec::new();
         match &p {
-            None => body.push(ui.text_s(s().h(16.0), "Loading", T::new(Ty::Small).c(tok::MUTED))),
+            None => body.push(ui.text_s(s().h(16.0), tr().common.loading, T::new(Ty::Small).c(tok::MUTED))),
             Some(p) => {
                 for (r, row) in rows(p).into_iter().enumerate() {
                     if row.hidden {
                         continue;
                     }
                     if r == FX_ROWS {
-                        body.push(ui.text_s(s().mt(0.25).wp(1.0), "Refresh rates other than the screen's own work on screens that support them, like a TV or monitor.", T::new(Ty::Meta).c(tok::MUTED).wrap()).key(key("gm-perf-hz-note")));
-                        body.push(ui.text_s(s().mt(1.0).mb(0.25), "Frame generation and filters", T::new(Ty::Label).w(500).c(tok::MUTED)).key(key("gm-perf-fx-head")));
+                        body.push(ui.text_s(s().mt(0.25).wp(1.0), tr().game.hz_note, T::new(Ty::Meta).c(tok::MUTED).wrap()).key(key("gm-perf-hz-note")));
+                        body.push(ui.text_s(s().mt(1.0).mb(0.25), tr().game.fx_head, T::new(Ty::Label).w(500).c(tok::MUTED)).key(key("gm-perf-fx-head")));
                     }
                     let mut line = ui.bx(s().row().items_center().gap(0.5).h(2.75)).group(Group::new(&format!("gm-perf-{r}"), [0.0; 4]));
                     line = line.child(ui.text_s(s().w(8.5), row.label, T::new(Ty::Small).w(500).c(if row.off { tok::MUTED } else { tok::FG })));
@@ -297,18 +308,18 @@ impl Manage {
                     body.push(ui.text_s(s().mt(if i == 0 { 0.75 } else { 0.4 }).wp(1.0), n, T::new(Ty::Meta).c(tok::MUTED).wrap()).key(key(&("gm-perf-note", i))));
                 }
                 if ask_steam {
-                    let b = kit::button(ui, B::new("Lossless Scaling in Steam", acts.tag(Act::Local(ACT_LOSSLESS))).sm().ghost());
+                    let b = kit::button(ui, B::new(tr().game.lossless_in_steam, acts.tag(Act::Local(ACT_LOSSLESS))).sm().ghost());
                     body.push(ui.bx(s().row().mt(0.6)).group(Group::new("gm-perf-ls", [0.0; 4])).child(b).key(key("gm-perf-ls")));
                 }
             }
         }
         let saved = p.as_ref().is_some_and(|p| p.saved.is_some());
         let footer = vec![
-            kit::button(ui, B::new("Done", acts.tag(Act::Local(ACT_DONE))).primary().def(p.is_none())),
-            kit::button(ui, B::new("Use Rare's settings", acts.tag(Act::Local(ACT_RESET))).ghost().disabled(!saved)),
+            kit::button(ui, B::new(tr().common.done, acts.tag(Act::Local(ACT_DONE))).primary().def(p.is_none())),
+            kit::button(ui, B::new(tr().game.use_rare_settings, acts.tag(Act::Local(ACT_RESET))).ghost().disabled(!saved)),
         ];
-        let sub = format!("Used each time {} starts. Rare's own settings come back when it closes.", g.title);
-        Some(kit::sheet(ui, "Performance", Some(&sub), body, footer, true, SCOPE))
+        let sub = trf!(tr().game.perf_sub, game = g.title);
+        Some(kit::sheet(ui, tr().game.performance, Some(&sub), body, footer, true, SCOPE))
     }
 
     /// B and the buttons that would act behind the sheet. True when used.
@@ -343,7 +354,7 @@ impl Manage {
                     Box::new(move |st: &mut State, now| {
                         if let Err(e) = r {
                             log::warn!("lossless: {e}");
-                            st.toast("Couldn't open Steam. Try again.", Tone::Error, now);
+                            st.toast(tr().game.steam_open_failed, Tone::Error, now);
                         }
                     })
                 });
@@ -355,14 +366,14 @@ impl Manage {
                 let now = rare_render::clock::secs();
                 let Some(rw) = r.get(row).filter(|r| i < r.chips.len()) else { return };
                 if rw.on == Some(i) {
-                    return st.toast(format!("{} is already {}", rw.label, rw.chips[i]), Tone::Info, now);
+                    return st.toast(trf!(tr().game.already_set, label = rw.label, value = rw.chips[i]), Tone::Info, now);
                 }
                 if rw.off {
-                    let why = match rw.label {
-                        "Sharpness" => "Pick FSR or NIS under Upscaling first.",
-                        "Flow scale" => "Turn on frame generation first.",
-                        "Frame generation" => "Frame generation isn't ready on this device yet.",
-                        _ => "This needs the next Rare OS update.",
+                    let why = match row {
+                        3 => tr().game.why_sharpness,
+                        7 => tr().game.why_flow,
+                        6 => tr().game.why_framegen,
+                        _ => tr().game.why_update,
                     };
                     return st.toast(why, Tone::Info, now);
                 }
@@ -371,7 +382,7 @@ impl Manage {
             }
             ACT_CHECK | ACT_KEEP => {
                 if st.is_running(&g.id) {
-                    st.toast("Close the game first.", Tone::Info, rare_render::clock::secs());
+                    st.toast(tr().game.close_first, Tone::Info, rare_render::clock::secs());
                     return;
                 }
                 let (g, keep) = (g.clone(), code == ACT_KEEP);
@@ -385,7 +396,7 @@ impl Manage {
                 });
             }
             ACT_RENAME => {
-                st.ask_text(RENAME_KEY, "Name for this game", g.title.clone(), Some("Leave empty for the original name"));
+                st.ask_text(RENAME_KEY, tr().game.rename_title, g.title.clone(), Some(tr().game.rename_hint));
                 fx.fb(Feedback::Open);
             }
             ACT_ART => crate::features::gamemgmt::artpage::open(st, &g.id, ArtKind::Cover),
@@ -422,7 +433,7 @@ impl Manage {
                 ver.fetch_add(1, Ordering::Relaxed);
                 if let Err(e) = r {
                     log::warn!("game perf: {e}");
-                    st.toast("Couldn't save that setting.", Tone::Error, now);
+                    st.toast(tr().game.save_failed, Tone::Error, now);
                 }
             })
         });
@@ -440,15 +451,15 @@ fn rename(fx: &mut Fx, id: &str, name: String) {
         Box::new(move |st: &mut State, now| match r {
             Ok(()) if name.is_empty() => {
                 st.rescan_at = Some(now);
-                st.toast("The original name is back", Tone::Info, now);
+                st.toast(tr().game.name_back, Tone::Info, now);
             }
             Ok(()) => {
                 crate::features::gamemgmt::show_custom(st, &id, &c);
-                st.toast(format!("Renamed to {name}"), Tone::Info, now);
+                st.toast(trf!(tr().game.renamed_to, name = name), Tone::Info, now);
             }
             Err(e) => {
                 log::warn!("rename: {e}");
-                st.toast("Couldn't rename it.", Tone::Error, now);
+                st.toast(tr().game.rename_failed, Tone::Error, now);
             }
         })
     });

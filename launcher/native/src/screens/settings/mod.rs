@@ -36,6 +36,7 @@ use crate::screens::overlay::lay::s;
 use config::Config;
 use rare_render::input::Pad;
 use rare_render::theme::tok;
+use rare_i18n::{tr, trf};
 use rare_render::{Id, Node};
 use search::{search_settings, SectionHits, SettingEntry};
 use sections::{SectionId, SECTIONS};
@@ -108,7 +109,7 @@ impl Settings {
         // The section list.
         let nav_col = cx.scene.add(root, s().col().w(17.5 * r).no_shrink_().gap(0.1 * r).pad(0.5 * r, 1.0 * r, 0.5 * r, 0.5 * r).ml(-1.5 * r).done(), Node::default().scrolls());
         let h1 = cx.scene.add(nav_col, s().px(1.0 * r).mb(0.5 * r).done(), Node::default());
-        text(cx, h1, ty::TITLE, 600, tok::FG, "Settings");
+        text(cx, h1, ty::TITLE, 600, tok::FG, tr().common.settings);
         let mut label_style = s().row().items_center().gap(0.6 * r).h(2.75 * r).px(0.85 * r).mb(0.5 * r).done();
         // The web's label shrinks to its content when the section list overflows (flex-shrink 1).
         label_style.flex_shrink = 1.0;
@@ -116,13 +117,14 @@ impl Settings {
         let label = cx.scene.add(nav_col, label_style, Node::bg(tok::L1).radius(0.5 * r).border(1.0, tk::BORDER_LIGHT));
         icon(cx, label, "search", SEARCH_ICON, 1.1, tok::MUTED);
         let field = cx.scene.add(label, s().row().items_center().grow().done(), Node::default().radius(0.25 * r));
-        let shown = if query.is_empty() { "Search settings" } else { query };
+        let shown = if query.is_empty() { tr().settings.search_placeholder } else { query };
         let field_text = cx.scene.add_text(cx.t, field, s().done(), shown, ts(r, ty::BODY.0, ty::BODY.1, 400).truncate(), if query.is_empty() { tok::MUTED } else { tok::FG });
         let _ = field_text;
         let mut nav = Nav::default();
-        nav.add(Focusable { id: field, kind: Kind::Row, group: 0, hint: "Search".into(), tag: 9000, sid: "search".into() });
+        nav.add(Focusable { id: field, kind: Kind::Row, group: 0, hint: tr().common.search.into(), tag: 9000, sid: "search".into() });
         let mut nav_ids = Vec::new();
-        for (i, (id, name)) in SECTIONS.iter().enumerate() {
+        for (i, id) in SECTIONS.iter().enumerate() {
+            let name = id.label();
             let b = cx.scene.add(nav_col, s().row().items_center().px(1.0 * r).py(0.6 * r).done(), Node::default().radius(0.5 * r));
             let t = cx.scene.add_text(cx.t, b, s().done(), name, ts(r, ty::BODY.0, ty::BODY.1, 500), tok::FG.alpha(0.7));
             let _ = t;
@@ -207,7 +209,7 @@ impl Settings {
             self.view = Box::new(NoView);
             if self.hits.is_empty() {
                 let p = cx.scene.add(col, s().px(0.5 * r).done(), Node::default());
-                let msg = format!("No settings match \"{}\".", self.query.trim());
+                let msg = trf!(tr().settings.no_match, query = self.query.trim());
                 cx.scene.add_text(cx.t, p, s().done(), &msg, ts(r, ty::BODY.0, ty::BODY.1, 400).wrap(), tok::MUTED);
             } else {
                 for (gi, g) in self.hits.clone().iter().enumerate() {
@@ -221,7 +223,7 @@ impl Settings {
                             edge(cx, row_, 0, tok::HAIR);
                         }
                         cx.scene.add_text(cx.t, row_, s().grow().done(), &e.title, ts(r, ty::BODY.0, ty::BODY.1, 600).truncate(), tok::FG);
-                        self.nav.add(Focusable { id: row_, kind: Kind::Row, group: 2, hint: "Go to setting".into(), tag: 1000 + (gi * 100 + i) as u32, sid: e.id.clone() });
+                        self.nav.add(Focusable { id: row_, kind: Kind::Row, group: 2, hint: tr().settings.go_to_setting.into(), tag: 1000 + (gi * 100 + i) as u32, sid: e.id.clone() });
                     }
                 }
             }
@@ -232,10 +234,10 @@ impl Settings {
             let panel = rows::panel(cx, col);
             let row_ = cx.scene.add(panel, s().row().items_center().gap(1.0 * r).min_h(4.5 * r).wp(1.0).px(1.4 * r).py(0.9 * r).done(), Node::default());
             let words = cx.scene.add(row_, s().col().grow().gap(0.2 * r).done(), Node::default());
-            cx.scene.add_text(cx.t, words, s().done(), "Locked by parental controls", ts(r, ty::BODY.0, ty::BODY.1, 600).truncate(), tok::FG);
-            let msg = format!("Enter the parent's PIN to open {}.", self.section.label());
+            cx.scene.add_text(cx.t, words, s().done(), tr().settings.locked_title, ts(r, ty::BODY.0, ty::BODY.1, 600).truncate(), tok::FG);
+            let msg = trf!(tr().settings.locked_body, section = self.section.label());
             cx.scene.add_text(cx.t, words, s().done(), &msg, ts(r, ty::BODY.0, ty::BODY.1, 400).wrap(), tok::MUTED);
-            self.nav.add(Focusable { id: row_, kind: Kind::Row, group: 2, hint: "Enter PIN".into(), tag: LOCKED_ROW, sid: String::new() });
+            self.nav.add(Focusable { id: row_, kind: Kind::Row, group: 2, hint: tr().settings.enter_pin.into(), tag: LOCKED_ROW, sid: String::new() });
             self.view = Box::new(NoView);
             return;
         }
@@ -285,7 +287,7 @@ impl Settings {
         let field_node = self.nav.items[0].id;
         let kids = cx.scene.children(field_node);
         if let Some(t) = kids.first() {
-            let shown = if q.is_empty() { "Search settings" } else { q };
+            let shown = if q.is_empty() { tr().settings.search_placeholder } else { q };
             cx.scene.set_text(cx.t, *t, shown);
             cx.scene.n(*t).text.as_mut().unwrap().color.snap(if q.is_empty() { tok::MUTED } else { tok::FG });
         }
@@ -489,7 +491,7 @@ impl Settings {
                             self.saved = self.cfg.clone();
                             return Out::Act(if ui_scale_changed { "settings:saved:ui-scale".into() } else { "settings:saved".into() });
                         }
-                        Err(e) => return Out::Act(format!("toast:error:{}", live::failed("Couldn't save that setting.", &e, None))),
+                        Err(e) => return Out::Act(format!("toast:error:{}", live::failed(tr().settings.save_failed, &e, None))),
                     }
                 }
                 Out::Act("settings:save".into())
@@ -670,14 +672,14 @@ impl Settings {
                     "ask-model" => cfg.agent_model = (!v.is_empty()).then(|| v.to_string()),
                     "ask-url" => {
                         let Some(u) = ask::clean_url(v) else {
-                            self.pending_toast = Some("That address needs to start with http:// or https://.".into());
+                            self.pending_toast = Some(tr().settings.url_http.into());
                             return;
                         };
                         cfg.agent_url = u;
                     }
                     _ => {
                         let Some(clean) = developer::clean_endpoint(v) else {
-                            self.pending_toast = Some("That address needs to start with https://.".into());
+                            self.pending_toast = Some(tr().settings.url_https.into());
                             return;
                         };
                         match cmd {
@@ -692,7 +694,7 @@ impl Settings {
                     self.dirty = true;
                     if self.persist {
                         if let Err(e) = config::save_diff(&self.saved, &self.cfg) {
-                            self.pending_toast = Some(live::failed("Couldn't save that setting.", &e, None));
+                            self.pending_toast = Some(live::failed(tr().settings.save_failed, &e, None));
                             return;
                         }
                         self.saved = self.cfg.clone();
@@ -712,11 +714,11 @@ impl Settings {
 
     fn bar_hints(&self) -> Vec<rare_render::focus::hints::Hint> {
         use rare_render::focus::hints::{hint, Key};
-        let a = self.nav.current().map(|f| f.hint.clone()).filter(|h| !h.is_empty()).unwrap_or_else(|| "Select".into());
+        let a = self.nav.current().map(|f| f.hint.clone()).filter(|h| !h.is_empty()).unwrap_or_else(|| tr().common.select.into());
         let mut v = vec![hint(Key::A, &a)];
-        v.extend([hint(Key::B, if self.searching() { "Clear search" } else { "Back" }), hint(Key::Y, "Search"), hint(Key::LbRb, "Tabs")]);
+        v.extend([hint(Key::B, if self.searching() { tr().settings.clear_search } else { tr().common.back }), hint(Key::Y, tr().common.search), hint(Key::LbRb, tr().common.tabs)]);
         if !self.searching() {
-            v.push(hint(Key::LtRt, "Sections"));
+            v.push(hint(Key::LtRt, tr().common.sections));
         }
         v
     }
@@ -746,7 +748,8 @@ mod crawl {
     fn crawl_every_row() {
         let mut text = TextSys::new(&FONTS, false, 512);
         let mut images = ImageLoader::new(1, Arc::new(|| {}), None);
-        for (sec, name) in SECTIONS {
+        for sec in SECTIONS {
+            let name = sec.label();
             let mut scene = Scene::new(1280.0, 800.0, 16.0);
             let mut cx = Cx { scene: &mut scene, t: &mut text, img: &mut images };
             let area = fixture_area(&mut cx);

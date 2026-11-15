@@ -123,6 +123,8 @@ pub struct T {
     pub color: Color,
     pub tabular: bool,
     pub truncate: bool,
+    /// Shrinks to fit its box, then truncates (labels that change length with the language).
+    pub fit: bool,
     pub wrap: bool,
     pub clamp: u16,
     pub mono: bool,
@@ -134,7 +136,7 @@ pub struct T {
 
 impl T {
     pub fn new(ty: Ty) -> T {
-        T { ty, weight: 400, color: tok::FG, tabular: false, truncate: false, wrap: false, clamp: 0, mono: false, align: TextAlign::Left, tracking: None, leading: None, opacity: 1.0 }
+        T { ty, weight: 400, color: tok::FG, tabular: false, truncate: false, fit: false, wrap: false, clamp: 0, mono: false, align: TextAlign::Left, tracking: None, leading: None, opacity: 1.0 }
     }
     /// font-medium is 500, font-semibold 600, font-bold 700.
     pub fn w(mut self, w: u16) -> T {
@@ -153,6 +155,12 @@ impl T {
     /// truncate
     pub fn trunc(mut self) -> T {
         self.truncate = true;
+        self
+    }
+    /// Shrinks to fit (down to 80%), then truncates: button, chip and tile labels.
+    pub fn fit(mut self) -> T {
+        self.truncate = true;
+        self.fit = true;
         self
     }
     pub fn wrap(mut self) -> T {
@@ -200,6 +208,7 @@ impl T {
         let mut st = TextStyle::new(size * rem, self.weight).line((line * rem).round()).tracking(self.tracking.unwrap_or(track)).align(self.align);
         st.tabular = self.tabular;
         st.truncate = self.truncate;
+        st.fit = self.fit;
         st.wrap = self.wrap;
         st.clamp = self.clamp;
         if self.mono {

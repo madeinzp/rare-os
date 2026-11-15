@@ -2,6 +2,7 @@
 //! today's change, Sui games owned), Cloud saves, Share, what is minting on rare.market's
 //! launchpad, and the Launchpad tile. Network numbers live in the status bar, not here.
 
+use rare_i18n::{tr, trf, trn};
 use super::profile::{display_name, profile_avatar, Profile};
 use crate::kit::format::{NumKind, NumOptions};
 use crate::screens::wallet::kit::mimg;
@@ -47,74 +48,74 @@ pub fn view(pr: &Props) -> El<Msg> {
     let card = if prof.address.is_some() {
         let mut bottom = span("flex items-end justify-between gap-[1rem]").kid(
             span("min-w-0")
-                .kid(span("block text-label text-secondary").text("Total value"))
+                .kid(span("block text-label text-secondary").text(tr().sui.total_value))
                 .kid(match pr.value.and_then(|v| num(NumKind::Money, Some(v), NumOptions::default(), "text-row font-semibold", false, true)) {
                     Some(n) => n,
                     None => span("text-row text-muted").text("--"),
                 }),
         );
         if let Some(d) = pr.delta {
-            bottom = bottom.kid(span("text-right").kid(span("block text-label text-secondary").text("Today")).kid_opt(num(NumKind::Pnl, Some(d), NumOptions::default(), "text-small font-medium", false, true)));
+            bottom = bottom.kid(span("text-right").kid(span("block text-label text-secondary").text(tr().sui.today)).kid_opt(num(NumKind::Pnl, Some(d), NumOptions::default(), "text-small font-medium", false, true)));
         }
         let n = pr.owned_games;
         button("tile tile-wide flex h-[12rem] w-[19rem] shrink-0 flex-col justify-between rounded-card border border-hair bg-l1 p-[1.1rem] text-left", Some(Msg::Profile))
-            .hint_a("Profile")
+            .hint_a(tr().sui.profile)
             .kid(
                 span("flex items-center gap-[0.75rem]").kid_opt(profile_avatar(prof, "2.75rem", "")).kid(
                     span("min-w-0")
                         .kid(span("block truncate text-body font-semibold text-fg").text(display_name(prof)))
-                        .kid(span("block text-meta text-muted").text(if n > 0 { format!("{n} Sui {} owned", if n == 1 { "game" } else { "games" }) } else { "Your profile".into() })),
+                        .kid(span("block text-meta text-muted").text(if n > 0 { trn!(tr().sui.sui_games_owned, n) } else { tr().sui.your_profile.into() })),
                 ),
             )
             .kid(bottom)
     } else {
-        button("tile tile-wide flex h-[12rem] w-[19rem] shrink-0 flex-col justify-between rounded-card border border-hair bg-l1 p-[1.1rem] text-left", Some(Msg::OpenWallet)).hint_a("Open Wallet").kid(
+        button("tile tile-wide flex h-[12rem] w-[19rem] shrink-0 flex-col justify-between rounded-card border border-hair bg-l1 p-[1.1rem] text-left", Some(Msg::OpenWallet)).hint_a(tr().sui.open_wallet).kid(
             span("flex h-full flex-col justify-between gap-[0.75rem]")
-                .kid(span("block text-body font-semibold text-fg").text("Your Sui profile"))
-                .kid(span("block text-small text-muted").text("Add a Rare Wallet account to see your name, picture, games you own and cloud saves.")),
+                .kid(span("block text-body font-semibold text-fg").text(tr().sui.your_sui_profile))
+                .kid(span("block text-small text-muted").text(tr().sui.add_account_hint)),
         )
     };
     let saves = button("tile flex aspect-square w-[12rem] shrink-0 flex-col justify-end gap-[0.2rem] rounded-card border border-hair bg-l1 p-[1rem] text-left", Some(Msg::Saves))
-        .hint_a("Cloud saves")
+        .hint_a(tr().sui.cloud_saves)
         .kid(icon("cloud", "mb-auto text-icon-2").attr("size", "1.6rem"))
-        .kid(span("block text-body font-bold text-fg").text("Cloud saves"))
-        .kid(span("block text-meta text-muted").text("Emulator saves on Walrus"));
+        .kid(span("block text-body font-bold text-fg").text(tr().sui.cloud_saves))
+        .kid(span("block text-meta text-muted").text(tr().sui.emulator_saves));
     let fresh = pr.new_captures;
     let share = button("tile flex aspect-square w-[12rem] shrink-0 flex-col justify-end gap-[0.2rem] rounded-card border border-hair bg-l1 p-[1rem] text-left", Some(Msg::Share))
-        .hint_a("Share")
+        .hint_a(tr().common.share)
         .kid(icon("images", "mb-auto text-icon-2").attr("size", "1.6rem"))
-        .kid(span("block text-body font-bold text-fg").text("Share"))
-        .kid(span("block text-meta text-muted").text(if fresh > 0 { format!("{fresh} new {}", if fresh == 1 { "capture" } else { "captures" }) } else { "Screenshots and clips".into() }));
+        .kid(span("block text-body font-bold text-fg").text(tr().common.share))
+        .kid(span("block text-meta text-muted").text(if fresh > 0 { trn!(tr().sui.new_captures, fresh) } else { tr().sui.screenshots_clips.into() }));
     let mut tiles = vec![card, saves, share];
     for m in pr.mints.unwrap_or(&[]) {
         tiles.push(
             button("tile relative aspect-square w-[12rem] shrink-0 overflow-hidden rounded-card border border-hair bg-l3 text-left", Some(Msg::OpenWeb(m.href.clone())))
-                .hint_a("Mint")
+                .hint_a(tr().sui.mint)
                 .key(&m.key)
                 .kid(mimg(m.image_url.as_deref(), &m.name, 320, "absolute inset-0 h-full w-full"))
                 .kid(span("absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/95 via-black/50 to-transparent"))
                 .kid(span("absolute inset-x-[1rem] bottom-[0.9rem]").kid(span("block truncate text-body font-bold text-white").text(&m.name)).kid(span("block truncate text-meta text-white/60").text(&m.sub))),
         );
     }
-    let sub = if pr.mints.is_some_and(|m| m.is_empty()) { "No live mints" } else { "New drops" };
+    let sub = if pr.mints.is_some_and(|m| m.is_empty()) { tr().sui.no_live_mints } else { tr().sui.new_drops };
     let href = format!("{}/launchpad", super::tab::RARE);
     let pad = if pr.rarelings {
         button("tile relative aspect-square w-[12rem] shrink-0 overflow-hidden rounded-card border border-hair bg-l1 text-left", Some(Msg::OpenWeb(href)))
-            .hint_a("Open")
+            .hint_a(tr().common.open)
             .kid(img(Some("home/launchpad-rarelings.webp"), "", "absolute inset-0 h-full w-full object-cover"))
             .kid(span("absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/95 via-black/50 to-transparent"))
-            .kid(span("absolute inset-x-[1rem] bottom-[0.9rem]").kid(span("block truncate text-body font-bold text-white").text("Launchpad")).kid(span("block truncate text-meta text-white/60").text(sub)))
+            .kid(span("absolute inset-x-[1rem] bottom-[0.9rem]").kid(span("block truncate text-body font-bold text-white").text(tr().sui.launchpad)).kid(span("block truncate text-meta text-white/60").text(sub)))
     } else {
         // No art: the rocket on top, like Cloud saves and Share.
         button("tile flex aspect-square w-[12rem] shrink-0 flex-col justify-end gap-[0.2rem] rounded-card border border-hair bg-l1 p-[1rem] text-left", Some(Msg::OpenWeb(href)))
-            .hint_a("Open")
+            .hint_a(tr().common.open)
             .kid(icon("rocket", "mb-auto text-icon-2").attr("size", "1.6rem"))
-            .kid(span("block text-body font-bold text-fg").text("Launchpad"))
+            .kid(span("block text-body font-bold text-fg").text(tr().sui.launchpad))
             .kid(span("block text-meta text-muted").text(sub))
     };
     tiles.push(pad);
-    let note = pr.mints.filter(|m| !m.is_empty()).map(|m| text(format!("{} minting now", m.len())));
-    rail("sui-shelf", Some(text("On Sui")), note, None, "", tiles)
+    let note = pr.mints.filter(|m| !m.is_empty()).map(|m| text(trf!(tr().sui.minting_now, n = m.len())));
+    rail("sui-shelf", Some(text(tr().sui.on_sui)), note, None, "", tiles)
 }
 
 #[cfg(test)]

@@ -3,6 +3,7 @@
 //! (A deletes one). `NotificationsSection` plugs into `settings::SectionView`:
 //! `SectionId::Notifications => Box::new(notify::section::NotificationsSection::build(cx, &mut self.nav, col, &cfg, now))`.
 
+use rare_i18n::{tr, trf};
 use super::backend::{AlertsApi, AlertsState, MemAlerts};
 use super::data::kinds::kinds;
 use super::data::logic::{class_of, NoticeClass, CLASSES};
@@ -10,7 +11,7 @@ use super::data::storage::MemStorage;
 use super::data::store::NotifyStore;
 use super::data::types::{AlertDir, PriceAlert};
 use super::fixtures::SUI;
-use super::ui::usd_price;
+use super::ui::{dir_word, usd_price};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
 use crate::screens::settings::config::Config;
@@ -22,19 +23,19 @@ use std::sync::Arc;
 
 pub fn class_note(c: NoticeClass) -> &'static str {
     match c {
-        NoticeClass::Money | NoticeClass::Invites | NoticeClass::Messages => "Pops up over a game. Waits in the list with Do not disturb.",
-        NoticeClass::Trophies => "A small toast over a game. Waits in the list with Do not disturb.",
-        NoticeClass::Social | NoticeClass::System => "Pops up in Rare. Waits in the list over a game and with Do not disturb.",
-        NoticeClass::Battery => "Always pops up, even over a game and with Do not disturb.",
+        NoticeClass::Money | NoticeClass::Invites | NoticeClass::Messages => tr().notify.note_over_game,
+        NoticeClass::Trophies => tr().notify.note_trophies,
+        NoticeClass::Social | NoticeClass::System => tr().notify.note_in_rare,
+        NoticeClass::Battery => tr().notify.note_battery,
     }
 }
 
 /// The body line of the "Your price alerts" row.
 pub fn alerts_body(list: Option<&[PriceAlert]>, error: Option<&str>) -> &'static str {
     match list {
-        Some(l) if l.is_empty() => "No price alerts. Set one from a coin's page in Trade.",
-        None if error.is_some() => "Could not load price alerts.",
-        _ => "One notice when the price crosses your target, then the alert stops.",
+        Some(l) if l.is_empty() => tr().notify.alerts_none,
+        None if error.is_some() => tr().notify.alerts_load_failed,
+        _ => tr().notify.alerts_about,
     }
 }
 
@@ -81,9 +82,9 @@ impl NotificationsSection {
         let mut rows = RowSet::default();
         let p = panel(cx, col);
         let prefs = store.prefs.clone();
-        rows.switch(cx, nav, p, "notif-dnd", "Do not disturb", "Only battery warnings pop up. Everything else waits in the list.", prefs.dnd, true);
-        rows.switch(cx, nav, p, "notif-toasts", "Show toasts over a game", "Money, invites, messages and trophies pop up over a game. Off: they wait in the list until it ends.", prefs.game_toasts, false);
-        rows.switch(cx, nav, p, "notif-desktop", "Desktop notifications", "When Rare is in the background, notices also show on the desktop.", prefs.desktop, false);
+        rows.switch(cx, nav, p, "notif-dnd", tr().notify.dnd, tr().notify.dnd_body, prefs.dnd, true);
+        rows.switch(cx, nav, p, "notif-toasts", tr().notify.game_toasts, tr().notify.game_toasts_body, prefs.game_toasts, false);
+        rows.switch(cx, nav, p, "notif-desktop", tr().notify.desktop, tr().notify.desktop_body, prefs.desktop, false);
         for c in CLASSES {
             let list: Vec<_> = kinds().into_iter().filter(|k| class_of(&k.kind) == c).collect();
             if list.is_empty() {
@@ -107,18 +108,18 @@ impl NotificationsSection {
     fn build_alerts(&mut self, cx: &mut Cx, nav: &mut Nav) {
         let r = cx.r();
         let body = alerts_body(self.alerts.list.as_deref(), self.alerts.error.as_deref());
-        setting_row(cx, self.panel, "Your price alerts", Some(body), true);
+        setting_row(cx, self.panel, tr().notify.your_alerts, Some(body), true);
         let list = self.alerts.list.clone().unwrap_or_default();
         for (i, a) in alert_rows(&list).into_iter().enumerate() {
             let row_ = cx.scene.add(self.panel, s().row().items_center().gap(1.25 * r).min_h(3.75 * r).wp(1.0).px(1.4 * r).py(0.7 * r).done(), Node::default());
             edge(cx, row_, 0, tok::HAIR);
             let c = cx.scene.add(row_, s().col().grow().done(), Node::default());
-            text(cx, c, ty::BODY, 600, tok::FG, &format!("{} {} {}", a.symbol, a.dir.as_str(), usd_price(a.target)));
+            text(cx, c, ty::BODY, 600, tok::FG, &trf!(tr().notify.alert_line, symbol = a.symbol, dir = dir_word(a.dir), price = usd_price(a.target)));
             let sub = cx.scene.add(c, s().row().items_center().gap(0.45 * r).done(), Node::default());
             dot(cx, sub, if a.active { tok::FG } else { tok::MUTED });
-            text(cx, sub, ty::SMALL, 400, tok::MUTED, if a.active { "Watching" } else { "Hit" });
-            text(cx, row_, ty::SMALL, 400, tok::MUTED, "Delete");
-            nav.add(Focusable { id: row_, kind: Kind::Row, group: G_ALERTS, hint: "Delete alert".into(), tag: i as u32, sid: format!("alert:{}", a.id) });
+            text(cx, sub, ty::SMALL, 400, tok::MUTED, if a.active { tr().notify.watching } else { tr().notify.hit });
+            text(cx, row_, ty::SMALL, 400, tok::MUTED, tr().common.delete);
+            nav.add(Focusable { id: row_, kind: Kind::Row, group: G_ALERTS, hint: tr().notify.delete_alert.into(), tag: i as u32, sid: format!("alert:{}", a.id) });
         }
     }
 }

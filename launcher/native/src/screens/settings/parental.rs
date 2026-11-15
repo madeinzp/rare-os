@@ -8,6 +8,7 @@ use crate::features::parental::{self as pc, Rules};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
 use crate::state::{State, Tone};
+use rare_i18n::{tr, trf};
 use rare_render::theme::tok;
 use rare_render::{Id, Node};
 
@@ -31,31 +32,32 @@ impl ParentalSection {
 
     pub fn build_with(cx: &mut Cx, nav: &mut Nav, parent: Id, pin: bool, who: &str, rules: Rules, played: u64) -> ParentalSection {
         let r = cx.r();
+        let t = &tr().settings_more;
         let mut rows = RowSet::default();
         let p = panel(cx, parent);
         if !pin {
-            let row = setting_row(cx, p, "Parental controls", Some("Set a 4 to 6 digit PIN to turn them on. The PIN is then needed for purchases, approving in Rare Wallet, and changing System, Network, Accounts and Developer settings."), true);
-            nav.add(button(cx, row.right, "Set PIN", Variant::Primary, Sz::Md, false).sid(SID_PIN).tag(1).group(10));
+            let row = setting_row(cx, p, t.pc_title, Some(t.pc_body), true);
+            nav.add(button(cx, row.right, t.pc_set_pin, Variant::Primary, Sz::Md, false).sid(SID_PIN).tag(1).group(10));
             return ParentalSection { rows, rules };
         }
-        let row = setting_row(cx, p, "PIN", Some("Needed for purchases, approving in Rare Wallet, these rules and locked settings. It stays unlocked for 5 minutes once entered."), true);
-        nav.add(button(cx, row.right, "Change PIN", Variant::Secondary, Sz::Md, false).sid(SID_PIN).tag(2).group(10));
-        nav.add(button(cx, row.right, "Turn off", Variant::Secondary, Sz::Md, false).sid(SID_PIN).tag(3).group(10));
+        let row = setting_row(cx, p, t.pc_pin, Some(t.pc_pin_body), true);
+        nav.add(button(cx, row.right, t.pc_change_pin, Variant::Secondary, Sz::Md, false).sid(SID_PIN).tag(2).group(10));
+        nav.add(button(cx, row.right, tr().common.turn_off, Variant::Secondary, Sz::Md, false).sid(SID_PIN).tag(3).group(10));
 
         let lab = cx.scene.add(parent, s().pad(0.25 * r, 0.0, 0.0, 0.5 * r).done(), Node::default());
-        text(cx, lab, ty::LABEL, 500, tok::MUTED, &format!("Rules for {who}"));
+        text(cx, lab, ty::LABEL, 500, tok::MUTED, &trf!(t.pc_rules_for, name = who));
         let p = panel(cx, parent);
-        let row = setting_row(cx, p, "Played today", None, true);
+        let row = setting_row(cx, p, t.pc_played_today, None, true);
         text(cx, row.right, ty::BODY, 500, tok::FG, &pc::played_text(played));
         let daily = pc::DAILY.iter().position(|d| *d == rules.daily_min);
-        rows.choice(cx, nav, p, "parental-daily", "Daily play time", Some("When it runs out, a parent's PIN is needed to start a game."), &pc::DAILY_LABELS, daily, false);
-        rows.choice(cx, nav, p, "parental-hours", "Allowed hours", Some("Outside these hours, a parent's PIN is needed to start a game."), &["Any time", "Set hours"], Some(rules.hours.is_some() as usize), false);
+        rows.choice(cx, nav, p, "parental-daily", t.pc_daily, Some(t.pc_daily_body), &pc::daily_labels().iter().map(|s| s.as_str()).collect::<Vec<_>>(), daily, false);
+        rows.choice(cx, nav, p, "parental-hours", t.pc_hours, Some(t.pc_hours_body), &[t.pc_any_time, t.pc_set_hours], Some(rules.hours.is_some() as usize), false);
         if let Some((from, to)) = rules.hours {
-            rows.slider(cx, nav, p, "parental-from", "From", None, from as f32, 0.0, 23.0, 1.0, ":00", false);
-            rows.slider(cx, nav, p, "parental-to", "To", None, to as f32, 1.0, 24.0, 1.0, ":00", false);
+            rows.slider(cx, nav, p, "parental-from", t.pc_from, None, from as f32, 0.0, 23.0, 1.0, ":00", false);
+            rows.slider(cx, nav, p, "parental-to", t.pc_to, None, to as f32, 1.0, 24.0, 1.0, ":00", false);
         }
         let age = pc::AGES.iter().position(|a| *a == rules.max_age);
-        rows.choice(cx, nav, p, "parental-age", "Age rating", Some("From the Steam store's ESRB and PEGI ratings. Games without a rating stay allowed."), &pc::AGE_LABELS, age, false);
+        rows.choice(cx, nav, p, "parental-age", t.pc_age, Some(t.pc_age_body), &pc::age_labels().iter().map(|s| s.as_str()).collect::<Vec<_>>(), age, false);
         ParentalSection { rows, rules }
     }
 
@@ -114,12 +116,12 @@ pub fn act(st: &mut State, a: &str, now: f64) {
         }
         "parental:off" => {
             pc::clear_pin();
-            st.toast("Parental controls are off", Tone::Info, now);
+            st.toast(tr().settings_more.pc_off_toast, Tone::Info, now);
         }
         _ => {
             if let Some(key) = a.strip_prefix("parental:unlock:") {
                 let label = super::sections::SectionId::from_key(key).map(|s| s.label()).unwrap_or("these");
-                let _ = pc::ask("Parent's PIN", &format!("Enter the PIN to open {label}."), now);
+                let _ = pc::ask(tr().settings_more.pc_parent_pin, &trf!(tr().settings_more.pc_enter_pin_to_open, label = label), now);
             }
         }
     }

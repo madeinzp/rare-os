@@ -4,6 +4,7 @@
 //! files for them sits in the page's Manage row (manage.rs) and runs the store's own repair.
 
 use crate::act::Act;
+use rare_i18n::tr;
 use crate::data::model::Game;
 use crate::features::stores;
 use crate::kit::{self, s, tok, Btn as B, BtnIcon, Ty, Ui, T};
@@ -28,12 +29,12 @@ fn job_buttons(ui: &mut Ui, acts: &mut Acts, g: &Game, primary: bool) -> Option<
         if !primary {
             return Some(vec![]);
         }
-        return Some(vec![kit::button(ui, B::new("Setting up", acts.game(Act::None, &g.id)).primary().lg().def(true).min_w(10.0).game())]);
+        return Some(vec![kit::button(ui, B::new(tr().game.setting_up, acts.game(Act::None, &g.id)).primary().lg().def(true).min_w(10.0).game())]);
     }
     let (label, verb, icon) = match j.phase {
-        Phase::Queued | Phase::Running => ("Pause", "pause", Some("pause")),
-        Phase::Paused => ("Resume", "resume", Some("play")),
-        Phase::Failed(_) => ("Try again", "resume", Some("refresh-cw")),
+        Phase::Queued | Phase::Running => (tr().game.pause, "pause", Some("pause")),
+        Phase::Paused => (tr().common.resume, "resume", Some("play")),
+        Phase::Failed(_) => (tr().common.try_again, "resume", Some("refresh-cw")),
     };
     let mut main = B::new(label, acts.game(act(verb, &g.id), &g.id)).lg().min_w(10.0).game();
     if let Some(i) = icon {
@@ -44,7 +45,7 @@ fn job_buttons(ui: &mut Ui, acts: &mut Acts, g: &Game, primary: bool) -> Option<
     } else {
         main = main.ghost();
     }
-    Some(vec![kit::button(ui, main), kit::button(ui, B::new("Cancel", acts.game(act("cancel", &g.id), &g.id)).lg().ghost().game())])
+    Some(vec![kit::button(ui, main), kit::button(ui, B::new(tr().common.cancel, acts.game(act("cancel", &g.id), &g.id)).lg().ghost().game())])
 }
 
 /// A game that is not installed: Install (or the download's own buttons). Replaces Play.
@@ -54,7 +55,7 @@ pub fn not_installed(ui: &mut Ui, acts: &mut Acts, g: &Game) -> Vec<El> {
     if let Some(b) = job_buttons(ui, acts, g, true) {
         return b;
     }
-    vec![kit::button(ui, B::new("Install", acts.game(act("install", &g.id), &g.id)).primary().lg().def(true).hint("Install").icon(BtnIcon::Lucide("download", 1.1, false)).min_w(10.0).game())]
+    vec![kit::button(ui, B::new(tr().common.install, acts.game(act("install", &g.id), &g.id)).primary().lg().def(true).hint(tr().common.install).icon(BtnIcon::Lucide("download", 1.1, false)).min_w(10.0).game())]
 }
 
 /// After Play on an installed game: Update, Sync saves, or the running job's buttons.
@@ -67,10 +68,10 @@ pub fn installed(ui: &mut Ui, acts: &mut Acts, g: &Game, running: bool) -> Vec<E
         return v;
     }
     if stores::has_update(&g.id) {
-        v.push(kit::button(ui, B::new("Update", acts.game(act("update", &g.id), &g.id)).lg().ghost().icon(BtnIcon::Lucide("download", 1.1, false)).game()));
+        v.push(kit::button(ui, B::new(tr().common.update, acts.game(act("update", &g.id), &g.id)).lg().ghost().icon(BtnIcon::Lucide("download", 1.1, false)).game()));
     }
     if stores::cloud(&g.id) {
-        v.push(kit::button(ui, B::new("Sync saves", acts.game(act("sync", &g.id), &g.id)).lg().ghost().icon(BtnIcon::Lucide("cloud", 1.1, false)).game()));
+        v.push(kit::button(ui, B::new(tr().game.sync_saves, acts.game(act("sync", &g.id), &g.id)).lg().ghost().icon(BtnIcon::Lucide("cloud", 1.1, false)).game()));
     }
     v
 }
@@ -92,5 +93,5 @@ pub fn size_text(g: &Game) -> Option<String> {
     if g.installed || !managed(g) {
         return None;
     }
-    Some(stores::size(&g.id).map(|s| rare_stores::fmt_bytes(s.1)).unwrap_or_else(|| "Checking".into()))
+    Some(stores::size(&g.id).map(|s| rare_stores::fmt_bytes(s.1)).unwrap_or_else(|| tr().game.checking.into()))
 }

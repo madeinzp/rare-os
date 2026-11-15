@@ -8,7 +8,8 @@
 
 use super::format::{ago, fmt_bytes, fmt_duration, fmt_sui_mist, fmt_wal, kind_word, telegram_poster, DurationId, DURATIONS};
 use super::qr;
-use super::store::{clips_note, Payer, Phase, ShareState, Taking, Thumb, STEPS};
+use super::store::{clips_note, steps, Payer, Phase, ShareState, Taking, Thumb};
+use rare_i18n::{tr, trf, trn};
 use super::video::{self, Player};
 use crate::kit::controls::{LOAD_SX, LOAD_X};
 use crate::kit::{Btn, DotTone};
@@ -46,8 +47,8 @@ const LOAD_STRIP: &str = "share-load-strip";
 
 fn kind_label(c: &Capture) -> &'static str {
     match c.kind {
-        Kind::Clip => "Clip",
-        Kind::Screenshot => "Screenshot",
+        Kind::Clip => tr().share.kind_clip,
+        Kind::Screenshot => tr().share.kind_screenshot,
     }
 }
 
@@ -127,28 +128,28 @@ fn grid(ui: &mut Ui, st: &ShareState, req: &mut Requested) -> El {
     let note = clips_note(status);
     let head = ui
         .bx(s().col())
-        .child(ui.text("Share", T::new(Ty::Title).w(600).track(-0.02)))
+        .child(ui.text(tr().common.share, T::new(Ty::Title).w(600).track(-0.02)))
         .child(ui.text_s(
             s().mt(0.25).max_w(46.0),
-            "Shared links open on rare.market for anyone. Files are stored on Walrus and your wallet pays for the storage.",
+            tr().share.intro,
             T::new(Ty::Small).c(tok::MUTED).wrap(),
         ));
 
     let taking = st.taking;
     let shot_btn = kit::button(
         ui,
-        Btn::new(if taking == Some(Taking::Screenshot) { "Saving" } else { "Take screenshot" }, T_SHOT).def(true).hint("Take a screenshot").disabled(taking.is_some() || status.is_some_and(|s| !s.screenshot.available)),
+        Btn::new(if taking == Some(Taking::Screenshot) { tr().share.saving } else { tr().share.take_screenshot }, T_SHOT).def(true).hint(tr().share.take_screenshot_hint).disabled(taking.is_some() || status.is_some_and(|s| !s.screenshot.available)),
     );
     let secs = status.map(|s| s.clips.seconds).unwrap_or(rare_share::clip::SECONDS);
     let save = crate::features::capture::save_label(secs);
     let clip_btn = kit::button(
         ui,
-        Btn::new(if taking == Some(Taking::Clip) { "Saving" } else { save.as_str() }, T_CLIP).hint("Save the clip").disabled(taking.is_some() || !status.is_some_and(|s| s.clips.recording)),
+        Btn::new(if taking == Some(Taking::Clip) { tr().share.saving } else { save.as_str() }, T_CLIP).hint(tr().share.save_clip_hint).disabled(taking.is_some() || !status.is_some_and(|s| s.clips.recording)),
     );
     let capture_words = ui
         .bx(s().col().grow())
-        .child(ui.text("Capture", T::new(Ty::Body).w(600)))
-        .child(ui.text(format!("In a game: Guide and Y for a screenshot, Guide and View for {}.", crate::features::capture::last_words(secs)), T::new(Ty::Small).c(tok::MUTED).wrap()));
+        .child(ui.text(tr().share.capture, T::new(Ty::Body).w(600)))
+        .child(ui.text(trf!(tr().share.capture_keys, last = crate::features::capture::last_words(secs)), T::new(Ty::Small).c(tok::MUTED).wrap()));
     let actions = ui.bx(s().row().min_h(4.25).items_center().gap(1.25).px(1.4).py(0.85)).group(kit::group("share-actions", true)).child(capture_words).child(shot_btn).child(clip_btn);
 
     let enabled = status.is_some_and(|s| s.clips.enabled);
@@ -156,41 +157,44 @@ fn grid(ui: &mut Ui, st: &ShareState, req: &mut Requested) -> El {
     let sub = match status {
         None => String::new(),
         Some(s) if !s.clips.available => note.unwrap_or("").to_string(),
-        Some(s) if s.clips.enabled && s.clips.recording => format!("Recording in the background{}. Uses a little battery.", s.clips.method.as_deref().map(|m| format!(" with {m}")).unwrap_or_default()),
-        Some(s) if s.clips.enabled => "On. Recording starts with the next game.".into(),
-        Some(_) => "Off. Turn it on to save clips.".into(),
+        Some(s) if s.clips.enabled && s.clips.recording => match s.clips.method.as_deref() {
+            Some(m) => trf!(tr().share.replay_recording_with, method = m),
+            None => tr().share.replay_recording.to_string(),
+        },
+        Some(s) if s.clips.enabled => tr().share.replay_on.into(),
+        Some(_) => tr().share.replay_off.into(),
     };
-    let mut words = ui.bx(s().col().grow()).child(ui.text(format!("Instant replay: keep {} while playing", crate::features::capture::last_words(secs)), T::new(Ty::Body).w(600)));
+    let mut words = ui.bx(s().col().grow()).child(ui.text(trf!(tr().share.replay_title, last = crate::features::capture::last_words(secs)), T::new(Ty::Body).w(600)));
     if !sub.is_empty() {
         words = words.child(ui.text(sub, T::new(Ty::Small).c(tok::MUTED).wrap()));
     }
     let mut row = ui.bx(s().row().min_h(4.25).wp(1.0).items_center().gap(1.25).px(1.4).py(0.85)).child(words);
     if status.is_some_and(|s| s.clips.recording) {
         let d = kit::dot(ui, s(), DotTone::Brand, true);
-        row = row.child(ui.bx(s().row().items_center().gap(0.45)).child(d).child(ui.text("Recording", T::new(Ty::Small).c(tok::MUTED))));
+        row = row.child(ui.bx(s().row().items_center().gap(0.45)).child(d).child(ui.text(tr().share.recording, T::new(Ty::Small).c(tok::MUTED))));
     }
     row = row.child(kit::toggle(ui, enabled)).child(hair_top(ui));
     if !available {
         row = row.opacity(0.6);
     }
-    let hint = if enabled { "Turn off" } else { "Turn on" };
+    let hint = if enabled { tr().common.turn_off } else { tr().common.turn_on };
     let row = {
         let fl = row.look.clone().bg(tok::L4);
         row.focus_look(fl).nav(|f| f.tag(T_CLIPS).hints(Some(hint), None, None).disabled(!available))
     };
     let mut panel = kit::panel(ui, s().col().mt(1.5)).child(actions).child(row);
     if status.is_some_and(|s| !s.screenshot.available) {
-        panel = panel.child(ui.bx(s().px(1.4).py(0.85)).child(hair_top(ui)).child(ui.text("Screenshots aren't available in this session.", T::new(Ty::Small).c(tok::MUTED))));
+        panel = panel.child(ui.bx(s().px(1.4).py(0.85)).child(hair_top(ui)).child(ui.text(tr().share.no_screenshots, T::new(Ty::Small).c(tok::MUTED))));
     }
 
     let mut page = ui.bx(s().col()).child(head).child(panel);
     if let Some(e) = &st.error {
         page = page.child(ui.bx(s().mt(0.9)).child(error_line(ui, e, true)));
     }
-    let count = st.captures.as_ref().map(|c| format!("{} on this device", c.len()));
-    page = page.child(kit::section_head(ui, s().mb(0.9).mt(2.0), "Recent", count.as_deref(), None));
+    let count = st.captures.as_ref().map(|c| trf!(tr().share.on_device, n = c.len()));
+    page = page.child(kit::section_head(ui, s().mb(0.9).mt(2.0), tr().share.recent, count.as_deref(), None));
     match st.captures.as_deref() {
-        Some([]) => page = page.child(kit::empty(ui, s(), "No screenshots or clips yet", Some("Press Guide and Y in a game, or take one here."), vec![])),
+        Some([]) => page = page.child(kit::empty(ui, s(), tr().share.empty_title, Some(tr().share.empty_body), vec![])),
         Some(list) => {
             let tw = ((ui.w - ui.r(8.0)) / 4.0).floor();
             let mut tiles = Vec::new();
@@ -212,7 +216,7 @@ fn tile(ui: &mut Ui, st: &ShareState, c: &Capture, i: usize, tw: f32, req: &mut 
     let mut inner = ui.bx(s().abs(Some(px), Some(px), Some(px), Some(px))).radius(ui.r(0.5) - 1.0).clip();
     match picture(ui, req, &c.id, thumb, iw, ih, Fit::Cover { fy: 0.5 }, s().fill()) {
         Some(img) => inner = inner.child(img),
-        None if thumb.is_some() => inner = inner.child(ui.bx(s().fill().row().items_center().justify_center()).child(ui.text("Can't read this file", T::new(Ty::Small).c(tok::MUTED)))),
+        None if thumb.is_some() => inner = inner.child(ui.bx(s().fill().row().items_center().justify_center()).child(ui.text(tr().share.cant_read, T::new(Ty::Small).c(tok::MUTED)))),
         None => {}
     }
     let black = Color::BLACK;
@@ -220,7 +224,7 @@ fn tile(ui: &mut Ui, st: &ShareState, c: &Capture, i: usize, tw: f32, req: &mut 
     if fresh {
         inner = inner.child(ui.bx(s().abs_pct(Some(0.0), Some(0.0), None, Some(0.0)).hp(0.4)).look(Look::default().grad(Gradient { dir: GradDir::ToBottom, stops: [black.alpha(0.7), black.alpha(0.35), black.alpha(0.0)], mid: 0.5 })));
         let d = kit::dot(ui, s(), DotTone::Brand, false);
-        inner = inner.child(ui.bx(s().abs(Some(0.65), Some(0.85), None, None).row().items_center().gap(0.4)).child(d).child(ui.text("New", T::new(Ty::Label).w(500).c(Color::WHITE.alpha(0.85)))));
+        inner = inner.child(ui.bx(s().abs(Some(0.65), Some(0.85), None, None).row().items_center().gap(0.4)).child(d).child(ui.text(tr().share.new_badge, T::new(Ty::Label).w(500).c(Color::WHITE.alpha(0.85)))));
     }
     let name = c.game.as_ref().map(|g| g.name.clone()).unwrap_or_else(|| kind_label(c).to_string());
     let words = ui
@@ -234,7 +238,7 @@ fn tile(ui: &mut Ui, st: &ShareState, c: &Capture, i: usize, tw: f32, req: &mut 
     inner = inner.child(foot);
     let border = ui.bx(s().fill()).look(Look::default().radius(ui.r(0.5)).border(1.0, tok::HAIR));
     let el = ui.bx(s().wp(1.0).aspect(16.0 / 9.0)).bg(tok::L1).radius(ui.r(0.5)).child(inner).child(border).key(key(&c.id));
-    kit::nav(kit::tile(el, 1.06), T_TILE + i as u32, Some("Open"), None, false)
+    kit::nav(kit::tile(el, 1.06), T_TILE + i as u32, Some(tr().common.open), None, false)
 }
 
 fn detail(ui: &mut Ui, st: &ShareState, c: &Capture, req: &mut Requested) -> El {
@@ -264,47 +268,46 @@ fn detail(ui: &mut Ui, st: &ShareState, c: &Capture, req: &mut Requested) -> El 
         Phase::Idle | Phase::Error(_) => {
             let mut durs = Vec::new();
             for (i, d) in DURATIONS.iter().enumerate() {
-                durs.push(pick(ui, d.label, st.duration == d.id, T_DUR + i as u32, Some(&format!("Keep for {}", d.label))));
+                durs.push(pick(ui, d.label(), st.duration == d.id, T_DUR + i as u32, Some(&trf!(tr().share.keep_for, duration = d.label()))));
             }
             let keep = ui
                 .bx(s().col().gap(0.5))
-                .child(ui.text("Keep it for", T::new(Ty::Label).w(500).c(tok::MUTED)))
+                .child(ui.text(tr().share.keep_it_for, T::new(Ty::Label).w(500).c(tok::MUTED)))
                 .child(ui.bx(s().grid(&[Track::Fr(1.0), Track::Fr(1.0)]).gap(0.5)).group(kit::group("share-duration", false)).kids(durs));
             panel = panel.child(keep);
 
             if q.and_then(|q| q.sponsor.as_ref()).is_some_and(|s| s.covered) {
                 let mut who = Vec::new();
-                for (i, (p, label)) in [(Payer::Rare, "Rare covers it"), (Payer::Me, "My wallet")].into_iter().enumerate() {
+                for (i, (p, label)) in [(Payer::Rare, tr().share.rare_covers), (Payer::Me, tr().share.my_wallet)].into_iter().enumerate() {
                     who.push(pick(ui, label, st.payer == p, T_PAYER + i as u32, None));
                 }
                 panel = panel.child(
                     ui.bx(s().col().gap(0.5))
-                        .child(ui.text("Who pays", T::new(Ty::Label).w(500).c(tok::MUTED)))
+                        .child(ui.text(tr().share.who_pays, T::new(Ty::Label).w(500).c(tok::MUTED)))
                         .child(ui.bx(s().grid(&[Track::Fr(1.0), Track::Fr(1.0)]).gap(0.5)).group(kit::group("share-payer", false)).kids(who)),
                 );
             }
 
             let mut price = ui.bx(s().col().pt(0.9)).child(hair_top(ui));
-            let anyone = "Anyone with the link can see it.";
             match q {
                 Some(q) if rare => {
-                    let note = q.sponsor.as_ref().and_then(|s| s.note.clone()).unwrap_or_else(|| format!("Rare pays for {} days on Walrus.", q.days));
-                    price = price.child(ui.text("Free", T::new(Ty::Body).w(600))).child(ui.text(format!("{note} {anyone}"), T::new(Ty::Small).c(tok::MUTED).wrap()));
+                    let note = q.sponsor.as_ref().and_then(|s| s.note.clone()).unwrap_or_else(|| trn!(tr().share.rare_pays_days, q.days, days = q.days));
+                    price = price.child(ui.text(tr().share.free, T::new(Ty::Body).w(600))).child(ui.text(trf!(tr().share.note_anyone, note = note), T::new(Ty::Small).c(tok::MUTED).wrap()));
                 }
                 Some(q) if q.cost.is_some() => {
                     let cost = q.cost.unwrap();
                     let line = ui
                         .bx(s().row().wrap())
-                        .child(ui.text(format!("About {}", fmt_wal(Some(cost.wal_frost))), T::new(Ty::Body).w(600).tab()))
-                        .child(ui.text(format!(" plus {} in fees", fmt_sui_mist(cost.tip_mist + cost.gas_mist)), T::new(Ty::Body).c(tok::MUTED)));
-                    let net = if st.network == super::format::Network::Testnet { " testnet" } else { "" };
-                    price = price.child(line).child(ui.text(format!("Stored on Walrus{net} for {} days, {}. {anyone}", q.days, fmt_bytes(q.size)), T::new(Ty::Small).c(tok::MUTED).wrap()));
+                        .child(ui.text(trf!(tr().share.about_wal, wal = fmt_wal(Some(cost.wal_frost))), T::new(Ty::Body).w(600).tab()))
+                        .child(ui.text(trf!(tr().share.plus_fees, fee = fmt_sui_mist(cost.tip_mist + cost.gas_mist)), T::new(Ty::Body).c(tok::MUTED)));
+                    let stored = if st.network == super::format::Network::Testnet { tr().share.stored_testnet } else { tr().share.stored_mainnet };
+                    price = price.child(line).child(ui.text(trn!(stored, q.days, days = q.days, size = fmt_bytes(q.size)), T::new(Ty::Small).c(tok::MUTED).wrap()));
                 }
-                Some(_) => price = price.child(ui.text("Couldn't get the Walrus price. Try again in a moment.", T::new(Ty::Small).c(tok::MUTED).wrap())),
-                None => price = price.child(ui.text("Getting the price", T::new(Ty::Small).c(tok::MUTED))),
+                Some(_) => price = price.child(ui.text(tr().share.price_error, T::new(Ty::Small).c(tok::MUTED).wrap())),
+                None => price = price.child(ui.text(tr().share.getting_price, T::new(Ty::Small).c(tok::MUTED))),
             }
             if st.address.is_none() && !rare {
-                price = price.child(ui.text_s(s().mt(0.4), "Add a Rare Wallet account to share.", T::new(Ty::Small).c(tok::MUTED)));
+                price = price.child(ui.text_s(s().mt(0.4), tr().share.add_wallet, T::new(Ty::Small).c(tok::MUTED)));
             }
             panel = panel.child(price);
             if let Phase::Error(m) = &st.phase {
@@ -313,14 +316,15 @@ fn detail(ui: &mut Ui, st: &ShareState, c: &Capture, req: &mut Requested) -> El 
             if let Some(e) = &st.error {
                 panel = panel.child(error_line(ui, e, false));
             }
-            let share = kit::button(ui, Btn::new(if matches!(st.phase, Phase::Error(_)) { "Try again" } else { "Share" }, T_SHARE).primary().def(true).hint("Share").disabled(st.share_blocked()));
-            let del = kit::button(ui, Btn::new(if st.confirm { "Press again" } else { "Delete" }, T_DELETE).hint(if st.confirm { "Delete" } else { "Delete from this device" }));
+            let share = kit::button(ui, Btn::new(if matches!(st.phase, Phase::Error(_)) { tr().common.try_again } else { tr().common.share }, T_SHARE).primary().def(true).hint(tr().common.share).disabled(st.share_blocked()));
+            let del = kit::button(ui, Btn::new(if st.confirm { tr().share.press_again } else { tr().common.delete }, T_DELETE).hint(if st.confirm { tr().common.delete } else { tr().share.delete_hint }));
             panel = panel.child(ui.bx(s().row().gap(0.5)).group(kit::group("share-go", true)).child(flex1(share)).child(del));
         }
         Phase::Uploading(step) => {
-            let cur = STEPS.iter().position(|x| x.0 == *step).unwrap_or(0);
+            let steps = steps();
+            let cur = steps.iter().position(|x| x.0 == *step).unwrap_or(0);
             let mut col = ui.bx(s().col().gap(0.25).pt(0.9)).child(hair_top(ui));
-            for (i, (_, label, doing)) in STEPS.iter().enumerate() {
+            for (i, (_, label, doing)) in steps.iter().enumerate() {
                 let (tone, live) = match i.cmp(&cur) {
                     std::cmp::Ordering::Less => (DotTone::Primary, false),
                     std::cmp::Ordering::Equal => (DotTone::Brand, true),
@@ -330,7 +334,7 @@ fn detail(ui: &mut Ui, st: &ShareState, c: &Capture, req: &mut Requested) -> El 
                 let words = if i == cur { *doing } else { *label };
                 col = col.child(ui.bx(s().row().h(2.25).items_center().gap(0.65)).child(d).child(ui.text(words, T::new(Ty::Small).c(if i > cur { tok::MUTED } else { tok::FG }))));
             }
-            let note = if rare { "Rare is storing it." } else { "Two approvals in Rare Wallet: one pays for the storage, one confirms it." };
+            let note = if rare { tr().share.rare_storing } else { tr().share.two_approvals };
             col = col.child(ui.text_s(s().mt(0.4), note, T::new(Ty::Small).c(tok::MUTED).wrap()));
             panel = panel.child(col);
         }
@@ -353,20 +357,20 @@ fn detail(ui: &mut Ui, st: &ShareState, c: &Capture, req: &mut Requested) -> El 
             }
             col = col.child(lines);
             let d = kit::dot(ui, s(), if *copied { DotTone::Brand } else { DotTone::Muted }, false);
-            col = col.child(ui.bx(s().row().items_center().gap(0.45)).child(d).child(ui.text(if *copied { "Copied" } else { "Scan the code or copy the link" }, T::new(Ty::Small).c(tok::MUTED))));
+            col = col.child(ui.bx(s().row().items_center().gap(0.45)).child(d).child(ui.text(if *copied { tr().share.copied } else { tr().share.scan_or_copy }, T::new(Ty::Small).c(tok::MUTED))));
             panel = panel.child(col);
             let mut btns = ui.bx(s().col().gap(0.5)).group(kit::group("share-done", false));
-            btns = btns.child(kit::button(ui, Btn::new("Copy link", T_COPY).primary().def(true).hint("Copy link").min_w(0.0)).style(|st| st.size.width = rare_render::taffy::prelude::percent(1.0)));
+            btns = btns.child(kit::button(ui, Btn::new(tr().share.copy_link, T_COPY).primary().def(true).hint(tr().share.copy_link).min_w(0.0)).style(|st| st.size.width = rare_render::taffy::prelude::percent(1.0)));
             let send = match super::send_to() {
-                Some((_, name)) => format!("Send to {name}"),
-                None => "Send to a friend".to_string(),
+                Some((_, name)) => trf!(tr().share.send_to, name = name),
+                None => tr().share.send_to_friend.to_string(),
             };
-            btns = btns.child(kit::button(ui, Btn::new(send, T_SEND).hint("Send to a friend").min_w(0.0)).style(|st| st.size.width = rare_render::taffy::prelude::percent(1.0)));
+            btns = btns.child(kit::button(ui, Btn::new(send, T_SEND).hint(tr().share.send_to_friend).min_w(0.0)).style(|st| st.size.width = rare_render::taffy::prelude::percent(1.0)));
             if telegram_poster().is_some() {
-                btns = btns.child(kit::button(ui, Btn::new("Post to Telegram", T_TELEGRAM).hint("Post to Telegram")).style(|st| st.size.width = rare_render::taffy::prelude::percent(1.0)));
+                btns = btns.child(kit::button(ui, Btn::new(tr().share.post_telegram, T_TELEGRAM).hint(tr().share.post_telegram)).style(|st| st.size.width = rare_render::taffy::prelude::percent(1.0)));
             }
-            let done = kit::button(ui, Btn::new("Done", T_DONE).hint("Back to your captures"));
-            let del = kit::button(ui, Btn::new(if st.confirm { "Press again" } else { "Delete" }, T_DELETE).hint(if st.confirm { "Delete" } else { "Delete from this device" }));
+            let done = kit::button(ui, Btn::new(tr().common.done, T_DONE).hint(tr().share.back_to_captures));
+            let del = kit::button(ui, Btn::new(if st.confirm { tr().share.press_again } else { tr().common.delete }, T_DELETE).hint(if st.confirm { tr().common.delete } else { tr().share.delete_hint }));
             btns = btns.child(ui.bx(s().row().gap(0.5)).child(flex1(done)).child(flex1(del)));
             panel = panel.child(btns);
         }
@@ -561,13 +565,13 @@ impl SharePage {
         let mut h = Vec::new();
         if let Some(f) = self.host.nav.current_item() {
             if !f.disabled {
-                h.push(("a", f.hint_a.clone().unwrap_or_else(|| "Select".into())));
+                h.push(("a", f.hint_a.clone().unwrap_or_else(|| tr().common.select.into())));
             }
         }
-        h.push(("b", "Back".into()));
+        h.push(("b", tr().common.back.into()));
         if self.st.selected.is_some() && self.st.phase.editable() {
-            let other = DURATIONS.iter().find(|d| d.id != self.st.duration).map(|d| d.label).unwrap_or("");
-            h.push(("x", format!("Keep for {other}")));
+            let other = DURATIONS.iter().find(|d| d.id != self.st.duration).map(|d| d.label()).unwrap_or("");
+            h.push(("x", trf!(tr().share.keep_for, duration = other)));
         }
         h
     }

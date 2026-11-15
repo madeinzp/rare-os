@@ -1,6 +1,7 @@
 //! Search (components/Search.tsx): installed games from every store, Sui games, Rare Marketplace
 //! collections, in one page. Y opens it with the keyboard; the field reopens the keyboard.
 
+use rare_i18n::tr;
 use crate::act::Act;
 use crate::data::model::source_label;
 use crate::kit::{self, s, tok, Ty, Ui, T};
@@ -58,8 +59,8 @@ impl Page for Search {
         let q = st.search.clone();
         let edit = acts.tag(Act::Local(0));
         let mut field = ui.bx(s().row().items_center().gap(0.8).h(3.25).wp(1.0).px(1.1).mb(1.75)).bg(tok::L1).radius(ui.r(0.5)).border(1.0, tok::BORDER_LIGHT).child(kit::icon(ui, "search", 1.3, tok::ICON2));
-        field = if q.is_empty() { field.child(ui.text("Search games, Sui games, collections and coins", T::new(Ty::Row).c(tok::MUTED))) } else { field.child(ui.text(q.clone(), T::new(Ty::Row))) };
-        let field = kit::row_look(kit::nav(field, edit, Some("Edit search"), None, false));
+        field = if q.is_empty() { field.child(ui.text(tr().search.placeholder, T::new(Ty::Row).c(tok::MUTED))) } else { field.child(ui.text(q.clone(), T::new(Ty::Row))) };
+        let field = kit::row_look(kit::nav(field, edit, Some(tr().search.edit_search), None, false));
         let mut page = ui.bx(s().col().fill().px(2.5).py(2.0)).bg(tok::BG).enter(Motion::FADE).scrolls_y(key("search")).child(field);
         if !q.is_empty() {
             let needle = q.to_lowercase();
@@ -73,7 +74,7 @@ impl Page for Search {
                     let shade = ui
                         .bx(s().abs(None, Some(0.0), Some(0.0), Some(0.0)).px(0.5).pb(0.4).pt(1.2))
                         .look(Look::default().grad(Gradient { dir: GradDir::ToTop, stops: [tok::BLACK.alpha(0.85), tok::BLACK.alpha(0.42), tok::BLACK.alpha(0.0)], mid: 0.5 }))
-                        .child(ui.text(if g.installed { source_label(&g.source) } else { "Not installed" }, T::new(Ty::Label).c(tok::WHITE.alpha(0.85))));
+                        .child(ui.text(if g.installed { source_label(&g.source) } else { tr().common.not_installed }, T::new(Ty::Label).c(tok::WHITE.alpha(0.85))));
                     let tag = acts.game(Act::OpenGame(g.id.clone()), &g.id);
                     let b = ui.bx(s().wh(8.0, 12.0)).bg(tok::L3).radius(ui.r(0.5)).clip().child(art).child(shade);
                     kit::nav(kit::tile(b, 1.06), tag, None, None, false).key(key(&g.id))
@@ -109,13 +110,13 @@ impl Page for Search {
                     kit::nav(kit::tile(t, 1.06), tag, None, None, false).key(key(&c.slug))
                 })
                 .collect();
-            let mut col = ui.bx(s().col().gap(1.6)).child(group(ui, "Your games", "No game matches", games)).child(group(ui, "Sui Games", "No Sui game matches", sui)).child(group(ui, "Rare Marketplace", if hits.is_some() { "No collection matches" } else { "Searching" }, cols));
+            let mut col = ui.bx(s().col().gap(1.6)).child(group(ui, tr().search.your_games, tr().search.no_game_match, games)).child(group(ui, tr().search.sui_games, tr().search.no_sui_match, sui)).child(group(ui, tr().search.marketplace, if hits.is_some() { tr().search.no_collection_match } else { tr().search.searching }, cols));
             // Coins (trade/CoinSearch.tsx CoinResults): rows of the swap picker's kind.
             let coins: Vec<TokenRow> = hits.and_then(|h| h.coins.clone()).unwrap_or_default();
             let note = (!coins.is_empty()).then(|| coins.len().min(12).to_string());
-            let mut sec = ui.bx(s().col()).section().child(kit::section_head(ui, s().mb(0.5), "Coins", note.as_deref(), None));
+            let mut sec = ui.bx(s().col()).section().child(kit::section_head(ui, s().mb(0.5), tr().search.coins, note.as_deref(), None));
             if coins.is_empty() {
-                let msg = if hits.is_some_and(|h| h.coins.is_some()) { "No coin matches. Paste a full coin type to open one that is not listed." } else { "Searching" };
+                let msg = if hits.is_some_and(|h| h.coins.is_some()) { tr().search.no_coin_match } else { tr().search.searching };
                 sec = sec.child(ui.text_s(s().py(1.0), msg, T::new(Ty::Small).c(tok::MUTED)));
             } else {
                 let mut rows = ui.bx(s().col()).group(Group::new("search-coins", [0.0; 4]));
@@ -167,7 +168,7 @@ impl Page for Search {
 
     fn act(&mut self, st: &mut State, _fx: &mut crate::page::Fx, code: u32) {
         if code == 0 {
-            st.osk = Some(OskReq::new("Search", st.search.clone(), None, OskFor::Search));
+            st.osk = Some(OskReq::new(tr().common.search, st.search.clone(), None, OskFor::Search));
         }
     }
 }

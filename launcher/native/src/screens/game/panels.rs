@@ -3,6 +3,7 @@
 //! a Steam game starts.
 
 use crate::act::Act;
+use rare_i18n::{tr, trf, trn};
 use crate::data::model::{fmt_ago, Emulation, Game, ProtonStatus};
 use crate::kit::{self, s, tok, Btn as B, Ty, Ui, T};
 use crate::page::{Acts, Fx};
@@ -58,10 +59,10 @@ fn kind_label(k: &str) -> &str {
 
 fn phase_text(phase: &str) -> &'static str {
     match phase {
-        "lookup" => "Looking up the release",
-        "download" => "Downloading",
-        "verify" => "Checking the checksum",
-        "unpack" => "Unpacking",
+        "lookup" => tr().game.phase_lookup,
+        "download" => tr().common.downloading,
+        "verify" => tr().game.phase_verify,
+        "unpack" => tr().game.phase_unpack,
         _ => "",
     }
 }
@@ -81,7 +82,7 @@ fn entries(st: &ProtonStatus) -> Vec<Entry> {
         v.push(Entry { label: t.label.clone(), name: None, on: current.as_deref() == Some(t.name.as_str()) && st.game.is_none() });
     }
     for t in st.tools.iter().filter(|t| t.kind == "experimental" && !t.stale) {
-        v.push(Entry { label: "Experimental".into(), name: Some(t.name.clone()), on: st.game.as_deref() == Some(t.name.as_str()) });
+        v.push(Entry { label: tr().game.proton_experimental.into(), name: Some(t.name.clone()), on: st.game.as_deref() == Some(t.name.as_str()) });
     }
     for t in st.tools.iter().filter(|t| matches!(t.kind.as_str(), "ge" | "cachyos" | "other") && !t.stale) {
         v.push(Entry { label: t.label.clone(), name: Some(t.name.clone()), on: st.game.as_deref() == Some(t.name.as_str()) });
@@ -159,10 +160,10 @@ pub fn act(sh: &Arc<Shared>, st: &mut State, fx: &mut Fx, g: &Game, code: u32) {
         fx.spawn(move |b| {
             let r = b.webgame_open_browser(&id, &url);
             Box::new(move |st: &mut State, now| match r {
-                Ok(name) => st.toast(format!("Opening in {name}"), Tone::Info, now),
+                Ok(name) => st.toast(trf!(tr().game.opening_in, name = name), Tone::Info, now),
                 Err(e) => {
                     log::warn!("browser: {e}");
-                    st.toast("Couldn't open the browser.", Tone::Error, now)
+                    st.toast(tr().game.browser_failed, Tone::Error, now)
                 }
             })
         });
@@ -172,33 +173,33 @@ pub fn act(sh: &Arc<Shared>, st: &mut State, fx: &mut Fx, g: &Game, code: u32) {
     let Some(status) = sh.inner.lock().unwrap().proton.clone() else { return };
     let now = rare_render::clock::secs();
     if sh.busy().is_some() {
-        return st.toast("Wait for the Proton change to finish.", Tone::Info, now);
+        return st.toast(tr().game.proton_wait, Tone::Info, now);
     }
     if st.is_running(&g.id) {
-        return st.toast("Close the game first, then change its Proton.", Tone::Info, now);
+        return st.toast(tr().game.proton_close_first, Tone::Info, now);
     }
     let ents = entries(&status);
     let (key, done, job): (String, String, Box<dyn FnOnce(&dyn crate::data::backend::Backend) -> Result<(), String> + Send>) = match code {
         c if (ACT_SET..ACT_INSTALL).contains(&c) => {
             let Some(e) = ents.get((c - ACT_SET) as usize) else { return };
             if e.on {
-                return st.toast(format!("{} is already this game's Proton", e.label), Tone::Info, now);
+                return st.toast(trf!(tr().game.proton_already, name = e.label), Tone::Info, now);
             }
             let name = e.name.clone();
             let t = tgt.clone();
-            (format!("set:{:?}", name), format!("Proton for this game: {}", e.label), Box::new(move |b| set_tool(b, &t, name.as_deref())))
+            (format!("set:{:?}", name), trf!(tr().game.proton_set, name = e.label), Box::new(move |b| set_tool(b, &t, name.as_deref())))
         }
         c if (ACT_INSTALL..ACT_REMOVE).contains(&c) => {
             let Some(kind) = status.installable.get((c - ACT_INSTALL) as usize).cloned() else { return };
             let t = tgt.clone();
-            (format!("install:{kind}"), format!("{} installed and selected", kind_label(&kind)), Box::new(move |b| {
+            (format!("install:{kind}"), trf!(tr().game.proton_installed, name = kind_label(&kind)), Box::new(move |b| {
                 let name = b.proton_install(&kind)?;
                 set_tool(b, &t, Some(&name))
             }))
         }
         c => {
             let Some((name, label)) = stale(&status).get((c - ACT_REMOVE) as usize).cloned() else { return };
-            (format!("rm:{name}"), format!("{label} removed"), Box::new(move |b| b.proton_remove(&name)))
+            (format!("rm:{name}"), trf!(tr().game.proton_removed, name = label), Box::new(move |b| b.proton_remove(&name)))
         }
     };
     *PROGRESS.lock().unwrap() = None;
@@ -218,7 +219,7 @@ pub fn act(sh: &Arc<Shared>, st: &mut State, fx: &mut Fx, g: &Game, code: u32) {
                 Ok(()) => st.toast(done, Tone::Info, now),
                 Err(e) => {
                     log::warn!("proton: {e}");
-                    st.toast("Couldn't finish that.", Tone::Error, now)
+                    st.toast(tr().game.proton_failed, Tone::Error, now)
                 }
             }
         })
@@ -242,10 +243,10 @@ pub fn proton(ui: &mut Ui, sh: &Shared, acts: &mut Acts, g: &Game) -> Option<El>
         kids.push(kit::button(ui, if e.on { b.primary() } else { b.ghost() }));
     }
     for (i, k) in status.installable.iter().enumerate() {
-        kids.push(kit::button(ui, B::new(format!("Install {}", kind_label(k)), acts.tag(Act::Local(ACT_INSTALL + i as u32))).ghost().disabled(off)));
+        kids.push(kit::button(ui, B::new(trf!(tr().game.proton_install, name = kind_label(k)), acts.tag(Act::Local(ACT_INSTALL + i as u32))).ghost().disabled(off)));
     }
     for (i, (_, label)) in stale(&status).into_iter().enumerate() {
-        kids.push(kit::button(ui, B::new(format!("Remove old {label}"), acts.tag(Act::Local(ACT_REMOVE + i as u32))).ghost().disabled(off)));
+        kids.push(kit::button(ui, B::new(trf!(tr().game.proton_remove_old, name = label), acts.tag(Act::Local(ACT_REMOVE + i as u32))).ghost().disabled(off)));
     }
     if off {
         let text = match PROGRESS.lock().unwrap().as_ref() {
@@ -253,8 +254,8 @@ pub fn proton(ui: &mut Ui, sh: &Shared, acts: &mut Acts, g: &Game) -> Option<El>
                 let pct = if phase == "download" && *total > 0 { format!(" {}%", (*done as f64 / *total as f64 * 100.0).round()) } else { String::new() };
                 format!("{}{pct}", phase_text(phase))
             }
-            None if steam => "Restarting Steam".into(),
-            None => "Saving".into(),
+            None if steam => tr().game.restarting_steam.into(),
+            None => tr().game.saving.into(),
         };
         kids.push(ui.text(text, T::new(Ty::Meta).c(tok::MUTED)));
     }
@@ -264,9 +265,9 @@ pub fn proton(ui: &mut Ui, sh: &Shared, acts: &mut Acts, g: &Game) -> Option<El>
 /// "12 min" or "1.5 h" (GamePanels.tsx fmtHours).
 fn fmt_hours(secs: u64) -> String {
     if secs < 3600 {
-        format!("{} min", ((secs as f64 / 60.0).round() as u64).max(1))
+        trf!(tr().game.min, n = ((secs as f64 / 60.0).round() as u64).max(1))
     } else {
-        format!("{} h", (secs as f64 / 360.0).round() / 10.0)
+        trf!(tr().game.h, n = (secs as f64 / 360.0).round() / 10.0)
     }
 }
 
@@ -274,7 +275,7 @@ fn fmt_hours(secs: u64) -> String {
 pub fn emulation(ui: &mut Ui, acts: &mut Acts, e: &Emulation) -> El {
     let total: u32 = e.systems.iter().map(|x| x.count).sum();
     let sys_name = |id: &str| e.systems.iter().find(|x| x.id == id).map(|x| x.name.clone()).unwrap_or_else(|| id.to_uppercase());
-    let head = ui.bx(s().row().items_end().gap(0.6).mb(0.6)).child(ui.text("Systems", T::new(Ty::Small).w(600))).child(ui.text(format!("{total} games"), T::new(Ty::Meta).c(tok::MUTED).tab()));
+    let head = ui.bx(s().row().items_end().gap(0.6).mb(0.6)).child(ui.text(tr().game.systems, T::new(Ty::Small).w(600))).child(ui.text(trn!(tr().common.games_n, total), T::new(Ty::Meta).c(tok::MUTED).tab()));
     let mut rows = Vec::new();
     for chunk in e.systems.iter().take(12).collect::<Vec<_>>().chunks(3) {
         let mut cells: Vec<El> = chunk
@@ -294,7 +295,7 @@ pub fn emulation(ui: &mut Ui, acts: &mut Acts, e: &Emulation) -> El {
     let left = ui.bx(s().col().flex(3.0).min0().px(1.25).py(1.0).gap(0.35)).bg(tok::L1).radius(ui.r(1.0)).child(head).kids(rows);
     let mut row = ui.bx(s().row().gap(1.0).max_w(75.0)).child(left);
     if !e.recent.is_empty() {
-        let mut col = vec![ui.text_s(s().mb(0.25), "Played last", T::new(Ty::Small).w(600))];
+        let mut col = vec![ui.text_s(s().mb(0.25), tr().game.played_last, T::new(Ty::Small).w(600))];
         for g in e.recent.iter().take(4) {
             let name = g.name.split(['[', '(']).next().unwrap_or(&g.name).trim_end();
             let name = if name.is_empty() { g.name.as_str() } else { name };
@@ -305,7 +306,7 @@ pub fn emulation(ui: &mut Ui, acts: &mut Acts, e: &Emulation) -> El {
                 .child(ui.text_s(s().shrink(), format!("{} \u{b7} {when}", sys_name(&g.system)), T::new(Ty::Meta).c(tok::MUTED).trunc()));
             // Delete: the ROM file leaves the system's folder (features/uninstall.rs).
             if let Some(id) = g.uninstall_id() {
-                line = line.child(kit::button(ui, B::new("Delete", acts.tag(Act::Uninstall(id))).sm().ghost().hint("Delete")));
+                line = line.child(kit::button(ui, B::new(tr().common.delete, acts.tag(Act::Uninstall(id))).sm().ghost().hint(tr().common.delete)));
             }
             col.push(line);
         }
@@ -322,7 +323,7 @@ pub fn web_info(ui: &mut Ui, sh: &Shared, acts: &mut Acts, g: &Game) -> El {
     let mut row = ui.bx(s().row().items_end().gap(1.5).max_w(60.0)).child(col);
     let browser = sh.inner.lock().unwrap().browser.clone();
     if let (Some(_), Some(name)) = (url, browser) {
-        row = row.child(kit::button(ui, B::new(format!("Open in {name}"), acts.tag(Act::Local(ACT_BROWSER))).sm().ghost().hint(format!("Open in {name}"))));
+        row = row.child(kit::button(ui, B::new(trf!(tr().game.open_in, name = name), acts.tag(Act::Local(ACT_BROWSER))).sm().ghost().hint(trf!(tr().game.open_in, name = name))));
     }
     row
 }
@@ -337,14 +338,12 @@ pub fn start_progress(ui: &mut Ui, start: &Start, now: f64) -> Option<El> {
         _ => return None,
     };
     let secs = now - start.since;
-    let mut text = match asked {
+    let text = match asked {
         Some(q) => q.to_string(),
-        None if steam => "Starting Steam".to_string(),
-        None => "Starting the game".to_string(),
+        None if steam && secs >= 15.0 => tr().game.starting_steam_updating.to_string(),
+        None if steam => tr().game.starting_steam.to_string(),
+        None => tr().game.starting_game.to_string(),
     };
-    if steam && secs >= 15.0 {
-        text.push_str(", it is updating");
-    }
     let name = ui.loop_name(&rare_render::anim::BREATHE, 1.3);
     let seg = ui.bx(s().wp(0.35).h_px(3.0)).bg(tok::fg(0.8)).radius(ui.r(0.15)).name(name);
     let track = ui.bx(s().wp(1.0).h_px(3.0)).bg(tok::fg(0.15)).radius(ui.r(0.15)).clip().child(seg);

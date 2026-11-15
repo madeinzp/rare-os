@@ -16,6 +16,7 @@ use crate::screens::emulators::{EmuInfo, EmuUpdateInfo};
 use super::network::{BluetoothAdapter, BtDev, NetInfo, NetStatus, WifiNet};
 use super::power::{BatteryCare, CareState, Perf, PowerInfo};
 use super::update::{OsUpdate, SystemInfo};
+use rare_i18n::{tr, trf, trn};
 use rare_system as sys;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -329,7 +330,7 @@ fn read_perf() -> Option<Perf> {
         cpu_boost: p.cpu_boost,
         fan: p.fan.map(|f| name_of(&f)),
         profile_watts: Some((p.profile_watts.quiet as f32, p.profile_watts.balanced as f32, p.profile_watts.performance as f32)),
-        fan_now: sys::system::fan_status().map(|f| crate::features::fancurve::now_line(&f)).filter(|l| l != "Reading the fan"),
+        fan_now: sys::system::fan_status().map(|f| crate::features::fancurve::now_line(&f)).filter(|l| l != tr().features.fan_reading),
     })
 }
 
@@ -546,7 +547,7 @@ fn scan_wifi(waker: &Arc<dyn Fn() + Send + Sync>) {
                 Ok(l) => s.net.nets = Some(l),
                 Err(e) => {
                     s.net.nets = Some(vec![]);
-                    s.net.error = Some(failed("Couldn't look for networks.", &e, None));
+                    s.net.error = Some(failed(tr().settings_more.lv_couldnt_look_for_networks, &e, None));
                 }
             }
         },
@@ -626,7 +627,7 @@ fn sound_action(op: &str, rest: String, waker: &Arc<dyn Fn() + Send + Sync>) {
     match op {
         "output" => spawn(waker, move || {
             if let Err(e) = sys::audio::set_default_output(&rest) {
-                toast(failed("Couldn't switch the output.", &e, None), true);
+                toast(failed(tr().settings_more.lv_couldnt_switch_the_output, &e, None), true);
             }
             refresh_audio(&w, true);
         }),
@@ -634,7 +635,7 @@ fn sound_action(op: &str, rest: String, waker: &Arc<dyn Fn() + Send + Sync>) {
             let muted = rest == "true";
             spawn(waker, move || {
                 if let Err(e) = sys::audio::set_mic_muted(muted) {
-                    toast(failed(if muted { "Couldn't mute the mic." } else { "Couldn't turn the mic on." }, &e, None), true);
+                    toast(failed(if muted { tr().settings_more.lv_mute_mic_failed } else { tr().settings_more.lv_mic_on_failed }, &e, None), true);
                 }
                 refresh_audio(&w, true);
             });
@@ -643,7 +644,7 @@ fn sound_action(op: &str, rest: String, waker: &Arc<dyn Fn() + Send + Sync>) {
             let on = rest == "true";
             spawn(waker, move || {
                 if let Err(e) = sys::speakers::set_louder(on) {
-                    toast(failed("Couldn't change the speakers.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_change_the_speakers, &e, None), true);
                 }
                 refresh_audio(&w, true);
             });
@@ -652,7 +653,7 @@ fn sound_action(op: &str, rest: String, waker: &Arc<dyn Fn() + Send + Sync>) {
             let v: f32 = rest.parse().unwrap_or(0.0);
             spawn(waker, move || {
                 if let Err(e) = sys::audio::set_mic_level(v.round().clamp(0.0, 100.0) as u8) {
-                    toast(failed("Couldn't change the mic level.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_change_the_mic_level, &e, None), true);
                 }
                 // The slider already shows it: keep the reading without a redraw.
                 let a = read_audio();
@@ -750,32 +751,28 @@ fn set_allow_network_apps(on: bool) -> Result<(), String> {
 
 fn github_keys(user: &str) -> Result<Vec<String>, String> {
     let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(10))).http_status_as_error(false).build().into();
-    let mut resp = agent.get(&sys::ssh::github_keys_url(user)).header("User-Agent", "RareLauncher/0.1").call().map_err(|_| "Couldn't reach GitHub. Check your connection.".to_string())?;
+    let mut resp = agent.get(&sys::ssh::github_keys_url(user)).header("User-Agent", "RareLauncher/0.1").call().map_err(|_| tr().settings_more.lv_gh_unreachable.to_string())?;
     if resp.status().as_u16() == 404 {
-        return Err(format!("GitHub has no user called {user}."));
+        return Err(trf!(tr().settings_more.lv_gh_no_user, user = user));
     }
     if !resp.status().is_success() {
-        return Err("GitHub didn't answer. Try again in a moment.".into());
+        return Err(tr().settings_more.lv_gh_no_answer.into());
     }
-    let text = resp.body_mut().with_config().limit(64 * 1024).read_to_string().map_err(|_| "GitHub's answer was too large.".to_string())?;
+    let text = resp.body_mut().with_config().limit(64 * 1024).read_to_string().map_err(|_| tr().settings_more.lv_gh_too_large.to_string())?;
     let keys = sys::ssh::parse_keys(&text);
     if keys.is_empty() {
-        return Err(format!("{user} has no public keys on GitHub."));
+        return Err(trf!(tr().settings_more.lv_gh_no_keys, user = user));
     }
     Ok(keys)
-}
-
-fn plural(n: usize) -> &'static str {
-    if n == 1 { "" } else { "s" }
 }
 
 fn add_keys_now(lines: Vec<String>, waker: &Arc<dyn Fn() + Send + Sync>) {
     match sys::ssh::add_keys(&lines) {
         Ok(m) => {
             let added = m.split_whitespace().find_map(|p| p.strip_prefix("added=")).and_then(|n| n.parse::<usize>().ok()).unwrap_or(lines.len());
-            toast(if added == 0 { "Those keys were already added".to_string() } else { format!("Added {added} key{}. Password sign-in turns off once a key is added.", plural(added)) }, false);
+            toast(if added == 0 { tr().settings_more.lv_keys_already.to_string() } else { trn!(tr().settings_more.lv_keys_added, added) }, false);
         }
-        Err(e) => toast(failed("Couldn't add the key.", &e, None), true),
+        Err(e) => toast(failed(tr().settings_more.lv_couldnt_add_the_key, &e, None), true),
     }
     refresh_ssh(waker);
 }
@@ -791,9 +788,10 @@ fn ssh_action(op: &str, rest: String, arg: Option<String>, waker: &Arc<dyn Fn() 
                     Ok(()) => {
                         let st = sys::ssh::status().ok();
                         let none = st.as_ref().is_some_and(|s| !s.has_password && s.keys.is_empty());
-                        toast(if on { if none { "Remote access is on. Set a password or add a key to sign in.".to_string() } else { "Remote access is on".to_string() } } else { "Remote access is off".to_string() }, false);
+                        let t = &tr().settings_more;
+                        toast(if on { if none { t.lv_remote_on_setup } else { t.lv_remote_on } } else { t.lv_remote_off }, false);
                     }
-                    Err(e) => toast(failed(if on { "Couldn't turn on remote access." } else { "Couldn't turn off remote access." }, &e, None), true),
+                    Err(e) => toast(failed(if on { tr().settings_more.lv_remote_on_failed } else { tr().settings_more.lv_remote_off_failed }, &e, None), true),
                 }
                 refresh_ssh(&w);
             });
@@ -802,8 +800,8 @@ fn ssh_action(op: &str, rest: String, arg: Option<String>, waker: &Arc<dyn Fn() 
             let pw = arg.unwrap_or_default();
             spawn(waker, move || {
                 match sys::ssh::set_password(&pw) {
-                    Ok(()) => toast("Password set", false),
-                    Err(e) => toast(failed("Couldn't set the password.", &e, None), true),
+                    Ok(()) => toast(tr().settings_more.lv_password_set, false),
+                    Err(e) => toast(failed(tr().settings_more.lv_couldnt_set_the_password, &e, None), true),
                 }
                 refresh_ssh(&w);
             });
@@ -813,7 +811,7 @@ fn ssh_action(op: &str, rest: String, arg: Option<String>, waker: &Arc<dyn Fn() 
             spawn(waker, move || {
                 let keys = sys::ssh::parse_keys(&text);
                 if keys.is_empty() {
-                    toast("That isn't a public key. It starts with ssh-ed25519 or ssh-rsa.", true);
+                    toast(tr().settings_more.lv_that_isnt_a_public_key, true);
                     return;
                 }
                 add_keys_now(keys, &w);
@@ -830,7 +828,7 @@ fn ssh_action(op: &str, rest: String, arg: Option<String>, waker: &Arc<dyn Fn() 
                 }
             }
             if keys.is_empty() {
-                toast("No keys found. Put a file called authorized_keys on a USB stick and plug it in.", true);
+                toast(tr().settings_more.lv_no_keys_found_put_a, true);
                 return;
             }
             let drive = files.first().map(|(d, _)| d.clone()).unwrap_or_default();
@@ -839,10 +837,10 @@ fn ssh_action(op: &str, rest: String, arg: Option<String>, waker: &Arc<dyn Fn() 
                 s.pending_keys = keys;
             }
             ask(Ask {
-                title: format!("Add {n} key{} from the USB stick?", plural(n)),
+                title: trn!(tr().settings_more.lv_usb_title, n),
                 sub: drive,
-                body: "Anyone with a matching private key will be able to sign in to this device.".into(),
-                yes: "Add keys".into(),
+                body: tr().settings_more.lv_usb_body.into(),
+                yes: tr().settings_more.lv_add_keys.into(),
                 act: "ssh:add-pending".into(),
             });
         }),
@@ -850,7 +848,7 @@ fn ssh_action(op: &str, rest: String, arg: Option<String>, waker: &Arc<dyn Fn() 
             let user = arg.unwrap_or_default().trim().trim_start_matches('@').to_string();
             spawn(waker, move || {
                 if !sys::ssh::github_user_ok(&user) {
-                    toast("That isn't a GitHub user name.", true);
+                    toast(tr().settings_more.lv_that_isnt_a_github_user, true);
                     return;
                 }
                 match github_keys(&user) {
@@ -860,7 +858,7 @@ fn ssh_action(op: &str, rest: String, arg: Option<String>, waker: &Arc<dyn Fn() 
                             s.pending_keys = keys;
                         }
                         let (title, sub, body) = super::remote::github_confirm(&user, n);
-                        ask(Ask { title, sub, body, yes: "Add keys".into(), act: "ssh:add-pending".into() });
+                        ask(Ask { title, sub, body, yes: tr().settings_more.lv_add_keys.into(), act: "ssh:add-pending".into() });
                     }
                     Err(e) => toast(e, true),
                 }
@@ -872,19 +870,19 @@ fn ssh_action(op: &str, rest: String, arg: Option<String>, waker: &Arc<dyn Fn() 
         }),
         "remove-ask" => {
             let kind = SHARED.lock().ok().and_then(|s| s.snap.as_ref().and_then(|sn| sn.ssh.status.as_ref().and_then(|st| st.keys.iter().find(|k| k.fingerprint == rest).cloned())));
-            let label = kind.map(|k| if k.comment.is_empty() { format!("{} key", k.kind) } else { k.comment }).unwrap_or_else(|| "this key".into());
+            let label = kind.map(|k| if k.comment.is_empty() { trf!(tr().settings_more.rem_key_kind, kind = k.kind) } else { k.comment }).unwrap_or_else(|| tr().settings_more.lv_this_key.into());
             ask(Ask {
-                title: "Remove this key?".into(),
+                title: tr().settings_more.lv_remove_title.into(),
                 sub: label,
-                body: format!("The computer that uses it can no longer sign in.\n{rest}"),
-                yes: "Remove".into(),
+                body: trf!(tr().settings_more.lv_remove_body, fingerprint = rest),
+                yes: tr().common.remove.into(),
                 act: format!("ssh:remove:{rest}"),
             });
         }
         "remove" => spawn(waker, move || {
             match sys::ssh::remove_key(&rest) {
-                Ok(()) => toast("Key removed", false),
-                Err(e) => toast(failed("Couldn't remove the key.", &e, None), true),
+                Ok(()) => toast(tr().settings_more.lv_key_removed, false),
+                Err(e) => toast(failed(tr().settings_more.lv_couldnt_remove_the_key, &e, None), true),
             }
             refresh_ssh(&w);
         }),
@@ -892,7 +890,7 @@ fn ssh_action(op: &str, rest: String, arg: Option<String>, waker: &Arc<dyn Fn() 
             let on = rest == "true";
             spawn(waker, move || {
                 if let Err(e) = sys::ssh::keep_password(on) {
-                    toast(failed("Couldn't change that.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_change_that, &e, None), true);
                 }
                 refresh_ssh(&w);
             });
@@ -901,9 +899,9 @@ fn ssh_action(op: &str, rest: String, arg: Option<String>, waker: &Arc<dyn Fn() 
             let on = rest == "true";
             spawn(waker, move || {
                 match sys::ssh::auto_off(on) {
-                    Ok(()) if on => toast("Remote access turns off in an hour", false),
+                    Ok(()) if on => toast(tr().settings_more.lv_remote_access_turns_off_in, false),
                     Ok(()) => {}
-                    Err(e) => toast(failed("Couldn't set the timer.", &e, None), true),
+                    Err(e) => toast(failed(tr().settings_more.lv_couldnt_set_the_timer, &e, None), true),
                 }
                 refresh_ssh(&w);
             });
@@ -912,7 +910,7 @@ fn ssh_action(op: &str, rest: String, arg: Option<String>, waker: &Arc<dyn Fn() 
             let cmd = SHARED.lock().ok().and_then(|s| s.snap.as_ref().map(|sn| sn.ssh.command())).unwrap_or_default();
             spawn(waker, move || {
                 crate::screens::wallet::flows::manage::copy_text(&cmd);
-                toast("Copied", false);
+                toast(tr().settings_more.lv_copied, false);
             });
         }
         _ => {}
@@ -948,9 +946,9 @@ fn netapi_action(op: &str, rest: String, waker: &Arc<dyn Fn() + Send + Sync>) {
                 match r {
                     Ok(t) => {
                         edit(|s| { s.ssh.netapi = on; s.ssh.net_token = t; }, true);
-                        toast(if on { "Network apps are allowed" } else { "Network apps are off" }, false);
+                        toast(if on { tr().settings_more.lv_netapps_on } else { tr().settings_more.lv_netapps_off }, false);
                     }
-                    Err(e) => toast(failed("Couldn't change network apps.", &e, None), true),
+                    Err(e) => toast(failed(tr().settings_more.lv_couldnt_change_network_apps, &e, None), true),
                 }
                 w();
             });
@@ -971,10 +969,10 @@ fn netapi_action(op: &str, rest: String, waker: &Arc<dyn Fn() + Send + Sync>) {
                     Ok(()) => {
                         rare_localapi::network_set_caps(&ids);
                         edit(|s| s.ssh.caps = ids.clone(), true);
-                        let title = rare_localapi::CAPS.iter().find(|c| c.0 == id).map(|c| c.1).unwrap_or("That");
-                        toast(&format!("{title} is {}", if on { "on" } else { "off" }), false);
+                        let title = rare_localapi::CAPS.iter().find(|c| c.0 == id).map(|c| c.1).unwrap_or(tr().settings_more.lv_cap_that);
+                        toast(if on { trf!(tr().settings_more.lv_cap_on, name = title) } else { trf!(tr().settings_more.lv_cap_off, name = title) }, false);
                     }
-                    Err(e) => toast(failed("Couldn't save that.", &e, None), true),
+                    Err(e) => toast(failed(tr().settings_more.lv_couldnt_save_that, &e, None), true),
                 }
                 w();
             });
@@ -983,16 +981,16 @@ fn netapi_action(op: &str, rest: String, waker: &Arc<dyn Fn() + Send + Sync>) {
             match net_token_new().and_then(|t| rare_localapi::network_enable(&t, sys::ssh::NETAPI_PORT, &sys::ssh::hostname()).map(|_| t)) {
                 Ok(t) => {
                     edit(|s| s.ssh.net_token = Some(t), true);
-                    toast("New token made. The old one stopped working.", false);
+                    toast(tr().settings_more.lv_new_token_made_the_old, false);
                 }
-                Err(e) => toast(failed("Couldn't make a new token.", &e, None), true),
+                Err(e) => toast(failed(tr().settings_more.lv_couldnt_make_a_new_token, &e, None), true),
             }
             w();
         }),
         "copy" => spawn(waker, move || {
             if let Some(t) = SHARED.lock().ok().and_then(|s| s.snap.as_ref().and_then(|sn| sn.ssh.net_token.clone())) {
                 crate::screens::wallet::flows::manage::copy_text(&t);
-                toast("Copied", false);
+                toast(tr().settings_more.lv_copied, false);
             }
         }),
         _ => {}
@@ -1050,7 +1048,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
             let v: f32 = rest.parse().unwrap_or(0.0);
             spawn(&w, move || {
                 if let Err(e) = sys::system::set_volume(v.round().clamp(0.0, 100.0) as u8) {
-                    toast(failed("Couldn't change the volume.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_change_the_volume, &e, None), true);
                 }
             });
         }
@@ -1058,7 +1056,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
             let v: f32 = rest.parse().unwrap_or(0.0);
             spawn(&w, move || {
                 if let Err(e) = sys::system::set_brightness(v.round().clamp(0.0, 100.0) as u8) {
-                    toast(failed("Couldn't change the brightness.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_change_the_brightness, &e, None), true);
                 }
             });
         }
@@ -1072,7 +1070,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
                     _ => n.warmth = rest.parse::<f32>().unwrap_or(50.0).round().clamp(10.0, 100.0) as u8,
                 }
                 if let Err(e) = sys::screen::night_set(n) {
-                    toast(failed("Couldn't change Night light.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_change_night_light, &e, None), true);
                 }
             });
         }
@@ -1088,7 +1086,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
                     t.refresh = rest.parse().unwrap_or(0);
                 }
                 if let Err(e) = sys::screen::tv_set(t) {
-                    toast(failed("Couldn't change the TV's picture.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_change_the_tvs_picture, &e, None), true);
                 }
             });
         }
@@ -1111,7 +1109,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
                     sys::power::perf_set_apply(tdp, wanted, None)
                 })();
                 if let Err(e) = r {
-                    toast(failed("Couldn't change the performance profile.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_change_the_performance_profile, &e, None), true);
                 }
                 let perf = read_perf();
                 edit(|s| s.power.perf = perf, !quiet);
@@ -1124,7 +1122,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
                 sys::power::perf_boost_config(&mut s, on);
                 power_save(&s);
                 if let Err(e) = sys::system::set_cpu_boost(on) {
-                    toast(failed("Couldn't change CPU boost.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_change_cpu_boost, &e, None), true);
                 }
                 let perf = read_perf();
                 edit(|s| s.power.perf = perf, true);
@@ -1135,7 +1133,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
             spawn(&w, move || {
                 let r = named::<sys::system::FanMode>(&mode).ok_or("Unknown fan mode".to_string()).and_then(sys::system::set_fan);
                 if let Err(e) = r {
-                    toast(failed("Couldn't change the fan.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_change_the_fan, &e, None), true);
                 }
                 let perf = read_perf();
                 edit(|s| s.power.perf = perf, true);
@@ -1145,7 +1143,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
             let pct = rest.parse::<u32>().unwrap_or(80);
             spawn(&w, move || {
                 if let Err(e) = sys::system::set_battery_limit(pct) {
-                    toast(failed("Couldn't change the charge limit.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_change_the_charge_limit, &e, None), true);
                 }
                 std::thread::sleep(std::time::Duration::from_secs(1));
                 let care = read_care();
@@ -1160,7 +1158,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
             let on = rest == "true";
             spawn(&w, move || {
                 if let Err(e) = sys::system::set_battery_care(on) {
-                    toast(failed("Couldn't change battery care.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_change_battery_care, &e, None), true);
                 }
                 // The driver takes a moment to report the new state (PowerSection.tsx waits 6 s).
                 std::thread::sleep(std::time::Duration::from_secs(2));
@@ -1172,7 +1170,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
             let action = action.to_string();
             spawn(&w, move || {
                 if let Err(e) = sys::system::power(&action) {
-                    toast(failed("That didn't work.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_that_didnt_work, &e, None), true);
                 }
             });
         }
@@ -1182,7 +1180,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
             spawn(&w, move || {
                 if let Err(e) = sys::osupdate::check_now() {
                     edit(|s| s.system.checking = false, true);
-                    toast(failed("Couldn't check for updates.", &e, Some("Check your Wi-Fi and try again.")), true);
+                    toast(failed(tr().settings_more.lv_couldnt_check_for_updates, &e, Some(tr().settings_more.lv_check_wifi_hint)), true);
                     return;
                 }
                 // Follow the updater for as long as it works (an 8 GB download takes a while): its
@@ -1207,7 +1205,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
                         // Nothing started within a minute: say so instead of spinning.
                         if idle_polls >= 20 {
                             edit(|s| s.system.checking = false, true);
-                            toast("The update check did not start. Try again in a moment.".to_string(), true);
+                            toast(tr().settings_more.lv_the_update_check_did_not.to_string(), true);
                             return;
                         }
                     }
@@ -1216,35 +1214,36 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
         }
         ("os", "rollback-ask") => {
             let snap = SHARED.lock().ok().and_then(|s| s.snap.clone());
-            let prev = snap.as_ref().and_then(|s| s.system.update.previous_version.clone()).unwrap_or_else(|| "the previous version".into());
+            let prev = snap.as_ref().and_then(|s| s.system.update.previous_version.clone()).map(|v| trf!(tr().settings_more.lv_os_version, version = v)).unwrap_or_else(|| tr().settings_more.lv_previous_version.into());
             let running = snap.as_ref().is_some_and(|s| s.running);
-            let mut body = format!("The device restarts into Rare OS {prev}. Your games and files stay as they are.\nThis version stays on the device but does not install again by itself. Update now in Settings installs it again.");
+            let mut body = trf!(tr().settings_more.lv_rollback_body, name = prev);
             if running {
-                body.push_str("\nA game is running. Close it first so nothing is lost.");
+                body.push_str("\n");
+                body.push_str(tr().settings_more.os_game_running);
             }
-            ask(Ask { title: "Go back to the previous version".into(), sub: format!("Rare OS {prev}"), body, yes: "Go back and restart".into(), act: "os:rollback:reboot".into() });
+            ask(Ask { title: tr().settings_more.lv_rollback_title.into(), sub: prev, body, yes: tr().settings_more.lv_rollback_yes.into(), act: "os:rollback:reboot".into() });
         }
         ("os", "rollback") => {
             let reboot = rest == "reboot";
             spawn(&w, move || match sys::osupdate::rollback(reboot) {
                 Ok(m) => toast(m, false),
-                Err(e) => toast(failed("Couldn't go back to the previous version.", &e, None), true),
+                Err(e) => toast(failed(tr().settings_more.lv_couldnt_go_back_to_the, &e, None), true),
             });
         }
         ("os", "boot-menu-next") => {
             spawn(&w, move || match sys::osupdate::boot_menu_next() {
                 Ok(()) => {
                     edit(|s| s.system.menu_set = true, true);
-                    toast("The boot menu shows on the next start", false);
+                    toast(tr().settings_more.lv_the_boot_menu_shows_on, false);
                 }
-                Err(e) => toast(failed("Couldn't set the boot menu.", &e, None), true),
+                Err(e) => toast(failed(tr().settings_more.lv_couldnt_set_the_boot_menu, &e, None), true),
             });
         }
         ("os", "restore") => {
             let reboot = rest == "reboot";
             spawn(&w, move || match sys::osupdate::restore(reboot) {
                 Ok(m) => toast(m, false),
-                Err(e) => toast(failed("Couldn't restore the previous system.", &e, None), true),
+                Err(e) => toast(failed(tr().settings_more.lv_couldnt_restore_the_previous_system, &e, None), true),
             });
         }
         ("emu", "check") => {
@@ -1255,11 +1254,11 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
                     Ok(u) => {
                         let info = EmuUpdateInfo { available: u.available, tag: u.tag.clone(), verify: u.verify.into() };
                         if !u.available {
-                            toast(format!("{} is up to date", emu_name(&id)), false);
+                            toast(trf!(tr().settings_more.lv_emu_current, name = emu_name(&id)), false);
                         }
                         edit(|s| { s.emu_found.retain(|(i, _)| *i != id); s.emu_found.push((id.clone(), info)); }, false);
                     }
-                    Err(e) => toast(failed(&format!("Couldn't check {}.", emu_name(&id)), &e.to_string(), None), true),
+                    Err(e) => toast(failed(&trf!(tr().settings_more.lv_emu_check_failed, name = emu_name(&id)), &e.to_string(), None), true),
                 }
                 edit(|s| s.emu_busy = None, true);
             });
@@ -1270,11 +1269,11 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
             spawn(&w, move || {
                 match rare_emu::emu_update(&crate::features::bus::ctx(), id.clone()) {
                     Ok(d) => {
-                        toast(format!("{} updated to {}", emu_name(&id), d.tag), false);
+                        toast(trf!(tr().settings_more.lv_emu_updated, name = emu_name(&id), tag = d.tag), false);
                         let list = read_emulators();
                         edit(|s| { s.emu = Some(list); s.emu_found.retain(|(i, _)| *i != id); }, false);
                     }
-                    Err(e) => toast(failed(&format!("Couldn't update {}.", emu_name(&id)), &e.to_string(), None), true),
+                    Err(e) => toast(failed(&trf!(tr().settings_more.lv_emu_update_failed, name = emu_name(&id)), &e.to_string(), None), true),
                 }
                 edit(|s| s.emu_busy = None, true);
             });
@@ -1301,7 +1300,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
                     }
                     Err(m) => {
                         let low = m.to_lowercase();
-                        let msg = if ["secret", "password", "802-11-wireless-security"].iter().any(|k| low.contains(k)) { format!("Couldn't join {ssid}. Check the password and try again.") } else { failed(&format!("Couldn't join {ssid}."), &m, None) };
+                        let msg = if ["secret", "password", "802-11-wireless-security"].iter().any(|k| low.contains(k)) { trf!(tr().settings_more.lv_join_password, ssid = ssid) } else { failed(&trf!(tr().settings_more.lv_join_failed, ssid = ssid), &m, None) };
                         edit(|s| s.net.error = Some(msg), true);
                     }
                 }
@@ -1313,7 +1312,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
             let w2 = waker.clone();
             spawn(&w, move || {
                 if let Err(e) = sys::netctl::wifi_forget(&ssid) {
-                    edit(|s| s.net.error = Some(failed("Couldn't forget that network.", &e, None)), true);
+                    edit(|s| s.net.error = Some(failed(tr().settings_more.lv_couldnt_forget_that_network, &e, None)), true);
                 }
                 edit(|s| s.net.net = Some(read_net_status()), true);
                 scan_wifi(&w2);
@@ -1323,7 +1322,7 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
             let w2 = waker.clone();
             spawn(&w, move || {
                 if let Err(e) = sys::netctl::bt_power(true) {
-                    toast(failed("Couldn't turn Bluetooth on.", &e, None), true);
+                    toast(failed(tr().settings_more.lv_couldnt_turn_bluetooth_on, &e, None), true);
                 }
                 refresh_bt_devices(&w2);
             });
@@ -1343,18 +1342,18 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
             let w2 = waker.clone();
             edit(|s| s.net.bt_busy = Some(addr.clone()), true);
             spawn(&w, move || {
-                let name = SHARED.lock().ok().and_then(|s| s.snap.clone()).and_then(|s| s.net.bt_devices.iter().find(|d| d.addr == addr).map(|d| d.name.clone())).unwrap_or_else(|| "the device".into());
+                let name = SHARED.lock().ok().and_then(|s| s.snap.clone()).and_then(|s| s.net.bt_devices.iter().find(|d| d.addr == addr).map(|d| d.name.clone())).unwrap_or_else(|| tr().settings_more.lv_the_device.into());
                 let r = match op.as_str() {
                     "bt-disconnect" => sys::netctl::bt_disconnect(&addr),
                     "bt-forget" => sys::netctl::bt_forget(&addr),
                     _ => sys::netctl::bt_pair(&addr),
                 };
                 match (&r, op.as_str()) {
-                    (Ok(()), "bt-forget") => toast(format!("Forgot {name}"), false),
-                    (Ok(()), "bt-disconnect") => toast(format!("Disconnected {name}"), false),
-                    (Ok(()), _) => toast(format!("Connected to {name}"), false),
-                    (Err(e), "bt-forget") => toast(failed("Couldn't forget that device.", e, None), true),
-                    (Err(e), _) => toast(failed(&format!("Couldn't connect to {name}."), e, Some("Put it in pairing mode and try again.")), true),
+                    (Ok(()), "bt-forget") => toast(trf!(tr().settings_more.lv_bt_forgot, name = name), false),
+                    (Ok(()), "bt-disconnect") => toast(trf!(tr().settings_more.lv_bt_disconnected, name = name), false),
+                    (Ok(()), _) => toast(trf!(tr().settings_more.lv_bt_connected, name = name), false),
+                    (Err(e), "bt-forget") => toast(failed(tr().settings_more.lv_couldnt_forget_that_device, e, None), true),
+                    (Err(e), _) => toast(failed(&trf!(tr().settings_more.lv_bt_connect_failed, name = name), e, Some(tr().settings_more.lv_bt_pairing_hint)), true),
                 }
                 edit(|s| s.net.bt_busy = None, false);
                 refresh_bt_devices(&w2);

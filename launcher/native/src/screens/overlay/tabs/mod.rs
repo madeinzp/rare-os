@@ -26,6 +26,7 @@
 pub mod friends;
 pub mod notices;
 
+use rare_i18n::{tr, trf};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
 use friends::FriendsView;
@@ -143,19 +144,19 @@ pub fn rare_tab(cx: &mut Cx, nav: &mut Nav, parent: Id, w: &Where, _now: f64) {
     let col = cx.scene.add(parent, s().col().done(), Node::default());
     if let Some(t) = &w.resume {
         let fo = mk_row(cx, col, 3.5);
-        line(cx, fo.id, &format!("Resume {t}"), Some("Back to your game"));
-        nav.add(fo.group(G_RARE).hint("Resume").sid("resume"));
+        line(cx, fo.id, &trf!(tr().overlay.resume_title, title = t), Some(tr().overlay.back_to_your_game));
+        nav.add(fo.group(G_RARE).hint(tr().common.resume).sid("resume"));
     }
-    shortcut(cx, nav, col, "Open Steam", None, "Open Steam", "steam", Some(G::X));
-    shortcut(cx, nav, col, "Share", Some("Your screenshots and clips"), "Open", "share", None);
-    shortcut(cx, nav, col, "Quick settings", Some("Brightness, volume, Wi-Fi, performance"), "Open", "quick", Some(G::Quick));
+    shortcut(cx, nav, col, tr().overlay.open_steam, None, tr().overlay.open_steam, "steam", Some(G::X));
+    shortcut(cx, nav, col, tr().overlay.share, Some(tr().overlay.share_sub), tr().common.open, "share", None);
+    shortcut(cx, nav, col, tr().common.quick_settings, Some(tr().overlay.quick_settings_sub), tr().common.open, "quick", Some(G::Quick));
     // The downloads line: the running one's progress, else that nothing is downloading.
-    let sub = crate::features::downloads::menu_line().unwrap_or_else(|| "Nothing downloading".into());
-    shortcut(cx, nav, col, "Downloads", Some(&sub), "Open", "downloads", None);
-    shortcut(cx, nav, col, "Friends", None, "Open", "friends", None);
-    simple(cx, nav, col, "Your profile", "Open", "profile");
-    shortcut(cx, nav, col, "Settings", None, "Open", "settings", None);
-    shortcut(cx, nav, col, "Power", Some("Sleep, restart, turn off, desktop mode"), "Open", "power", None);
+    let sub = crate::features::downloads::menu_line().unwrap_or_else(|| tr().overlay.nothing_downloading.into());
+    shortcut(cx, nav, col, tr().common.downloads, Some(&sub), tr().common.open, "downloads", None);
+    shortcut(cx, nav, col, tr().common.friends, None, tr().common.open, "friends", None);
+    simple(cx, nav, col, tr().overlay.your_profile, tr().common.open, "profile");
+    shortcut(cx, nav, col, tr().common.settings, None, tr().common.open, "settings", None);
+    shortcut(cx, nav, col, tr().overlay.power, Some(tr().overlay.power_sub), tr().common.open, "power", None);
 }
 
 /// A row with an optional second line and the button that does the same from here on its right.

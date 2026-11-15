@@ -7,8 +7,8 @@ use crate::kit::art::{art, ArtFit};
 use crate::kit::icon::{svg_box, svg_tinted};
 use crate::kit::{dot, tok, DotTone};
 use crate::screens::market::host::{s, Ty, Ui, S, T};
-use rare_friends::format::presence_text;
 use rare_friends::types::{GameKind, GameRef, Person, Presence, PresenceState};
+use rare_i18n::{tr, trf};
 use rare_render::view::El;
 
 /// `FriendAvatar`: the player's picture (a Rare default, drawn here, or their NFT through
@@ -144,10 +144,6 @@ pub fn label(p: Option<&Person>) -> String {
     rare_friends::display::label(p)
 }
 
-const MONTHS: [&str; 12] = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
 /// (year, month 1-12, day) of a UTC time in ms (the launcher shows dates in the device's zone; the
 /// goldens run in UTC).
 pub fn ymd(ms: i64) -> (i64, u32, u32) {
@@ -166,21 +162,20 @@ pub fn ymd(ms: i64) -> (i64, u32, u32) {
 /// toLocaleDateString({ month: "short", day: "numeric", year: "numeric" }): "Oct 7, 2026".
 pub fn date_long(ms: i64) -> String {
     let (y, m, d) = ymd(ms);
-    format!("{} {d}, {y}", MONTHS[m as usize - 1])
+    rare_i18n::fmt::date_ymd(y as i32, m, d)
 }
 
 /// toLocaleDateString({ month: "short", day: "numeric" }): "Oct 25".
 pub fn date_short(ms: i64) -> String {
     let (_, m, d) = ymd(ms);
-    format!("{} {d}", MONTHS[m as usize - 1])
+    rare_i18n::fmt::date_md(m, d)
 }
 
 /// toLocaleTimeString({ hour: "numeric", minute: "2-digit" }): "6:41 PM".
 pub fn time_of(ms: i64) -> String {
     let mins = ms.div_euclid(60_000).rem_euclid(24 * 60);
     let (h, m) = (mins / 60, mins % 60);
-    let h12 = if h % 12 == 0 { 12 } else { h % 12 };
-    format!("{h12}:{m:02} {}", if h < 12 { "AM" } else { "PM" })
+    rare_i18n::fmt::time_hm(h as u32, m as u32)
 }
 
 /// BuySheet's `Qr`: margin 1, error correction M, #100C18 on white, in a white rounded-md box with
@@ -294,4 +289,26 @@ pub fn trunc_slack(mut el: El) -> El {
         .map(trunc_slack)
         .collect();
     el
+}
+
+/// "Playing ACT", "Online", "Away", "Last seen 3 h ago", "Offline" in the player's language
+/// (rare_friends::format::presence_text's wording). `long` adds how long.
+pub fn presence_text(p: &Presence, long: bool, now: i64) -> String {
+    use crate::screens::overlay::tabs::friends::{ago, mins};
+    let o = &tr().overlay;
+    match p.state {
+        PresenceState::Offline => match p.last_seen {
+            Some(t) if t != 0 => trf!(o.last_seen, when = ago(t, now)),
+            _ => tr().common.offline.into(),
+        },
+        PresenceState::Away => match &p.game {
+            Some(g) => trf!(o.away_in, game = g.title),
+            None => o.away.into(),
+        },
+        PresenceState::Online => match (&p.game, p.since) {
+            (Some(g), Some(since)) if long && since != 0 => trf!(o.playing_for, game = g.title, time = mins(now - since)),
+            (Some(g), _) => trf!(o.playing_game, game = g.title),
+            (None, _) => tr().common.online.into(),
+        },
+    }
 }

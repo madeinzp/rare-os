@@ -4,6 +4,7 @@
 //! rare-wallet: the vault gate and PIN, Bluetooth, the CTAP ceremony on a worker (`create_account`
 //! / `sign_in`), the ceremony's live state from `w.passkey_event`, and the security key's PIN.
 
+use rare_i18n::tr;
 use crate::screens::wallet::home::lib::Hint;
 use crate::screens::wallet::home::stack::{PasskeyMode, WalletView};
 use crate::screens::wallet::markup::El as M;
@@ -246,7 +247,7 @@ impl WalletTab {
                 if w.keystore.is_unlocked().unwrap_or(false) {
                     return self.pk_answer(f, create, |pr, s| pk::gate(pr, s, Gate::Ready));
                 }
-                f.gate = Some(service::ask_unlock("Enter your PIN to add this account"));
+                f.gate = Some(service::ask_unlock(tr().wallet_setup.gate_add_this_account));
                 None
             }
             Effect::CheckBluetooth => {
@@ -327,9 +328,9 @@ impl WalletTab {
             }
             Effect::AskPass { confirm } => {
                 if confirm {
-                    ask_secret(st, KEY_PASS2, "Confirm passphrase");
+                    ask_secret(st, KEY_PASS2, tr().wallet_setup.confirm_passphrase);
                 } else {
-                    ask_secret(st, KEY_PASS, "Passphrase");
+                    ask_secret(st, KEY_PASS, tr().wallet_setup.passphrase);
                 }
                 None
             }
@@ -383,7 +384,7 @@ impl WalletTab {
             changed = true;
         }
         if let Some(r) = service::poll(&mut f.power) {
-            let (powered, blocked, msg) = r.unwrap_or((false, false, Some("Could not turn Bluetooth on. Try again.".into())));
+            let (powered, blocked, msg) = r.unwrap_or((false, false, Some(tr().wallet_setup.bluetooth_failed.into())));
             effs.extend(self.pk_answer(&mut f, create, |pr, s| pk::bt_result(pr, s, powered, blocked, msg.as_deref())));
             changed = true;
         }

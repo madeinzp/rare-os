@@ -6,6 +6,7 @@
 //! the card row and the Runs section under the fold, so nothing above moves when they land.
 
 use crate::act::Act;
+use rare_i18n::{tr, trf, trn};
 use crate::data::knowledge::{self as kn, GameInfo, RunSettings, Runs};
 use crate::data::model::Game;
 use crate::kit::{self, s, tok, Btn as B, BtnIcon, Ty, Ui, T};
@@ -30,7 +31,10 @@ const CLOSE: u32 = BASE + 22;
 pub const END: u32 = BASE + 100;
 const SCOPE: u32 = 5;
 
-const RATINGS: [(&str, &str, &str); 3] = [("great", "Great", "Runs well, nothing to fix"), ("playable", "Playable", "Runs, with a tweak or a few issues"), ("broken", "Broken", "Does not start, or is not playable")];
+fn ratings() -> [(&'static str, &'static str, &'static str); 3] {
+    let g = &tr().game;
+    [("great", g.verdict_great, g.rating_great), ("playable", g.verdict_playable, g.rating_playable), ("broken", g.verdict_broken, g.rating_broken)]
+}
 
 #[derive(Default)]
 struct Inner {
@@ -105,7 +109,7 @@ impl Knowledge {
     fn cards(&self, ui: &mut Ui, acts: &mut Acts, g: &Game, info: &GameInfo) -> Vec<El> {
         let mut out = Vec::new();
         if let Some(h) = info.hltb.as_ref() {
-            let parts: Vec<(String, &str)> = [(h.main, "Main story"), (h.extras, "With extras"), (h.completionist, "Everything")].iter().filter_map(|(v, l)| v.map(|v| (hours(v), *l))).collect();
+            let parts: Vec<(String, &str)> = [(h.main, tr().game.hltb_main), (h.extras, tr().game.hltb_extras), (h.completionist, tr().game.hltb_all)].iter().filter_map(|(v, l)| v.map(|v| (hours(v), *l))).collect();
             if !parts.is_empty() {
                 let tag = acts.game(Act::Local(HLTB), &g.id);
                 let groups: Vec<El> = parts
@@ -116,20 +120,20 @@ impl Knowledge {
                     .bx(s().col().h(6.0).w(24.0).px(1.0).py(0.875))
                     .bg(tok::L1)
                     .radius(ui.r(0.5))
-                    .child(ui.text("How long to beat", T::new(Ty::Label).w(500).c(tok::MUTED)))
+                    .child(ui.text(tr().game.how_long, T::new(Ty::Label).w(500).c(tok::MUTED)))
                     .child(ui.bx(s().row().mt_auto().gap(1.0).wp(1.0).min0()).kids(groups));
                 out.push(kit::nav(kit::tile(c, 1.03), tag, Some("HowLongToBeat"), None, false).key(key("kn-hltb")));
             }
         }
         if let Some(sc) = info.score.as_ref() {
             let card = match (sc.metacritic, sc.steam_pct) {
-                (Some(m), Some(p)) => Some((format!("{m} Metacritic"), format!("{p}% positive on Steam"))),
-                (Some(m), None) => Some((format!("{m} Metacritic"), "Critics' score".to_string())),
-                (None, Some(p)) => Some((format!("{p}% positive"), sc.steam_label.clone().map(|l| format!("{l} on Steam")).unwrap_or_else(|| "Steam reviews".into()))),
+                (Some(m), Some(p)) => Some((trf!(tr().game.metacritic, m = m), trf!(tr().game.positive_steam, p = p))),
+                (Some(m), None) => Some((trf!(tr().game.metacritic, m = m), tr().game.critics_score.to_string())),
+                (None, Some(p)) => Some((trf!(tr().game.positive, p = p), sc.steam_label.clone().map(|l| trf!(tr().game.label_on_steam, label = l)).unwrap_or_else(|| tr().game.steam_reviews.into()))),
                 _ => None,
             };
             if let Some((v, sub)) = card {
-                out.push(kit::info_card(ui, "Reviews", &v, Some(&sub), None).key(key("kn-score")));
+                out.push(kit::info_card(ui, tr().game.reviews, &v, Some(&sub), None).key(key("kn-score")));
             }
         }
         out
@@ -144,28 +148,28 @@ impl Knowledge {
         // How long to beat and Reviews wrap onto more lines when the page is narrow.
         let cards = self.cards(ui, acts, g, info);
         if !cards.is_empty() {
-            col = col.child(kit::section_head(ui, s(), "About this game", None, None)).child(ui.bx(s().row().wrap().gap(1.0).mb(1.5).wp(1.0)).group(Group::new("kn-cards", [0.0; 4])).kids(cards));
+            col = col.child(kit::section_head(ui, s(), tr().game.about_game, None, None)).child(ui.bx(s().row().wrap().gap(1.0).mb(1.5).wp(1.0)).group(Group::new("kn-cards", [0.0; 4])).kids(cards));
         }
-        col = col.child(kit::section_head(ui, s(), "Runs on SuiPlay", Some(&if runs.total > 0 { format!("{} {}", int(runs.total as i64), if runs.total == 1 { "report" } else { "reports" }) } else { "No reports yet".to_string() }), None));
+        col = col.child(kit::section_head(ui, s(), tr().game.runs_on_suiplay, Some(&if runs.total > 0 { trn!(tr().game.reports_n, runs.total, n = int(runs.total as i64)) } else { tr().game.no_reports.to_string() }), None));
         let mut panel = kit::panel(ui, s().col().gap(1.0).p(1.25).max_w(56.0));
         if runs.total > 0 {
             panel = panel.child(split_bar(ui, &runs));
         } else {
-            panel = panel.child(ui.text_s(s().wp(1.0), "Nobody has said how this game runs on a SuiPlay yet. Play it, then tell others: Great, Playable or Broken, with the settings you used.", T::new(Ty::Small).c(tok::fg(0.8)).wrap()));
+            panel = panel.child(ui.text_s(s().wp(1.0), tr().game.nobody_said, T::new(Ty::Small).c(tok::fg(0.8)).wrap()));
         }
         if let Some(b) = runs.best.as_ref().filter(|b| !b.settings.is_empty()) {
-            let who = format!("Best settings, from {} {} {}", int(b.count as i64), verdict_word(Some(&b.from)), if b.count == 1 { "report" } else { "reports" });
+            let who = trn!(tr().game.best_from, b.count, n = int(b.count as i64), verdict = verdict_word(Some(&b.from)));
             panel = panel.child(ui.bx(s().col().gap(0.25).wp(1.0)).child(ui.text(who, T::new(Ty::Label).w(500).c(tok::MUTED))).child(ui.text_s(s().wp(1.0), b.settings.line(), T::new(Ty::Body).w(600).wrap())));
         }
         let mut btns = Vec::new();
         let said = i.said.as_ref().map(|(r, _)| verdict_word(Some(r)).to_string());
-        btns.push(kit::button(ui, B::new(if said.is_some() { "Change your report" } else { "Report how it runs" }, acts.game(Act::Local(OPEN_SHEET), &g.id)).icon(BtnIcon::Lucide("message-circle", 1.0, false))));
+        btns.push(kit::button(ui, B::new(if said.is_some() { tr().game.change_report } else { tr().game.report_how }, acts.game(Act::Local(OPEN_SHEET), &g.id)).icon(BtnIcon::Lucide("message-circle", 1.0, false))));
         if runs.best.as_ref().is_some_and(|b| b.settings.power.is_some()) {
-            btns.push(kit::button(ui, B::new("Use these settings", acts.game(Act::Local(USE_BEST), &g.id)).ghost().hint("Use these settings for this game")));
+            btns.push(kit::button(ui, B::new(tr().game.use_settings, acts.game(Act::Local(USE_BEST), &g.id)).ghost().hint(tr().game.use_settings_hint)));
         }
         let mut row = ui.bx(s().row().items_center().gap(0.75)).group(Group::new("kn-runs", [0.0; 4])).kids(btns);
         if let Some(s_) = said {
-            row = row.child(ui.text_s(s().ml(0.5), format!("You said {s_}"), T::new(Ty::Small).c(tok::MUTED)));
+            row = row.child(ui.text_s(s().ml(0.5), trf!(tr().game.you_said, verdict = s_), T::new(Ty::Small).c(tok::MUTED)));
         }
         panel = panel.child(row);
         Some(col.child(panel).key(key("kn-section")))
@@ -179,23 +183,23 @@ impl Knowledge {
         let i = self.inner.lock().unwrap();
         let said = i.said.as_ref().map(|s| s.0.clone());
         let mut body: Vec<El> = Vec::new();
-        for (n, (id, label, line)) in RATINGS.iter().enumerate() {
+        for (n, (id, label, line)) in ratings().iter().enumerate() {
             let busy = i.sending == Some(*id);
             let mut lab = ui.bx(s().col().gap(0.15).grow()).child(ui.text(*label, T::new(Ty::Row).w(600))).child(ui.text(*line, T::new(Ty::Small).c(tok::MUTED).trunc()));
             if busy {
-                lab = lab.child(ui.text("Sending", T::new(Ty::Meta).c(tok::MUTED)));
+                lab = lab.child(ui.text(tr().game.sending, T::new(Ty::Meta).c(tok::MUTED)));
             }
             let mut el = ui.bx(s().row().items_center().gap(1.0).h(4.25).px(1.0).wp(1.0)).radius(ui.r(0.5)).bg(tok::L1).child(dot(ui, id)).child(lab);
             if said.as_deref() == Some(*id) {
-                el = el.child(ui.text("Your report", T::new(Ty::Small).c(tok::MUTED)));
+                el = el.child(ui.text(tr().game.your_report, T::new(Ty::Small).c(tok::MUTED)));
             }
             let tag = acts.game(Act::Local(RATE + n as u32), &g.id);
-            body.push(kit::nav(kit::row_look(el), tag, Some("Send"), None, said.as_deref().map_or(n == 0, |s| s == *id)).key(key(id)));
+            body.push(kit::nav(kit::row_look(el), tag, Some(tr().common.send), None, said.as_deref().map_or(n == 0, |s| s == *id)).key(key(id)));
         }
-        let mine = i.mine.as_ref().map(|m| m.line()).filter(|l| !l.is_empty()).unwrap_or_else(|| "Reading this game's settings".into());
-        body.push(ui.text_s(s().mt(0.75).wp(1.0), format!("Sent with your settings for this game: {mine}."), T::new(Ty::Small).c(tok::MUTED).wrap()));
-        let footer = vec![kit::button(ui, B::new("Cancel", acts.game(Act::Local(CLOSE), &g.id)).ghost())];
-        Some(kit::sheet(ui, "How does it run?", Some(&format!("{} on this SuiPlay", g.title)), body, footer, false, SCOPE).group(Group::new("kn-sheet", [0.0; 4])))
+        let mine = i.mine.as_ref().map(|m| m.line()).filter(|l| !l.is_empty()).unwrap_or_else(|| tr().game.reading_settings.into());
+        body.push(ui.text_s(s().mt(0.75).wp(1.0), trf!(tr().game.sent_with, settings = mine), T::new(Ty::Small).c(tok::MUTED).wrap()));
+        let footer = vec![kit::button(ui, B::new(tr().common.cancel, acts.game(Act::Local(CLOSE), &g.id)).ghost())];
+        Some(kit::sheet(ui, tr().game.how_runs, Some(&trf!(tr().game.on_this_suiplay, game = g.title)), body, footer, false, SCOPE).group(Group::new("kn-sheet", [0.0; 4])))
     }
 
     pub fn act(&mut self, st: &mut State, fx: &mut Fx, g: &Game, code: u32) {
@@ -219,7 +223,7 @@ impl Knowledge {
             HLTB => {
                 let url = self.inner.lock().unwrap().info.as_ref().and_then(|i| i.hltb.as_ref()).map(|h| h.url.clone());
                 if let Some(u) = url.filter(|u| !u.is_empty()) {
-                    st.toast("Opening HowLongToBeat", Tone::Info, now);
+                    st.toast(tr().game.opening_hltb, Tone::Info, now);
                     fx.run(Act::OpenWeb(u));
                 }
             }
@@ -233,16 +237,16 @@ impl Knowledge {
                     let p = apply(cur.saved.unwrap_or(GamePower::DEFAULT), cur.global_upscale, &b.settings);
                     let r = be.set_game_perf(&id, Some(p));
                     Box::new(move |st: &mut State, now| match r {
-                        Ok(()) => st.toast("Using these settings each time it starts", Tone::Info, now),
+                        Ok(()) => st.toast(tr().game.using_settings, Tone::Info, now),
                         Err(e) => {
                             log::warn!("use best settings: {e}");
-                            st.toast("Couldn't save the settings. Try again.", Tone::Error, now);
+                            st.toast(tr().game.settings_save_failed, Tone::Error, now);
                         }
                     })
                 });
             }
             c if (RATE..RATE + 3).contains(&c) => {
-                let (rating, _, _) = RATINGS[(c - RATE) as usize];
+                let (rating, _, _) = ratings()[(c - RATE) as usize];
                 let (key, settings) = {
                     let i = self.inner.lock().unwrap();
                     if i.sending.is_some() {
@@ -272,7 +276,7 @@ impl Knowledge {
                     }
                     Self::bump(&ver);
                     Box::new(move |st: &mut State, now| match r {
-                        Ok(_) => st.toast("Thanks. Your report is in.", Tone::Info, now),
+                        Ok(_) => st.toast(tr().game.report_thanks, Tone::Info, now),
                         Err(e) => st.toast(e, Tone::Error, now),
                     })
                 });
@@ -301,7 +305,7 @@ impl Knowledge {
     }
 
     pub fn hints(&self) -> Option<Vec<Hint>> {
-        self.sheet.then(|| vec![hint(Key::A, "Send"), hint(Key::B, "Cancel")])
+        self.sheet.then(|| vec![hint(Key::A, tr().common.send), hint(Key::B, tr().common.cancel)])
     }
 }
 
@@ -312,20 +316,20 @@ fn int(n: i64) -> String {
 /// "23.6 h" (under an hour: minutes).
 fn hours(h: f64) -> String {
     if h < 1.0 {
-        format!("{} min", (h * 60.0).round())
+        trf!(tr().game.min, n = (h * 60.0).round())
     } else if h >= 100.0 {
-        format!("{} h", int(h.round() as i64))
+        trf!(tr().game.h, n = int(h.round() as i64))
     } else {
-        format!("{} h", (h * 10.0).round() / 10.0)
+        trf!(tr().game.h, n = (h * 10.0).round() / 10.0)
     }
 }
 
 fn verdict_word(v: Option<&str>) -> &'static str {
     match v {
-        Some("great") => "Great",
-        Some("playable") => "Playable",
-        Some("broken") => "Broken",
-        _ => "No reports yet",
+        Some("great") => tr().game.verdict_great,
+        Some("playable") => tr().game.verdict_playable,
+        Some("broken") => tr().game.verdict_broken,
+        _ => tr().game.no_reports,
     }
 }
 
@@ -349,7 +353,7 @@ fn split_bar(ui: &mut Ui, r: &Runs) -> El {
     let bar = ui.bx(s().row().gap(0.15).wp(1.0).h(0.5)).radius(ui.r(0.25)).clip().kids(segs);
     let legend: Vec<El> = parts
         .iter()
-        .map(|(id, n)| ui.bx(s().row().items_center().gap(0.45)).child(dot(ui, id)).child(ui.text(format!("{} {}", verdict_word(Some(id)), int(*n as i64)), T::new(Ty::Small).c(tok::fg(0.8)).tab())).key(key(&("leg", id))))
+        .map(|(id, n)| ui.bx(s().row().items_center().gap(0.45)).child(dot(ui, id)).child(ui.text(trf!(tr().game.legend_item, verdict = verdict_word(Some(id)), n = int(*n as i64)), T::new(Ty::Small).c(tok::fg(0.8)).tab())).key(key(&("leg", id))))
         .collect();
     ui.bx(s().col().gap(0.6).wp(1.0)).child(bar).child(ui.bx(s().row().wrap().gap_xy(1.5, 0.4)).kids(legend))
 }

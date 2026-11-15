@@ -6,6 +6,7 @@ use super::{config::Config, rows::*, SectionOut, SectionView};
 use crate::features::capture::{self, Info, CAPS_GB, LENGTHS};
 use crate::screens::overlay::common::*;
 use rare_discord::Client as Dc;
+use rare_i18n::{tr, trf};
 use rare_render::Id;
 
 pub struct CaptureSection {
@@ -29,56 +30,60 @@ pub fn size_text(bytes: u64) -> String {
 }
 
 fn replay_body(i: &Info) -> String {
+    let t = &tr().settings;
     if !i.replay_available {
-        return "Needs gpu-screen-recorder, or GStreamer with VA-API. Neither is on this system.".into();
+        return t.cap_no_recorder.into();
     }
     if !i.replay_on {
-        return "Off. Turn it on to save the last moments of a game.".into();
+        return t.cap_replay_off.into();
     }
-    let mut s = format!("Keeps {} while a game runs, on the GPU's video encoder. Uses a little battery.", capture::last_words(i.secs));
+    let mut s = trf!(t.cap_replay_on, last = capture::last_words(i.secs));
     if i.recording {
-        s.push_str(" Recording now.");
+        s.push(' ');
+        s.push_str(t.cap_recording);
     }
     s
 }
 
 fn discord_body(i: &Info) -> String {
+    let t = &tr().settings;
     let d = &i.discord;
     if !i.presence_on {
-        return "Off. Friends on Discord don't see what you play on Rare.".into();
+        return t.cap_presence_off.into();
     }
     match d.client {
-        None => "Open Discord from Apps. Friends then see the game you play on Rare.".into(),
-        Some(Dc::Web) if !d.arrpc_available => "Discord on the web needs arRPC, which comes with the next Rare OS update.".into(),
+        None => t.cap_discord_closed.into(),
+        Some(Dc::Web) if !d.arrpc_available => t.cap_discord_arrpc.into(),
         Some(Dc::Web) => match &d.showing {
-            Some(g) => format!("Friends see: Playing {g}."),
-            None => "Discord on the web is open. Friends see every game you play.".into(),
+            Some(g) => trf!(t.cap_friends_see, game = g),
+            None => t.cap_discord_web.into(),
         },
         Some(Dc::App) => match &d.showing {
-            Some(g) => format!("Friends see: Playing {g}."),
-            None => "The Discord app is open. Friends see games Discord knows.".into(),
+            Some(g) => trf!(t.cap_friends_see, game = g),
+            None => t.cap_discord_app.into(),
         },
     }
 }
 
 fn host_body(i: &Info) -> String {
+    let t = &tr().settings;
     let h = &i.host;
     if !h.available {
-        return "Needs Sunshine, which comes with the next Rare OS update.".into();
+        return t.cap_no_sunshine.into();
     }
     if !i.host_on {
-        return format!("Play this {}'s games on a TV, a PC or a phone with Moonlight. Off until you turn it on.", i.name);
+        return trf!(t.cap_host_off, name = i.name);
     }
     if !h.running {
         return match (&h.error, h.stopped) {
-            (Some(e), true) => format!("Sunshine couldn't start ({}). Turn this off and on to try again.", e.trim_start_matches("Fatal: ").trim_end_matches('.')),
-            (None, true) => "Sunshine couldn't start. Turn this off and on to try again.".into(),
-            _ => "Starting.".into(),
+            (Some(e), true) => trf!(t.cap_host_failed_why, error = e.trim_start_matches("Fatal: ").trim_end_matches('.')),
+            (None, true) => t.cap_host_failed.into(),
+            _ => t.cap_host_starting.into(),
         };
     }
     match &i.ip {
-        Some(ip) => format!("On. Moonlight on your network finds it as {}, or add {ip}.", i.name),
-        None => format!("On. Moonlight on your network finds it as {}.", i.name),
+        Some(ip) => trf!(t.cap_host_on_ip, name = i.name, ip = ip),
+        None => trf!(t.cap_host_on, name = i.name),
     }
 }
 
@@ -88,56 +93,57 @@ impl CaptureSection {
     }
 
     pub fn build_with(cx: &mut Cx, nav: &mut Nav, parent: Id, i: &Info) -> CaptureSection {
+        let t = &tr().settings;
         let mut rows = RowSet::default();
         let mut clients = Vec::new();
 
         // Instant replay.
         let p = panel(cx, parent);
-        rows.switch(cx, nav, p, "replay-toggle", "Instant replay", &replay_body(i), i.replay_on && i.replay_available, true);
+        rows.switch(cx, nav, p, "replay-toggle", t.row_replay, &replay_body(i), i.replay_on && i.replay_available, true);
         let labels: Vec<String> = LENGTHS.iter().map(|s| capture::length_label(*s)).collect();
         let labels: Vec<&str> = labels.iter().map(String::as_str).collect();
-        rows.choice(cx, nav, p, "replay-length", "Length", Some("How much a saved clip keeps."), &labels, LENGTHS.iter().position(|s| *s == i.secs), false);
+        rows.choice(cx, nav, p, "replay-length", t.row_length, Some(t.length_body), &labels, LENGTHS.iter().position(|s| *s == i.secs), false);
         let caps: Vec<String> = CAPS_GB.iter().map(|g| format!("{g} GB")).collect();
         let caps: Vec<&str> = caps.iter().map(String::as_str).collect();
-        let used = format!("Clips use {} of {} GB. The oldest go first.", size_text(i.used_bytes), i.cap_gb);
-        rows.choice(cx, nav, p, "replay-cap", "Space for clips", Some(&used), &caps, CAPS_GB.iter().position(|g| *g == i.cap_gb), false);
-        let row_ = setting_row(cx, p, "Save a clip", Some("Rare and View in a game, or Save in Quick settings and the Rare menu. Clips go to Share with the game's name."), false);
-        small_button(cx, nav, row_.right, "Open Share", "replay-share", 0);
+        let used = trf!(t.cap_used, used = size_text(i.used_bytes), cap = i.cap_gb);
+        rows.choice(cx, nav, p, "replay-cap", t.row_clip_space, Some(&used), &caps, CAPS_GB.iter().position(|g| *g == i.cap_gb), false);
+        let row_ = setting_row(cx, p, t.row_save_clip, Some(t.save_clip_body), false);
+        small_button(cx, nav, row_.right, t.open_share, "replay-share", 0);
 
         // Discord.
         let p = panel(cx, parent);
-        rows.switch(cx, nav, p, "discord-presence", "Show what you play on Discord", &discord_body(i), i.presence_on, true);
+        rows.switch(cx, nav, p, "discord-presence", t.row_presence, &discord_body(i), i.presence_on, true);
         let voice = match i.discord.client {
-            Some(_) if i.discord.deafened => "Deafened: you hear nothing from Discord and your microphone is muted.",
-            Some(_) if i.discord.muted => "Your microphone is muted in Discord.",
-            Some(_) => "Discord keeps running while you play. Mute and deafen are here and in the Rare menu.",
-            None => "Discord keeps running while you play. Mute and deafen show here and in the Rare menu when it is open.",
+            Some(_) if i.discord.deafened => t.voice_deafened,
+            Some(_) if i.discord.muted => t.voice_muted,
+            Some(_) => t.voice_running,
+            None => t.voice_closed,
         };
-        let row_ = setting_row(cx, p, "Voice", Some(voice), false);
+        let row_ = setting_row(cx, p, t.row_voice, Some(voice), false);
         if i.discord.client.is_some() {
-            small_button(cx, nav, row_.right, if i.discord.muted { "Unmute" } else { "Mute" }, "discord-mute", 0);
-            small_button(cx, nav, row_.right, if i.discord.deafened { "Undeafen" } else { "Deafen" }, "discord-deafen", 0);
+            small_button(cx, nav, row_.right, if i.discord.muted { t.unmute } else { t.mute }, "discord-mute", 0);
+            small_button(cx, nav, row_.right, if i.discord.deafened { t.undeafen } else { t.deafen }, "discord-deafen", 0);
         }
 
         // Stream this device.
         let p = panel(cx, parent);
-        let title = format!("Stream this {}", i.name);
+        let title = trf!(t.row_stream, name = i.name);
         rows.switch(cx, nav, p, "host-toggle", &title, &host_body(i), i.host_on && i.host.available, true);
         if i.host_on && i.host.running {
             let body = if i.host.pin_wanted {
-                "A device is waiting for its PIN. Type the four digits it shows.".to_string()
+                t.host_pin_waiting.to_string()
             } else {
-                format!("In Moonlight, pick {}. It shows a PIN: type it here.", i.name)
+                trf!(t.host_pin_how, name = i.name)
             };
-            let row_ = setting_row(cx, p, "Pair a device", Some(&body), false);
-            small_button(cx, nav, row_.right, "Enter PIN", "host-pin", 0);
+            let row_ = setting_row(cx, p, t.row_pair, Some(&body), false);
+            small_button(cx, nav, row_.right, t.enter_pin_btn, "host-pin", 0);
             if i.clients.is_empty() {
-                setting_row(cx, p, "No devices paired yet", Some("Paired devices show up here. Remove one to stop it from streaming."), false);
+                setting_row(cx, p, t.no_paired, Some(t.no_paired_body), false);
             }
             for (n, c) in i.clients.iter().enumerate() {
-                let name = if c.name.trim().is_empty() { "Unnamed device" } else { c.name.as_str() };
-                let row_ = setting_row(cx, p, name, Some("Paired. It can stream this device."), false);
-                small_button(cx, nav, row_.right, "Remove", "host-unpair", n as u32);
+                let name = if c.name.trim().is_empty() { t.unnamed_device } else { c.name.as_str() };
+                let row_ = setting_row(cx, p, name, Some(t.paired_body), false);
+                small_button(cx, nav, row_.right, tr().common.remove, "host-unpair", n as u32);
                 clients.push(c.uuid.clone());
             }
         }
@@ -145,14 +151,14 @@ impl CaptureSection {
         // Rare devices nearby.
         let p = panel(cx, parent);
         let head = if i.nearby.is_empty() {
-            if i.nearby_done { "No other Rare devices found on this network." } else { "Rare devices on the same network show up here." }
+            if i.nearby_done { t.nearby_none } else { t.nearby_wait }
         } else {
-            "On the same network. One with streaming on can be played from Stream in Library."
+            t.nearby_some
         };
-        let row_ = setting_row(cx, p, "Rare devices nearby", Some(head), true);
-        small_button(cx, nav, row_.right, "Look again", "nearby-scan", 0);
+        let row_ = setting_row(cx, p, t.row_nearby, Some(head), true);
+        small_button(cx, nav, row_.right, t.look_again, "nearby-scan", 0);
         for (n, d) in i.nearby.iter().enumerate() {
-            let body = format!("{}. {}", d.address, if d.stream { "Streaming is on." } else { "Streaming is off." });
+            let body = trf!(if d.stream { t.nearby_line_on } else { t.nearby_line_off }, address = d.address);
             let row_ = setting_row(cx, p, &d.name, Some(&body), false);
             // Focusable so the list scrolls into view; A does nothing here.
             nav.add(Focusable { id: row_.row, kind: Kind::Row, group: 11, hint: String::new(), tag: n as u32, sid: "nearby-row".into() });

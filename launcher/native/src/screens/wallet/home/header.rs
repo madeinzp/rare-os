@@ -2,6 +2,8 @@
 //! header): picture, name, address and kind on the left; total value with the 24h move on the
 //! right. Coin rows (CoinRows.tsx) and the activity list (ActivityList.tsx) live here too.
 
+use rare_i18n::{tr, trf};
+
 use super::lib::{day_label, is_sui_type, kind_label, short_digest};
 use crate::screens::wallet::fmt::{fmt_token, fmt_usd, time_hm};
 use crate::screens::wallet::kit::{addr, avatar, delta, account_avatar};
@@ -11,11 +13,11 @@ use crate::screens::wallet::types::{ActivityItem, ActivityKind, Portfolio, Portf
 /// `CopyAddress`: the short address with a copy icon; "Copied" for 1.5 s after A.
 pub fn copy_address<M>(address: &str, done: bool, class: &str, on: M) -> El<M> {
     let mut b = button(cn(&["inline-flex h-8 items-center gap-1.5 rounded px-2 text-sm text-secondary transition-colors focus-visible:text-primary", class]), Some(on))
-        .label("Copy address")
+        .label(tr().wallet.copy_address)
         .kid(addr(address, false, ""))
         .kid(icon(if done { "check" } else { "copy" }, "").attr("size", "0.9rem"));
     if done {
-        b = b.kid(span("").text("Copied"));
+        b = b.kid(span("").text(tr().wallet.copied));
     }
     b
 }
@@ -61,14 +63,14 @@ pub fn account_header<M>(account: &RareAccount, pf: Option<&Portfolio>, copied: 
             span(cn(&["inline-flex items-center gap-2", tone]))
                 .kid(span("font-medium").text(format!("{sign}{}", fmt_usd(Some(c.abs())))))
                 .kid(delta(Some(p_), 2, ""))
-                .kid(span("text-secondary").text("24h")),
+                .kid(span("text-secondary").text(tr().wallet.h24)),
         );
     }
     if let (Some(s), Some(_)) = (sui, total) {
         line = line.kid(span("text-secondary").text(format!("{} SUI", fmt_token(Some(s.amount), 4))));
     }
     if total.is_none() && pf.is_some_and(|p| !p.priced) {
-        line = line.kid(span("text-secondary").text("Prices unavailable"));
+        line = line.kid(span("text-secondary").text(tr().wallet.prices_unavailable));
     }
     div("mb-5 flex items-center gap-5")
         .kid(account_avatar(&account.address, "4.5rem"))
@@ -86,10 +88,10 @@ pub const COIN_COLS: &str = "grid-cols-[minmax(0,1fr)_12rem_9rem_7rem]";
 /// `CoinHead`.
 pub fn coin_head<M>() -> El<M> {
     div(cn(&["trow grid h-10 items-center px-3 text-right text-sm text-secondary", COIN_COLS]))
-        .kid(span("text-left font-medium").text("Coin"))
-        .kid(span("px-3 font-medium").text("Amount"))
-        .kid(span("px-3 font-medium").text("Value"))
-        .kid(span("px-3 pr-4 font-medium").text("24h"))
+        .kid(span("text-left font-medium").text(tr().wallet.col_coin))
+        .kid(span("px-3 font-medium").text(tr().wallet.col_amount))
+        .kid(span("px-3 font-medium").text(tr().wallet.col_value))
+        .kid(span("px-3 pr-4 font-medium").text(tr().wallet.h24))
 }
 
 /// `CoinRow`: a focusable table row.
@@ -113,10 +115,10 @@ pub fn coin_row<M>(t: &PortfolioToken, idx: usize, on: M) -> El<M> {
 
 fn activity_title(k: ActivityKind) -> &'static str {
     match k {
-        ActivityKind::Send => "Sent",
-        ActivityKind::Receive => "Received",
-        ActivityKind::Swap => "Swapped",
-        ActivityKind::Other => "Transaction",
+        ActivityKind::Send => tr().wallet.act_sent,
+        ActivityKind::Receive => tr().wallet.act_received,
+        ActivityKind::Swap => tr().wallet.act_swapped,
+        ActivityKind::Other => tr().wallet.act_transaction,
     }
 }
 
@@ -134,7 +136,8 @@ pub fn activity_row<M>(a: &ActivityItem, idx: usize, tz_min: i32, on: M) -> El<M
     let mut sub = span("block truncate text-sm text-secondary").text(&a.summary);
     if let Some(cp) = a.counterparty.as_deref().filter(|_| a.kind != ActivityKind::Swap) {
         sub.text = None;
-        sub = sub.kid(text(&a.summary)).kid(text(format!(" {} ", if a.kind == ActivityKind::Receive { "from" } else { "to" }))).kid(addr(cp, false, ""));
+        let lead = if a.kind == ActivityKind::Receive { tr().wallet.summary_from } else { tr().wallet.summary_to };
+        sub = sub.kid(text(trf!(lead, summary = a.summary))).kid(text(" ")).kid(addr(cp, false, ""));
     }
     button("flex h-[4.25rem] w-full items-center gap-4 rounded-lg px-3 text-left transition-colors focus-visible:bg-layer-03", Some(on))
         .attr("data-idx", idx.to_string())
@@ -143,7 +146,7 @@ pub fn activity_row<M>(a: &ActivityItem, idx: usize, tz_min: i32, on: M) -> El<M
         .kid(span("min-w-0 flex-1").kid(span("block text-base font-semibold").text(activity_title(a.kind))).kid(sub))
         .kid(
             span("shrink-0 text-right")
-                .kid(span(cn(&["block text-sm", if a.failed { "text-negative" } else { "text-secondary" }])).text(if a.failed { "Failed".to_string() } else { time_hm(a.timestamp, tz_min) }))
+                .kid(span(cn(&["block text-sm", if a.failed { "text-negative" } else { "text-secondary" }])).text(if a.failed { tr().wallet.failed.to_string() } else { time_hm(a.timestamp, tz_min) }))
                 .kid(span("block font-mono text-xs text-secondary/70").text(short_digest(&a.digest))),
         )
 }

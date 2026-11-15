@@ -3,6 +3,7 @@
 
 use super::{config::Config, rows::*, SectionOut, SectionView};
 use crate::screens::overlay::common::*;
+use rare_i18n::{tr, trf, trn};
 use rare_render::Id;
 
 pub const DEFAULT_RPC_MAINNET: &str = "https://fullnode.mainnet.sui.io:443";
@@ -74,31 +75,32 @@ impl DeveloperSection {
         let keys = super::remote::build(cx, nav, parent, &mut rows, info, secs);
         super::remote::build_tools(cx, nav, parent, &mut rows, info);
         let p1 = panel(cx, parent);
-        let body = if testnet { "Testnet: Sui reads, Rare Wallet and the Rare API use testnet. Nothing here costs real SUI." } else { "Mainnet. Switch to testnet to try a game with test SUI." };
-        rows.choice(cx, nav, p1, "dev-network", "Network", Some(body), &["Mainnet", "Testnet"], Some(testnet as usize), true);
-        let default_rpc = format!("{DEFAULT_RPC_TESTNET} (default)");
+        let t = &tr().settings;
+        let body = if testnet { t.dev_testnet_on } else { t.dev_mainnet };
+        rows.choice(cx, nav, p1, "dev-network", t.row_network, Some(body), &[t.mainnet, t.testnet], Some(testnet as usize), true);
+        let default_rpc = trf!(t.dev_default_rpc, url = DEFAULT_RPC_TESTNET);
         let eps: [(&str, &str, String, Option<String>, u32); 3] = [
-            ("dev-testnet-rpc", "Testnet RPC", default_rpc, cfg.testnet_rpc.clone(), 1),
-            ("dev-testnet-api", "Testnet market API", "rare.market with ?network=testnet (default)".into(), cfg.testnet_api.clone(), 2),
-            ("dev-testnet-sponsor", "Testnet gas sponsor", "Same as the testnet market API (default)".into(), cfg.testnet_sponsor.clone(), 3),
+            ("dev-testnet-rpc", t.row_testnet_rpc, default_rpc, cfg.testnet_rpc.clone(), 1),
+            ("dev-testnet-api", t.row_testnet_api, t.testnet_api_default.into(), cfg.testnet_api.clone(), 2),
+            ("dev-testnet-sponsor", t.row_testnet_sponsor, t.testnet_sponsor_default.into(), cfg.testnet_sponsor.clone(), 3),
         ];
         for (sid, title, def, val, tag) in eps {
             let shown = val.clone().unwrap_or(def);
             let row_ = setting_row(cx, p1, title, Some(&shown), false);
-            let b = button(cx, row_.right, if val.is_some() { "Change" } else { "Set" }, Variant::Secondary, Sz::Md, false).sid(sid).tag(tag);
+            let b = button(cx, row_.right, if val.is_some() { tr().common.change } else { t.set }, Variant::Secondary, Sz::Md, false).sid(sid).tag(tag);
             nav.add(b.group(11));
         }
         let p2 = panel(cx, parent);
         let body = match dev {
-            Some(d) => format!("{}, {}, {} collection{}", d.url, d.slug, d.collections, if d.collections == 1 { "" } else { "s" }),
-            None => "None. Start the launcher with --dev-game <url> to run a local web game with the Local API.".into(),
+            Some(d) => trn!(t.dev_game_line, d.collections, url = d.url, slug = d.slug),
+            None => t.dev_game_none.into(),
         };
         let api_body = match api {
-            Some(u) => format!("Listening at {u}. Games started from Rare get RARE_API and RARE_TOKEN."),
-            None => "Not running.".into(),
+            Some(u) => trf!(t.dev_api_on, url = u),
+            None => t.dev_api_off.into(),
         };
-        setting_row(cx, p2, "Local API", Some(&api_body), true);
-        setting_row(cx, p2, "Developer game", Some(&body), false);
+        setting_row(cx, p2, t.row_local_api, Some(&api_body), true);
+        setting_row(cx, p2, t.row_dev_game, Some(&body), false);
         DeveloperSection { rows, keys }
     }
 }

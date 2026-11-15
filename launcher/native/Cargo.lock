@@ -5095,6 +5095,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "rare-i18n"
+version = "0.1.0"
+
+[[package]]
 name = "rare-images"
 version = "0.1.0"
 dependencies = [
@@ -5168,6 +5172,7 @@ dependencies = [
  "rare-discord",
  "rare-emu",
  "rare-friends",
+ "rare-i18n",
  "rare-input",
  "rare-journey",
  "rare-launch",

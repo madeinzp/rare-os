@@ -1,6 +1,7 @@
 //! Notices data and pure logic (notify/{types,kinds,logic,mock,store,actions}.ts, timeAgo of
 //! marketplace/format.ts) and the Notifications tab body (overlay/menuTabs.tsx NoticesTab).
 
+use rare_i18n::{tr, trf};
 use super::{calm, mk_row, G_NEWS, G_NEWS_HEAD};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
@@ -150,22 +151,22 @@ pub fn is_offer(n: &Notice) -> bool {
 
 pub fn action_label(a: &Action, n: Option<&Notice>) -> &'static str {
     if n.map_or(false, is_offer) {
-        return "Accept offer";
+        return tr().overlay.act_accept_offer;
     }
     match a {
-        Action::Item { .. } => "Open item",
-        Action::Collection => "Open collection",
-        Action::Position => "Open position",
-        Action::Coin => "Open coin",
-        Action::Tx => "View transaction",
-        Action::Trader => "Open trader",
-        Action::Friends => "Open friends",
-        Action::Party => "Open party",
-        Action::OsUpdate => "Restart now",
-        Action::Downloads => "Open library",
-        Action::Emulators => "Open emulators",
-        Action::Trophies => "Open trophies",
-        Action::Battery => "Open power",
+        Action::Item { .. } => tr().overlay.act_open_item,
+        Action::Collection => tr().overlay.act_open_collection,
+        Action::Position => tr().overlay.act_open_position,
+        Action::Coin => tr().overlay.act_open_coin,
+        Action::Tx => tr().overlay.act_view_tx,
+        Action::Trader => tr().overlay.act_open_trader,
+        Action::Friends => tr().overlay.act_open_friends,
+        Action::Party => tr().overlay.act_open_party,
+        Action::OsUpdate => tr().overlay.act_restart_now,
+        Action::Downloads => tr().overlay.act_open_library,
+        Action::Emulators => tr().overlay.act_open_emulators,
+        Action::Trophies => tr().overlay.act_open_trophies,
+        Action::Battery => tr().overlay.act_open_power,
     }
 }
 
@@ -175,25 +176,25 @@ pub fn time_ago(t: Option<i64>, now: i64) -> String {
     let Some(t) = t.filter(|t| *t != 0) else { return "--".into() };
     let s = (((now - t) as f64 / 1000.0).round() as i64).max(0);
     if s < 60 {
-        return format!("{s}s");
+        return trf!(tr().overlay.time_s, n = s);
     }
     let m = s / 60;
     if m < 60 {
-        return format!("{m}m");
+        return trf!(tr().overlay.time_m, n = m);
     }
     let h = m / 60;
     if h < 24 {
-        return format!("{h}h");
+        return trf!(tr().overlay.time_h, n = h);
     }
     let d = h / 24;
     if d < 30 {
-        return format!("{d}d");
+        return trf!(tr().overlay.time_d, n = d);
     }
     let mo = d / 30;
     if mo < 12 {
-        return format!("{mo}mo");
+        return trf!(tr().overlay.time_mo, n = mo);
     }
-    format!("{}y", d / 365)
+    trf!(tr().overlay.time_y, n = d / 365)
 }
 
 // ---- mock.ts (the samples, stamped ago) ----
@@ -247,19 +248,19 @@ pub fn notices_tab(cx: &mut Cx, nav: &mut Nav, parent: Id, st: &NoticeStore, now
     let r = cx.r();
     let list = st.visible();
     if list.is_empty() {
-        return calm(cx, parent, "Nothing new. Sales, offers, invites and trophies show up here.");
+        return calm(cx, parent, tr().overlay.news_empty);
     }
     let unread = st.unread();
     let col = cx.scene.add(parent, s().col().done(), Node::default());
     if unread > 0 {
         let head = cx.scene.add(col, s().row().items_center().pad(0.75 * r, 0.4 * r, 0.75 * r, 0.3 * r).done(), Node::default());
-        let t = text(cx, head, ty::LABEL, 400, tok::MUTED, &format!("{unread} new"));
+        let t = text(cx, head, ty::LABEL, 400, tok::MUTED, &trf!(tr().overlay.new_count, n = unread));
         if let Some(ts_) = cx.scene.n(t).text.as_mut() {
             ts_.style.tabular = true;
         }
         let b = cx.scene.add(head, s().row().items_center().justify_center().ml_auto().h(1.9 * r).px(0.7 * r).done(), Node::bg(tok::L2).radius(0.25 * r));
-        let tid = text(cx, b, ty::META, 500, tok::FG, "Mark all read");
-        nav.add(Focusable { id: b, kind: Kind::Btn { base: tok::L2, fg: tok::FG, text: tid }, group: G_NEWS_HEAD, hint: "Mark all read".into(), tag: 0, sid: "mark-all-read".into() });
+        let tid = text(cx, b, ty::META, 500, tok::FG, tr().overlay.mark_all_read);
+        nav.add(Focusable { id: b, kind: Kind::Btn { base: tok::L2, fg: tok::FG, text: tid }, group: G_NEWS_HEAD, hint: tr().overlay.mark_all_read.into(), tag: 0, sid: "mark-all-read".into() });
     }
     for (i, n) in list.iter().enumerate() {
         let read = is_read(n, &st.read, st.read_at);
@@ -373,7 +374,7 @@ mod tests {
         assert_eq!(action_label(&Action::Item { item_id: "x".into() }, None), "Open item");
         let mut o = n("1", "offer_received", 0);
         o.item_id = Some("x".into());
-        assert_eq!(action_label(&o.action, Some(&o)), "Accept offer");
+        assert_eq!(action_label(&o.action, Some(&o)), tr().overlay.act_accept_offer);
         let mock = mock_notices();
         assert!(is_offer(&mock[1]) && !is_offer(&mock[0]));
     }

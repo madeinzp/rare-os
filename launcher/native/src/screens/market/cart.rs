@@ -4,6 +4,7 @@
 //! lines and the total; Buy builds them with `rare_market::venues::build_cart_buy` in transactions
 //! sized to Sui's limits (the quote's chunks, or 40 lines) and hands each to Rare Wallet.
 
+use rare_i18n::{tr, trf, trn};
 use super::host::*;
 use super::parts::*;
 use crate::kit::{button, Btn};
@@ -243,11 +244,11 @@ impl CartSheet {
     }
 
     pub fn hints(&self) -> Vec<(&'static str, String)> {
-        let mut h = vec![("a", "Select".to_string())];
+        let mut h = vec![("a", tr().common.select.to_string())];
         if matches!(self.open, Some(Some(_))) {
-            h.push(("ltrt", "Fewer / more".into()));
+            h.push(("ltrt", tr().market.fewer_more.into()));
         }
-        h.push(("b", "Close".into()));
+        h.push(("b", tr().common.close.into()));
         h
     }
 
@@ -392,13 +393,13 @@ impl CartSheet {
                     let t = match built {
                         Ok(t) => t,
                         Err(e) => {
-                            let m = if e.0.is_empty() { "Some of these items can't be bought here.".to_string() } else { e.0 };
-                            let _ = tx.send(Msg::Phase(if bought > 0 { Phase::Error(format!("Bought {bought}. {m}")) } else { Phase::Error(m) }));
+                            let m = if e.0.is_empty() { tr().market.some_cant_buy.to_string() } else { e.0 };
+                            let _ = tx.send(Msg::Phase(if bought > 0 { Phase::Error(trf!(tr().market.bought_then_error, n = bought, error = m)) } else { Phase::Error(m) }));
                             return;
                         }
                     };
                     let _ = tx.send(Msg::Phase(Phase::Signing(i + 1, total)));
-                    let title = if chunk.len() == 1 { format!("Buy {}", chunk[0].name) } else { format!("Buy {} items", chunk.len()) };
+                    let title = if chunk.len() == 1 { trf!(tr().market.buy_title, name = chunk[0].name) } else { trn!(tr().market.buy_n_items, chunk.len()) };
                     match crate::sign::sign_and_execute(t, &acct.address, &title) {
                         Ok(_) => {
                             bought += chunk.len();
@@ -409,7 +410,7 @@ impl CartSheet {
                             return;
                         }
                         Err(e) => {
-                            let _ = tx.send(Msg::Phase(Phase::Error(if bought > 0 { format!("Bought {bought}. Then: {e}") } else { e })));
+                            let _ = tx.send(Msg::Phase(Phase::Error(if bought > 0 { trf!(tr().market.bought_then, n = bought, error = e) } else { e })));
                             return;
                         }
                     }
@@ -474,7 +475,7 @@ impl CartSheet {
                             }
                             Err(e) => {
                                 log::warn!("sweep quote: {e}");
-                                self.phase = Phase::Error("Couldn't price this sweep right now. Try again.".into());
+                                self.phase = Phase::Error(tr().market.sweep_price_failed.into());
                             }
                         }
                     }
@@ -509,19 +510,19 @@ fn view(ui: &mut Ui, sweep: Option<&Sweep>, lines: &[ItemCard], phase: &Phase, s
     let mut body: Vec<El> = Vec::new();
     if let Some(sw) = sweep {
         let pick = |on: bool| if on { V::Primary } else { V::Secondary };
-        let modes = ui.bx(s().row().gap(0.5)).child(btn(ui, s(), "Count", T_COUNT_MODE, pick(!sw.budget_mode), Sz::Md, false, false)).child(btn(ui, s(), "Spend up to", T_BUDGET_MODE, pick(sw.budget_mode), Sz::Md, false, false));
+        let modes = ui.bx(s().row().gap(0.5)).child(btn(ui, s(), tr().market.count, T_COUNT_MODE, pick(!sw.budget_mode), Sz::Md, false, false)).child(btn(ui, s(), tr().market.spend_up_to, T_BUDGET_MODE, pick(sw.budget_mode), Sz::Md, false, false));
         let minus = btn(ui, s(), "-", T_MINUS, V::Secondary, Sz::Md, false, false);
         let plus = btn(ui, s(), "+", T_PLUS, V::Secondary, Sz::Md, true, false);
         let label = if sw.budget_mode {
             if sw.budget > 0.0 {
-                format!("Up to {} SUI", mf::fmt_sui_num(sw.budget, SuiOpts { dp: 2, trim: true, ..Default::default() }))
+                trf!(tr().market.up_to_sui, amount = mf::fmt_sui_num(sw.budget, SuiOpts { dp: 2, trim: true, ..Default::default() }))
             } else {
-                "Set a budget".to_string()
+                tr().market.set_budget.to_string()
             }
         } else {
             match sw.available {
-                Some(a) => format!("{} of {} listed", sw.count, a.min(SWEEP_MAX)),
-                None => format!("{} items", sw.count),
+                Some(a) => trf!(tr().market.n_of_listed, n = sw.count, total = a.min(SWEEP_MAX)),
+                None => trn!(tr().common.items_n, sw.count),
             }
         };
         body.push(
@@ -532,17 +533,17 @@ fn view(ui: &mut Ui, sweep: Option<&Sweep>, lines: &[ItemCard], phase: &Phase, s
                 .child(ui.bx(s().row().justify_center().w(10.0)).child(ui.text(label, t(BASE).w(600).tab())))
                 .child(plus),
         );
-        let max_label = if sw.max_price > 0.0 { format!("{} SUI", mf::fmt_sui_num(sw.max_price, SuiOpts { dp: 2, trim: true, ..Default::default() })) } else { "No limit".to_string() };
+        let max_label = if sw.max_price > 0.0 { format!("{} SUI", mf::fmt_sui_num(sw.max_price, SuiOpts { dp: 2, trim: true, ..Default::default() })) } else { tr().market.no_limit.to_string() };
         let max_minus = btn(ui, s(), "-", T_MAX_MINUS, V::Secondary, Sz::Sm, false, false);
         let max_plus = btn(ui, s(), "+", T_MAX_PLUS, V::Secondary, Sz::Sm, false, false);
         body.push(
             ui.bx(s().row().items_center().gap(0.75).mt(0.75))
-                .child(ui.bx(s().w(7.0)).child(ui.text("Max price each", t(SM).c(tok::MUTED))))
+                .child(ui.bx(s().w(7.0)).child(ui.text(tr().market.max_price_each, t(SM).c(tok::MUTED))))
                 .child(max_minus)
                 .child(ui.bx(s().row().justify_center().w(8.0)).child(ui.text(max_label, t(SM).w(600).tab())))
                 .child(max_plus),
         );
-        body.push(ui.text_s(s().mt(0.5), "The cheapest listings on every marketplace, at their all-in price.", t(SM).c(tok::MUTED).wrap()));
+        body.push(ui.text_s(s().mt(0.5), tr().market.sweep_note, t(SM).c(tok::MUTED).wrap()));
     }
     let mut list = ui.bx(s().col().gap(0.25).mt(if sweep.is_some() { 1.0 } else { 0.0 }));
     for (i, it) in lines.iter().take(SHOWN).enumerate() {
@@ -555,31 +556,31 @@ fn view(ui: &mut Ui, sweep: Option<&Sweep>, lines: &[ItemCard], phase: &Phase, s
             .child(thumb)
             .child(ui.bx(s().col().grow().min0()).child(ui.text(mf::short_name(&it.name, coll).to_string(), t(SM).w(500).trunc())).child(ui.text(coll.unwrap_or("").to_string(), t(XS).c(tok::MUTED).trunc())))
             .child(ui.text(sui_text(all_in(it)), t(SM).mono()));
-        list = list.child(if sweep.is_none() { fill_nav(row, T_ROW + i as u32, Some("Remove"), None, false) } else { row });
+        list = list.child(if sweep.is_none() { fill_nav(row, T_ROW + i as u32, Some(tr().common.remove), None, false) } else { row });
     }
     if lines.len() > SHOWN {
-        list = list.child(ui.text_s(s().px(0.5).pt(0.25), format!("and {} more", lines.len() - SHOWN), t(SM).c(tok::MUTED)));
+        list = list.child(ui.text_s(s().px(0.5).pt(0.25), trf!(tr().market.and_n_more, n = lines.len() - SHOWN), t(SM).c(tok::MUTED)));
     }
     if lines.is_empty() {
         let msg = if sweep.is_some_and(|s| s.budget_mode && s.budget <= 0.0) {
-            "Pick a budget to see what it buys."
+            tr().market.pick_budget
         } else if sweep.is_some_and(|s| s.loading || s.quoted.is_none()) {
-            "Finding the cheapest listings..."
+            tr().market.finding_listings
         } else {
-            "Nothing listed to buy."
+            tr().market.nothing_to_buy_list
         };
         list = list.child(ui.text(msg, t(SM).c(tok::MUTED)));
     }
     body.push(list);
-    body.push(ui.bx(s().row().justify_between().mt(1.0)).child(ui.text("Total", t(BASE).w(600))).child(ui.text(sui_text(total), t(BASE).w(600).mono())));
-    body.push(ui.text_s(s().mt(0.25), "Network gas is extra. Items that sell first are left out.", t(XS).c(tok::MUTED)));
+    body.push(ui.bx(s().row().justify_between().mt(1.0)).child(ui.text(tr().market.total, t(BASE).w(600))).child(ui.text(sui_text(total), t(BASE).w(600).mono())));
+    body.push(ui.text_s(s().mt(0.25), tr().market.gas_extra_left_out, t(XS).c(tok::MUTED)));
     let (line, bad) = match phase {
         Phase::Idle => (None, false),
-        Phase::Building(i, n) if *n > 1 => (Some(format!("Getting purchase {i} of {n} ready...")), false),
-        Phase::Building(..) => (Some("Getting the purchase ready...".into()), false),
-        Phase::Signing(i, n) if *n > 1 => (Some(format!("Review and approve purchase {i} of {n} in Rare Wallet.")), false),
-        Phase::Signing(..) => (Some("Review and approve in Rare Wallet.".into()), false),
-        Phase::Done(n) => (Some(format!("Bought {n} {}. They're in your Rare Wallet.", if *n == 1 { "item" } else { "items" })), false),
+        Phase::Building(i, n) if *n > 1 => (Some(trf!(tr().market.getting_purchase_n, i = i, n = n)), false),
+        Phase::Building(..) => (Some(tr().market.getting_purchase_ready.into()), false),
+        Phase::Signing(i, n) if *n > 1 => (Some(trf!(tr().market.review_purchase_n, i = i, n = n)), false),
+        Phase::Signing(..) => (Some(tr().market.review_in_wallet.into()), false),
+        Phase::Done(n) => (Some(trn!(tr().market.bought_n_items, *n)), false),
         Phase::Error(e) => (Some(e.clone()), true),
     };
     if let Some(l) = line {
@@ -587,20 +588,21 @@ fn view(ui: &mut Ui, sweep: Option<&Sweep>, lines: &[ItemCard], phase: &Phase, s
     }
     let n = lines.len();
     let main_label = match phase {
-        Phase::Done(_) => "Done".to_string(),
-        Phase::Building(..) => "Getting ready...".into(),
-        Phase::Signing(..) => "Waiting for approval".into(),
-        _ if !signer => "Add a passkey to buy".into(),
-        _ if n == 0 => "Nothing to buy".into(),
-        _ => format!("Buy {n} {} for {}", if n == 1 { "item" } else { "items" }, sui_text(total)),
+        Phase::Done(_) => tr().common.done.to_string(),
+        Phase::Building(..) => tr().market.getting_ready.into(),
+        Phase::Signing(..) => tr().market.waiting_approval.into(),
+        _ if !signer => tr().market.add_passkey_to_buy.into(),
+        _ if n == 0 => tr().market.nothing_to_buy.into(),
+        _ => trn!(tr().market.buy_n_for, n, total = sui_text(total)),
     };
-    let main = button(ui, Btn { hint: Some("Buy".into()), grow: true, ..Btn::new(&main_label, T_BUY).primary() });
-    let second = button(ui, Btn::new(if sweep.is_some() || matches!(phase, Phase::Done(_)) { "Close" } else { "Clear cart" }, T_CLEAR));
+    let main = button(ui, Btn { hint: Some(tr().common.buy.into()), grow: true, ..Btn::new(&main_label, T_BUY).primary() });
+    let second = button(ui, Btn::new(if sweep.is_some() || matches!(phase, Phase::Done(_)) { tr().common.close } else { tr().market.clear_cart }, T_CLEAR));
     let title = match sweep {
-        Some(sw) => format!("Sweep {}", if sw.name.is_empty() { "this collection" } else { &sw.name }),
-        None => "Cart".into(),
+        Some(sw) if sw.name.is_empty() => tr().market.sweep_this.into(),
+        Some(sw) => trf!(tr().market.sweep_title, name = sw.name),
+        None => tr().market.cart.into(),
     };
-    let sub = if sweep.is_none() { Some("A on an item takes it out.") } else { None };
+    let sub = if sweep.is_none() { Some(tr().market.cart_sub) } else { None };
     let sh = crate::kit::sheet(ui, &title, sub, body, vec![main, second], false, SCOPE);
     in_flow_sheet(ui, sh)
 }

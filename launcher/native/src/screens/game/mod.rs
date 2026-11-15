@@ -15,7 +15,8 @@ pub mod settings;
 pub mod stores;
 
 use crate::act::Act;
-use crate::data::model::{fmt_ago, pretty_path, source_label};
+use rare_i18n::{tr, trf};
+use crate::data::model::{pretty_path, source_label};
 use crate::kit::format::fmt_size;
 use crate::kit::{self, s, tok, Btn as B, BtnIcon, DotTone, Ty, Ui, T};
 use crate::page::{hash, Acts, Btn, Feedback, Fx, Page};
@@ -74,8 +75,8 @@ impl GameDetail {
 fn playtime(m: Option<i64>) -> String {
     match m.filter(|m| *m > 0) {
         None => String::new(),
-        Some(m) if m < 60 => format!("{m} min"),
-        Some(m) => format!("{} h", (m as f64 / 6.0).round() / 10.0),
+        Some(m) if m < 60 => trf!(tr().game.min, n = m),
+        Some(m) => trf!(tr().game.h, n = (m as f64 / 6.0).round() / 10.0),
     }
 }
 
@@ -117,7 +118,7 @@ impl Page for GameDetail {
             if self.copy_ids.get((code - PLAY_ON) as usize) == Some(&self.id) {
                 let copies = st.copies(&self.id);
                 let label = crate::data::groups::copy_labels(&copies).into_iter().nth((code - PLAY_ON) as usize).unwrap_or_default();
-                st.toast(format!("This page is the {label} copy. Pick another to switch."), Tone::Info, rare_render::clock::secs());
+                st.toast(trf!(tr().game.copy_toast, label = label), Tone::Info, rare_render::clock::secs());
                 return;
             }
             if let Some(id) = self.copy_ids.get((code - PLAY_ON) as usize).filter(|id| **id != self.id).cloned() {
@@ -187,17 +188,17 @@ impl Page for GameDetail {
         if running {
             status = status.child(kit::dot(ui, s(), DotTone::Primary, true));
         }
-        status = status.child(ui.text(if running { "Now playing" } else { source_label(&g.source) }, T::new(Ty::Small).w(500).c(tok::fg(0.75))));
+        status = status.child(ui.text(if running { tr().game.now_playing } else { source_label(&g.source) }, T::new(Ty::Small).w(500).c(tok::fg(0.75))));
         if !g.installed && !running {
-            status = status.child(ui.text("\u{b7} Not installed", T::new(Ty::Small).w(500).c(tok::fg(0.5))));
+            status = status.child(ui.text(format!("\u{b7} {}", tr().common.not_installed), T::new(Ty::Small).w(500).c(tok::fg(0.5))));
         }
         if fav {
-            status = status.child(ui.text("\u{b7} Favourite", T::new(Ty::Small).w(500).c(tok::fg(0.5))));
+            status = status.child(ui.text(format!("\u{b7} {}", tr().common.favourite), T::new(Ty::Small).w(500).c(tok::fg(0.5))));
         }
         // Epic and GOG games Rare manages (rare-stores): Install before, Update and the rest after.
         let store = stores::managed(g);
         if store && !g.installed && !running {
-            status = status.child(ui.text("\u{b7} Not installed", T::new(Ty::Small).w(500).c(tok::fg(0.5))));
+            status = status.child(ui.text(format!("\u{b7} {}", tr().common.not_installed), T::new(Ty::Small).w(500).c(tok::fg(0.5))));
         }
         // Steam Deck and ProtonDB, after everything else on the line so nothing moves when they arrive.
         for t in settings::compat_texts(&self.settings) {
@@ -218,16 +219,16 @@ impl Page for GameDetail {
                     if on && self.switched {
                         self.want = Some(tag);
                     }
-                    let b = B::new(label, tag).sm().hint("Play on");
+                    let b = B::new(label, tag).sm().hint(tr().game.play_on);
                     kit::button(ui, if on { b.primary() } else { b }).key(rare_render::view::key(&("copy", &c.id)))
                 })
                 .collect();
             ui.bx(s().row().items_start().gap(0.75).mt(0.2))
-                .child(ui.text_s(s().mt(0.45), "Play on", T::new(Ty::Small).w(500).c(tok::fg(0.6))))
+                .child(ui.text_s(s().mt(0.45), tr().game.play_on, T::new(Ty::Small).w(500).c(tok::fg(0.6))))
                 .child(ui.bx(s().row().wrap().items_center().gap(0.5).shrink().min0()).group(Group::new("game-copies", [0.0; 4]).remember()).kids(chips))
         });
         self.switched = false;
-        let play_label = if running { "Resume" } else if g.source == "apps" { "Open" } else { "Play" };
+        let play_label = if running { tr().common.resume } else if g.source == "apps" { tr().common.open } else { tr().common.play };
         // A Steam game being installed or updated: Pause or Resume; not installed: Install.
         let main = if running { None } else { crate::features::downloads::game_button(ui, st, acts, g) };
         let mut actions = if store && !g.installed && !running {
@@ -236,40 +237,40 @@ impl Page for GameDetail {
             vec![main.unwrap_or_else(|| kit::button(ui, B::new(play_label, acts.game(Act::Launch(g.id.clone()), &g.id)).primary().lg().def(true).hint(play_label).icon(BtnIcon::Lucide("play", 1.1, true)).min_w(10.0).game()))]
         };
         if running {
-            let quit = if g.source == "apps" { "Close" } else { "Quit game" };
+            let quit = if g.source == "apps" { tr().common.close } else { tr().game.quit_game };
             actions.push(kit::button(ui, B::new(quit, acts.game(Act::QuitGame(g.id.clone()), &g.id)).lg().hint(quit).game()));
         }
         // Managing the game sits right after Play, in the open: Move (to the SD card or back) and
         // Uninstall. Options (Menu) has them too.
         let can_move = g.installed && !running && matches!(g.source.as_str(), "steam" | "epic" | "gog" | "local" | "itch");
         if can_move {
-            actions.push(kit::button(ui, B::new("Move", acts.game(Act::Legacy(format!("storage:move-game:{}", g.id)), &g.id)).lg().hint("Move to another drive").game()));
+            actions.push(kit::button(ui, B::new(tr().game.move_, acts.game(Act::Legacy(format!("storage:move-game:{}", g.id)), &g.id)).lg().hint(tr().game.move_hint).game()));
         }
         let uninstall = crate::features::uninstall::can_uninstall(g) && !running;
         if uninstall {
-            let label = if g.source == "web" { "Remove".to_string() } else { crate::features::uninstall::label(g) };
+            let label = if g.source == "web" { tr().common.remove.to_string() } else { crate::features::uninstall::label(g) };
             actions.push(kit::button(ui, B::new(label, acts.game(Act::Uninstall(g.id.clone()), &g.id)).lg().game()));
         }
         if !running {
             actions.extend(crate::features::downloads::update_now_button(ui, st, acts, g));
         }
         if crate::features::downloads::of(st, &g.id).is_some() || crate::features::stores::job(&g.id).is_some() {
-            actions.push(kit::button(ui, B::new("Downloads", acts.game(Act::Open(crate::state::Overlay::Other(crate::features::downloads::KIND)), &g.id)).lg().game()));
+            actions.push(kit::button(ui, B::new(tr().common.downloads, acts.game(Act::Open(crate::state::Overlay::Other(crate::features::downloads::KIND)), &g.id)).lg().game()));
         }
         if store && g.installed {
             actions.extend(stores::installed(ui, acts, g, running));
         }
         if g.foreign {
             let lib = g.origin.trim_start_matches("Steam library on ").to_string();
-            actions.push(kit::button(ui, B::new("Add library to Steam", acts.game(Act::SteamAddLibrary(lib), &g.id)).lg().game()));
+            actions.push(kit::button(ui, B::new(tr().game.add_library, acts.game(Act::SteamAddLibrary(lib), &g.id)).lg().game()));
         }
         // Trophies follow the game: a copy outside Steam shows its Steam copy's; every other game
         // has Rare's own (first launch, hours, ...) with its store's achievements.
         let steam_copy = if g.source != "steam" { copies.iter().find_map(|c| c.id.strip_prefix("steam:").and_then(|a| a.parse::<u32>().ok()).filter(|a| *a < 0x8000_0000)) } else { None };
         if let Some(appid) = steam_copy {
-            actions.push(kit::button(ui, B::new("Trophies", acts.game(Act::Trophies(Some(appid)), &g.id)).lg().game()));
+            actions.push(kit::button(ui, B::new(tr().common.trophies, acts.game(Act::Trophies(Some(appid)), &g.id)).lg().game()));
         } else if crate::features::trophy_case::eligible(g) {
-            actions.push(kit::button(ui, B::new("Trophies", acts.game(Act::Trophies(Some(crate::features::trophy_case::case_id(&g.id))), &g.id)).lg().game()));
+            actions.push(kit::button(ui, B::new(tr().common.trophies, acts.game(Act::Trophies(Some(crate::features::trophy_case::case_id(&g.id))), &g.id)).lg().game()));
         }
         if g.source == "steam" && g.id.starts_with("steam:") {
             let appid = g.id.strip_prefix("steam:").and_then(|a| a.parse::<u32>().ok());
@@ -277,17 +278,17 @@ impl Page for GameDetail {
                 Some(appid) => Act::SteamGamePage(appid),
                 None => Act::SteamBigPicture,
             };
-            actions.push(kit::button(ui, B::new("Open in Steam", acts.game(open, &g.id)).lg().game()));
+            actions.push(kit::button(ui, B::new(tr().game.open_in_steam, acts.game(open, &g.id)).lg().game()));
             // Non-Steam shortcuts have big ids that are not store apps.
             if let Some(appid) = appid.filter(|a| *a < 0x8000_0000) {
-                actions.push(kit::button(ui, B::new("Store page", acts.game(Act::SteamStore(appid), &g.id)).lg().hint("Open the Steam store page").game()));
+                actions.push(kit::button(ui, B::new(tr().game.store_page, acts.game(Act::SteamStore(appid), &g.id)).lg().hint(tr().game.store_page_hint).game()));
             }
         }
         // Android games: pad buttons as screen touches, for games made for touch only.
         if g.source == "android" && !rare_android::is_store(&g.id) {
             let n = rare_android::touch::map(rare_android::package_of(&g.id).unwrap_or_default()).len();
-            let label = if n == 0 { "Touch controls".to_string() } else { format!("Touch controls ({n})") };
-            actions.push(kit::button(ui, B::new(label, acts.game(Act::Legacy(format!("android:touch:{}", g.id)), &g.id)).lg().hint("Buttons as screen touches").game()));
+            let label = if n == 0 { tr().game.touch_controls.to_string() } else { trf!(tr().game.touch_controls_n, n = n) };
+            actions.push(kit::button(ui, B::new(label, acts.game(Act::Legacy(format!("android:touch:{}", g.id)), &g.id)).lg().hint(tr().game.touch_hint).game()));
         }
         let row = ui.bx(s().row().gap(0.75).mt(0.4)).group(Group::new("game-actions", [0.0; 4]).remember()).kids(actions);
         // Activity cards: one fact per card.
@@ -303,11 +304,11 @@ impl Page for GameDetail {
             info.push(ui.bx(s().row().gap(0.6).max_w(52.0)).child(dot).child(ui.text(plan, T::new(Ty::Small).c(tok::fg(0.8)).wrap())));
         }
         let origin = pretty_path(&g.origin);
-        let facts: Vec<(&str, String, Option<String>)> = vec![
-            ("Last played", if g.last_played.is_some() { fmt_ago(g.last_played).trim_start_matches("Played ").to_string() } else { "Not yet".into() }, None),
-            ("Playtime", { let p = playtime(g.playtime_minutes); if p.is_empty() { "None yet".into() } else { p } }, None),
-            (if g.installed { "Size" } else { "Install size" }, { let z = stores::size_text(g).unwrap_or_else(|| fmt_size(g.size_bytes)); if z.is_empty() && (g.source == "web" || cloud) { "Streamed".into() } else { z } }, match g.source.as_str() { "web" => Some("Plays from the web".to_string()), "cloud" => Some("Plays from the cloud".to_string()), _ => None }),
-            ("Store", source_label(&g.source).to_string(), (origin != source_label(&g.source)).then_some(origin)),
+        let facts: Vec<(&'static str, String, Option<String>)> = vec![
+            (tr().game.last_played, if let Some(t) = g.last_played.filter(|t| *t >= crate::data::model::REAL_TIME) { parts::when_ago(t) } else { tr().game.not_yet.into() }, None),
+            (tr().game.playtime, { let p = playtime(g.playtime_minutes); if p.is_empty() { tr().game.none_yet.into() } else { p } }, None),
+            (if g.installed { tr().game.size } else { tr().game.install_size }, { let z = stores::size_text(g).unwrap_or_else(|| fmt_size(g.size_bytes)); if z.is_empty() && (g.source == "web" || cloud) { tr().game.streamed.into() } else { z } }, match g.source.as_str() { "web" => Some(tr().game.plays_web.to_string()), "cloud" => Some(tr().game.plays_cloud.to_string()), _ => None }),
+            (tr().game.store, source_label(&g.source).to_string(), (origin != source_label(&g.source)).then_some(origin)),
         ];
         let mut cards: Vec<El> = facts.into_iter().filter(|f| !f.1.is_empty()).map(|(l, v, sub)| kit::info_card(ui, l, &v, sub.as_deref(), None)).collect();
         cards.extend(steam_cloud::card(ui, &self.cloud, g));
@@ -395,7 +396,7 @@ impl Page for GameDetail {
         }
         fx.fb(Feedback::Toggle);
         let on = st.toggle_fav(&self.id);
-        st.toast(if on { "Added to favourites" } else { "Removed from favourites" }, Tone::Info, rare_render::clock::secs());
+        st.toast(if on { tr().game.fav_added } else { tr().game.fav_removed }, Tone::Info, rare_render::clock::secs());
         true
     }
 
@@ -405,7 +406,7 @@ impl Page for GameDetail {
 
     fn hints(&self, st: &State) -> Vec<Hint> {
         if self.manage.sheet_open() {
-            return vec![hint(Key::B, "Close")];
+            return vec![hint(Key::B, tr().common.close)];
         }
         if let Some(h) = self.know.hints() {
             return h;
@@ -413,6 +414,6 @@ impl Page for GameDetail {
         if let Some(h) = self.extras.hints() {
             return h;
         }
-        vec![hint(Key::X, if st.is_fav(&self.id) { "Unfavourite" } else { "Favourite" }), hint(Key::Start, "Options"), hint(Key::Rare, "Menu")]
+        vec![hint(Key::X, if st.is_fav(&self.id) { tr().game.unfavourite } else { tr().common.favourite }), hint(Key::Start, tr().common.options), hint(Key::Rare, tr().common.menu)]
     }
 }

@@ -4,6 +4,7 @@
 //! actions). Every action shows on screen at once and rolls back if it fails (rare-market's
 //! `InventoryStore::run_optimistic`).
 
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::fmt::fmt_sui;
 use crate::screens::wallet::home::lib::load_bar;
 use crate::screens::wallet::kit::{btn_full, mimg, sheet, SheetSpec, Size, Variant};
@@ -85,10 +86,10 @@ pub fn plain(message: &str) -> String {
     let m = message.to_lowercase();
     let unreachable = (m.starts_with("rare.market ") && m[12..].chars().next().is_some_and(|c| c.is_ascii_digit())) || m.contains("failed to fetch") || m.contains("networkerror") || m.contains("load failed");
     if unreachable {
-        return "Couldn't reach rare.market. Check the connection and try again.".into();
+        return tr().inventory.unreachable.into();
     }
     if message.is_empty() {
-        "That didn't go through. Try again.".into()
+        tr().inventory.didnt_go_through.into()
     } else {
         message.to_string()
     }
@@ -97,8 +98,8 @@ pub fn plain(message: &str) -> String {
 pub fn view(pr: &Props, st: &State) -> El<Msg> {
     let spec = |title: String, sub: Option<String>, width: &'static str| SheetSpec { title, subtitle: sub, icon: None, footer: None, close: Some(Msg::Close), width };
     let item = match pr.item {
-        Some(None) => return sheet(spec("Item".into(), None, "52rem"), vec![p("text-sm text-secondary").text("Couldn't load this item.")]),
-        None => return sheet(spec("Item".into(), None, "52rem"), vec![load_bar(true)]),
+        Some(None) => return sheet(spec(tr().inventory.item.into(), None, "52rem"), vec![p("text-sm text-secondary").text(tr().inventory.couldnt_load_item)]),
+        None => return sheet(spec(tr().inventory.item.into(), None, "52rem"), vec![load_bar(true)]),
         Some(Some(i)) => i,
     };
     let listing = item.listing.as_ref();
@@ -111,11 +112,11 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
     let busy = matches!(st.phase, Phase::Working(_));
 
     let status = if let Some(l) = listing {
-        format!("Listed on {}", venue_name(Some(&l.venue)))
+        trf!(tr().inventory.listed_on, venue = venue_name(Some(&l.venue)))
     } else if staked {
-        "Staked".into()
+        tr().inventory.staked.into()
     } else {
-        "Not listed".into()
+        tr().inventory.not_listed.into()
     };
     let mut info = div("min-w-0 flex-1").kid(p("text-sm text-secondary").text(status));
     if let Some(l) = listing {
@@ -127,9 +128,9 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
     };
     info = info.kid_opt(stat_line(
         vec![
-            ("Floor".into(), floor.map(|f| sui(Some(f), 3, false, true, ""))),
-            ("Best offer".into(), best.map(|b| sui(Some(b), 3, false, true, ""))),
-            ("Last sale".into(), mist(item.last_sale_mist.as_deref()).map(|m| sui(Some(m), 3, false, true, ""))),
+            (tr().inventory.floor.into(), floor.map(|f| sui(Some(f), 3, false, true, ""))),
+            (tr().inventory.best_offer.into(), best.map(|b| sui(Some(b), 3, false, true, ""))),
+            (tr().inventory.last_sale.into(), mist(item.last_sale_mist.as_deref()).map(|m| sui(Some(m), 3, false, true, ""))),
         ],
         true,
         false,
@@ -148,57 +149,56 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
     }
     if !staked && pr.can_sign && !matches!(st.phase, Phase::Done(_)) {
         let sell = match pr.quote {
-            None => vec![p("text-sm text-secondary").text("Looking for offers...")],
-            Some(Some(q)) if q.blocked.is_some() => vec![p("text-sm text-secondary").text(format!("Best offer {} SUI. {}", trim3(mist(Some(&q.offer.price_mist)).unwrap_or(0)), q.blocked.clone().unwrap_or_default()))],
+            None => vec![p("text-sm text-secondary").text(tr().inventory.looking_for_offers)],
+            Some(Some(q)) if q.blocked.is_some() => vec![p("text-sm text-secondary").text(trf!(tr().inventory.best_offer_blocked, price = trim3(mist(Some(&q.offer.price_mist)).unwrap_or(0)), reason = q.blocked.clone().unwrap_or_default()))],
             Some(Some(q)) => {
                 let offer = mist(Some(&q.offer.price_mist)).unwrap_or(0);
                 let venue = venue_name(Some(&q.offer.venue));
                 vec![
-                    btn_full(&format!("Sell for {} SUI", trim3(q.net_mist)), Variant::Primary, Size::Md, false, "", Some(Msg::Sell)).def(true),
-                    p("text-label text-secondary").text(format!(
-                        "{}{}",
-                        if q.sponsored { "Network fee paid by Rare. " } else { "" },
-                        if q.net_mist < offer {
-                            format!("Best offer {} SUI on {venue}. You get this after fees and royalty.", trim3(offer))
+                    btn_full(&trf!(tr().inventory.sell_for, price = trim3(q.net_mist)), Variant::Primary, Size::Md, false, "", Some(Msg::Sell)).def(true),
+                    p("text-label text-secondary").text({
+                        let note = if q.net_mist < offer {
+                            trf!(tr().inventory.offer_after_fees, price = trim3(offer), venue = venue)
                         } else {
-                            format!("Best offer on {venue}. You get the full price.")
-                        }
-                    )),
+                            trf!(tr().inventory.offer_full_price, venue = venue)
+                        };
+                        if q.sponsored { trf!(tr().inventory.fee_paid_note, note = note) } else { note }
+                    }),
                 ]
             }
-            Some(None) => vec![p("text-sm text-secondary").text("No offers on this item right now.")],
+            Some(None) => vec![p("text-sm text-secondary").text(tr().inventory.no_offers)],
         };
-        let mut actions = div("mt-6 flex flex-col gap-5").kid(section("flex flex-col gap-2").kid(h3("text-sm font-medium text-secondary").text("Sell now")).kids(sell));
+        let mut actions = div("mt-6 flex flex-col gap-5").kid(section("flex flex-col gap-2").kid(h3("text-sm font-medium text-secondary").text(tr().inventory.sell_now)).kids(sell));
         if let Some(v) = &elsewhere {
-            actions = actions.kid(p("text-sm text-secondary").text(format!("Listed on {v}. Cancel it there to list or send it here.")));
+            actions = actions.kid(p("text-sm text-secondary").text(trf!(tr().inventory.listed_elsewhere, venue = v)));
         } else {
             let mut choices = Vec::new();
             if let Some(f) = floor {
-                choices.push(("Floor", f));
-                choices.push(("Floor +10%", f * 110 / 100));
+                choices.push((tr().inventory.floor, f));
+                choices.push((tr().inventory.floor_plus_10, f * 110 / 100));
             }
             let mut row = div("flex flex-wrap gap-2").attr("data-nav-group", "inv-price");
             for (l, m) in &choices {
                 row = row.kid(btn_full(&format!("{l} {}", fmt_sui(Some(*m), 2, false, true)), if price == Some(*m) { Variant::Primary } else { Variant::Secondary }, Size::Md, false, "", Some(Msg::Price(*m))).key(*l));
             }
-            row = row.kid(btn_full("Other price", Variant::Secondary, Size::Md, false, "", Some(Msg::OtherPrice)));
+            row = row.kid(btn_full(tr().inventory.other_price, Variant::Secondary, Size::Md, false, "", Some(Msg::OtherPrice)));
             let list_label = match price {
-                Some(p_) => format!("{} for {} SUI", if listing.is_some() { "Relist" } else { "List" }, trim3(p_)),
-                None => "Pick a price".into(),
+                Some(p_) => if listing.is_some() { trf!(tr().inventory.relist_for, price = trim3(p_)) } else { trf!(tr().inventory.list_for, price = trim3(p_)) },
+                None => tr().inventory.pick_price.into(),
             };
             actions = actions.kid(
                 section("flex flex-col gap-2")
-                    .kid(h3("text-sm font-medium text-secondary").text(if listing.is_some() { "Change the price" } else { "List for sale" }))
+                    .kid(h3("text-sm font-medium text-secondary").text(if listing.is_some() { tr().inventory.change_price } else { tr().inventory.list_for_sale }))
                     .kid(row)
                     .kid(btn_full(&list_label, Variant::Secondary, Size::Md, false, "", Some(Msg::List))),
             );
         }
         let mut last = div("flex flex-wrap gap-2 border-t border-border-primary pt-4");
         if native {
-            last = last.kid(btn_full("Cancel listing", Variant::Secondary, Size::Md, false, "", Some(Msg::Cancel)));
+            last = last.kid(btn_full(tr().inventory.cancel_listing, Variant::Secondary, Size::Md, false, "", Some(Msg::Cancel)));
         }
         if listing.is_none() {
-            last = last.kid(btn_full("Send", Variant::Secondary, Size::Md, false, "", Some(Msg::Send)));
+            last = last.kid(btn_full(tr().common.send, Variant::Secondary, Size::Md, false, "", Some(Msg::Send)));
         }
         body.push(actions.kid(last));
     }
@@ -215,7 +215,9 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
     sheet(spec(item.name.clone(), item.collection.as_ref().map(|c| c.name.clone()), "40rem"), body).attr("data-ready", if pr.quote.is_none() { "0" } else { "1" })
 }
 
-const WORKING: &str = "Review and approve in Rare Wallet.";
+fn working() -> &'static str {
+    tr().inventory.working
+}
 
 pub fn update(pr: &Props, st: &mut State, msg: Msg) -> Option<Effect> {
     let item = pr.item.flatten()?;
@@ -232,23 +234,23 @@ pub fn update(pr: &Props, st: &mut State, msg: Msg) -> Option<Effect> {
             if busy {
                 return None;
             }
-            st.phase = Phase::Working(WORKING.into());
-            Some(Effect::Sell { done: format!("Sold {} for {} SUI", item.name, trim3(q.net_mist)) })
+            st.phase = Phase::Working(working().into());
+            Some(Effect::Sell { done: trf!(tr().inventory.sold_for, name = item.name, price = trim3(q.net_mist)) })
         }
         Msg::List => {
             let price = st.price.or(mist(item.floor_mist.as_deref()))?;
             if busy {
                 return None;
             }
-            st.phase = Phase::Working(WORKING.into());
-            Some(Effect::List { price, done: format!("Listed {} for {} SUI", item.name, trim3(price)) })
+            st.phase = Phase::Working(working().into());
+            Some(Effect::List { price, done: trf!(tr().inventory.listed_for, name = item.name, price = trim3(price)) })
         }
         Msg::Cancel => {
             if busy {
                 return None;
             }
-            st.phase = Phase::Working(WORKING.into());
-            Some(Effect::Cancel { done: format!("Cancelled the listing of {}", item.name) })
+            st.phase = Phase::Working(working().into());
+            Some(Effect::Cancel { done: trf!(tr().inventory.cancelled_listing, name = item.name) })
         }
         Msg::Send => Some(Effect::Send(item.id.clone())),
         Msg::AddPasskey => Some(Effect::AddPasskey),

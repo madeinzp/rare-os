@@ -4,6 +4,7 @@
 //! The player's collections sit behind one Collections tab (a grid of them; A opens one, B goes
 //! back), so the tab row stays the same length however many there are.
 
+use rare_i18n::{tr, trf, trn};
 use crate::act::Act;
 use crate::data::model::{fmt_ago, pretty_path, source_label, Game};
 use crate::kit::{self, s, tok, Btn as B, BtnIcon, DotTone, Pb, TabItem, Track, Ty, Ui, T};
@@ -15,8 +16,6 @@ use rare_render::focus::hints::{hint, Hint, Key};
 use rare_render::focus::{Focusable, Group};
 use rare_render::view::{key, El};
 
-/// Library's note while Steam waits for a sign-in (`State::steam_sign_in`).
-pub const SIGN_IN_LINE: &str = "Steam games start once you sign in. Steam may ask for a Steam Guard code from your email or the Steam Mobile app.";
 
 const SOURCES: [&str; 14] = ["stream", "emu", "media", "cloud", "android", "rare", "steam", "epic", "gog", "battlenet", "itch", "local", "web", "apps"];
 /// The Downloads view's "Not installed games" asks the Library to open on that filter.
@@ -45,7 +44,9 @@ pub fn show_filter(f: &str) {
     *WANT_FILTER.lock().unwrap() = Some(if known { f } else { "all" }.to_string());
 }
 
-const SORTS: [(&str, &str); 3] = [("recent", "Recently played"), ("name", "Name"), ("played", "Most played")];
+fn sorts() -> [(&'static str, &'static str); 3] {
+    [("recent", tr().library.sort_recent), ("name", tr().library.sort_name), ("played", tr().library.sort_played)]
+}
 /// Room the bar's actions take (the Downloads icon and Add), rem.
 const BAR_ACTIONS_REM: f32 = 8.4;
 /// The Add sheet (under the collection cards' codes, which start at 400).
@@ -97,13 +98,13 @@ const BAND: f32 = 3.6;
 /// A filter's tab label: "all", "favs", "hidden", "col:<name>" or a source.
 fn label(f: &str) -> String {
     match f {
-        "all" => "All".into(),
-        "favs" => "Favourites".into(),
-        "hidden" => "Hidden".into(),
-        COLS => "Collections".into(),
-        "media" => "Apps".into(),
-        "stream" => "Streaming".into(),
-        "notinstalled" => "Not installed".into(),
+        "all" => tr().common.all.into(),
+        "favs" => tr().library.tab_favourites.into(),
+        "hidden" => tr().library.tab_hidden.into(),
+        COLS => tr().library.collections.into(),
+        "media" => tr().common.apps.into(),
+        "stream" => tr().library.tab_streaming.into(),
+        "notinstalled" => tr().common.not_installed.into(),
         f => match f.strip_prefix("col:") {
             Some(name) => name.to_string(),
             None => source_label(f).to_string(),
@@ -301,9 +302,9 @@ impl Page for Library {
         let tabs = ui.bx(s().row().items_stretch().grow().min0()).clip().child(kit::tabs(ui, s().hp(1.0), &items, value - from, true));
         // One Add button (a game from a file, a web game, a PC on Streaming): a sheet, so the bar
         // keeps its room for the filters.
-        let add = kit::button(ui, B::new("Add", acts.tag(Act::Local(ACT_ADD_MENU))).sm().icon(BtnIcon::Lucide("plus", 1.0, false)).hint("Add"));
+        let add = kit::button(ui, B::new(tr().common.add, acts.tag(Act::Local(ACT_ADD_MENU))).sm().icon(BtnIcon::Lucide("plus", 1.0, false)).hint(tr().common.add));
         // Library > Downloads: an icon button so the filter tabs keep their room.
-        let downloads = kit::button(ui, B::new("", acts.tag(Act::Open(crate::state::Overlay::Other(crate::features::downloads::KIND)))).sm().gap(0.0).icon(BtnIcon::Lucide("download", 1.05, false)).hint("Downloads"));
+        let downloads = kit::button(ui, B::new("", acts.tag(Act::Open(crate::state::Overlay::Other(crate::features::downloads::KIND)))).sm().gap(0.0).icon(BtnIcon::Lucide("download", 1.05, false)).hint(tr().common.downloads));
         // The sticky filter bar: h-[3.5rem] border-b border-hair bg-bg, flush under the top bar.
         let bar = ui
             .bx(s().row().items_stretch().gap(1.1).h(3.5).mb(1.0).mx(-2.5).px(2.5))
@@ -317,24 +318,22 @@ impl Page for Library {
             .child(ui.bx(s().abs(None, Some(0.0), Some(0.0), Some(0.0)).h_px(1.0)).bg(tok::HAIR));
         let games = self.games(st);
         let count = match filter {
-            "media" => format!("{} apps", APPS.len()),
+            "media" => trn!(tr().library.apps_n, APPS.len()),
             "stream" => match st.pc.as_ref().map(|p| p.apps.len()).unwrap_or(0) {
                 0 => String::new(),
-                n => format!("{n} on your PC"),
+                n => trf!(tr().library.n_on_your_pc, n = n),
             },
             "android" => match games.len() {
                 0 => String::new(),
-                1 => "1 app".into(),
-                n => format!("{n} apps"),
+                n => trn!(tr().library.apps_n, n),
             },
-            _ if st.scanning => "Scanning".into(),
-            _ => format!("{} {}", games.len(), if games.len() == 1 { "game" } else { "games" }),
+            _ if st.scanning => tr().library.scanning.into(),
+            _ => trn!(tr().common.games_n, games.len()),
         };
         let count = match filter {
             COLS => match st.user.collections.len() {
                 0 => String::new(),
-                1 => "1 collection".into(),
-                n => format!("{n} collections"),
+                n => trn!(tr().library.collections_n, n),
             },
             _ => count,
         };
@@ -363,13 +362,13 @@ impl Page for Library {
 
         // Steam waits for a sign-in behind Rare: its games start once it has one.
         if st.steam_sign_in && games_view && filter != "android" && filter != "emu" {
-            let btn = kit::button(ui, B::new("Open Steam", acts.tag(Act::SteamBigPicture)).icon(BtnIcon::Steam(1.0)));
+            let btn = kit::button(ui, B::new(tr().library.open_steam, acts.tag(Act::SteamBigPicture)).icon(BtnIcon::Steam(1.0)));
             let note = kit::panel(ui, s().row().items_center().gap(1.0).px(1.25).py(1.0).mb(1.5))
                 .child(kit::steam(ui, 1.4, tok::ICON2))
                 .child(
                     ui.bx(s().col().grow().min0())
-                        .child(ui.text(rare_launch::steamlogin::SIGN_IN, T::new(Ty::Body).w(600)))
-                        .child(ui.text(SIGN_IN_LINE, T::new(Ty::Small).c(tok::MUTED).wrap())),
+                        .child(ui.text(tr().library.steam_needs_sign_in, T::new(Ty::Body).w(600)))
+                        .child(ui.text(tr().library.steam_sign_in_line, T::new(Ty::Small).c(tok::MUTED).wrap())),
                 )
                 .child(btn);
             page = page.child(note.key(key("steam-sign-in")));
@@ -379,13 +378,13 @@ impl Page for Library {
         if !foreign.is_empty() && games_view && filter != "notinstalled" && filter != "android" && filter != "emu" {
             let n = st.games().iter().filter(|g| g.foreign).count();
             let paths = foreign.iter().map(|p| pretty_path(p)).collect::<Vec<_>>().join(", ");
-            let btn = kit::button(ui, B::new("Add to Steam", acts.tag(Act::SteamAddLibrary(foreign[0].clone()))));
+            let btn = kit::button(ui, B::new(tr().library.add_to_steam, acts.tag(Act::SteamAddLibrary(foreign[0].clone()))));
             let note = kit::panel(ui, s().row().items_center().gap(1.0).px(1.25).py(1.0).mb(1.5))
                 .child(kit::icon(ui, "folder", 1.4, tok::ICON2))
                 .child(
                     ui.bx(s().col().grow())
-                        .child(ui.text("Games found from your previous system", T::new(Ty::Body).w(600)))
-                        .child(ui.text(format!("{n} games in {paths}. They play from here; add the folder to Steam so Steam keeps them updated."), T::new(Ty::Small).c(tok::MUTED).trunc())),
+                        .child(ui.text(tr().library.foreign_title, T::new(Ty::Body).w(600)))
+                        .child(ui.text(trf!(tr().library.foreign_body, n = n, paths = paths), T::new(Ty::Small).c(tok::MUTED).trunc())),
                 )
                 .child(btn);
             page = page.child(note.key(key("foreign")));
@@ -405,9 +404,9 @@ impl Page for Library {
                 Some(pc) => {
                     // Every paired PC with its games (stream/tiles.tsx StreamGrid).
                     let (dot, status) = if pc.online {
-                        (DotTone::Primary, if pc.current_game.is_some() { "Playing on the PC" } else { "Online" })
+                        (DotTone::Primary, if pc.current_game.is_some() { tr().library.playing_on_pc } else { tr().common.online })
                     } else {
-                        (DotTone::Muted, if pc.can_wake { "Asleep" } else { "Off" })
+                        (DotTone::Muted, if pc.can_wake { tr().library.asleep } else { tr().common.off })
                     };
                     let note = ui.bx(s().row().items_center().gap(0.45)).child(kit::dot(ui, s(), dot, false)).child(ui.text(status, T::new(Ty::Small).c(tok::MUTED)));
                     let head = ui.bx(s().row().items_center().gap(0.75).mb(0.9)).child(ui.text(pc.name.clone(), T::new(Ty::Row).w(600).track(-0.01))).child(note);
@@ -417,21 +416,21 @@ impl Page for Library {
                     ui.bx(s().col()).child(head).child(grid)
                 }
                 None => {
-                    let set = kit::button(ui, B::new("Set up streaming", acts.tag(Act::PcSetup)).primary().def(true).icon(BtnIcon::Lucide("monitor", 1.0, false)).hint("Set up streaming"));
-                    kit::empty(ui, s(), "Play the games on your PC", Some("Stream from a gaming PC running Sunshine or GeForce Experience, over your home Wi-Fi. Rare gets Moonlight, the app that streams, the first time."), vec![set])
+                    let set = kit::button(ui, B::new(tr().library.set_up_streaming, acts.tag(Act::PcSetup)).primary().def(true).icon(BtnIcon::Lucide("monitor", 1.0, false)).hint(tr().library.set_up_streaming));
+                    kit::empty(ui, s(), tr().library.play_pc_title, Some(tr().library.play_pc_body), vec![set])
                 }
             })
             .child(more_ways(ui, acts)),
             COLS => self.collections_grid(ui, st, acts, &grid_cols, tw),
             "android" => android_body(ui, st, acts, &games, &grid_cols, tw),
             "emu" => self.emulation(ui, st, acts, &games, &grid_cols, tw),
-            "favs" if games.is_empty() => kit::empty(ui, s(), "No favourites yet", Some("Press Menu on a game and pick Add to favourites, or press X on its page."), vec![]),
-            "notinstalled" if games.is_empty() && !st.scanning => kit::empty(ui, s(), "Every game you own is installed", Some("Steam games your account owns show here when they are not on this device."), vec![]),
-            "hidden" if games.is_empty() => kit::empty(ui, s(), "Nothing hidden", Some("Games you hide leave the library and Home. They show here so you can bring them back."), vec![]),
-            f if f.starts_with("col:") && games.is_empty() => kit::empty(ui, s(), "Nothing in this collection yet", Some("Press Menu on a game and pick Add to collection."), vec![]),
+            "favs" if games.is_empty() => kit::empty(ui, s(), tr().library.no_favourites_title, Some(tr().library.no_favourites_body), vec![]),
+            "notinstalled" if games.is_empty() && !st.scanning => kit::empty(ui, s(), tr().library.all_installed_title, Some(tr().library.all_installed_body), vec![]),
+            "hidden" if games.is_empty() => kit::empty(ui, s(), tr().library.nothing_hidden_title, Some(tr().library.nothing_hidden_body), vec![]),
+            f if f.starts_with("col:") && games.is_empty() => kit::empty(ui, s(), tr().library.empty_collection_title, Some(tr().library.add_to_collection_body), vec![]),
             _ if games.is_empty() && !st.scanning => {
-                let scan = kit::button(ui, B::new("Scan again", acts.tag(Act::Scan)).primary().def(true));
-                kit::empty(ui, s(), "No games here yet", Some("Install a game in Steam, or put a game folder in Games on this device or your SD card."), vec![scan])
+                let scan = kit::button(ui, B::new(tr().library.scan_again, acts.tag(Act::Scan)).primary().def(true));
+                kit::empty(ui, s(), tr().library.no_games_title, Some(tr().library.no_games_body), vec![scan])
             }
             _ => {
                 let ids: Vec<String> = games.iter().map(|g| g.id.clone()).collect();
@@ -456,18 +455,18 @@ impl Page for Library {
         match b {
             Btn::Select => {
                 self.settle(st);
-                let mut items: Vec<OptionItem> = SORTS.iter().map(|(v, l)| OptionItem { label: format!("Sort: {l}"), on: Some(self.sort == *v), act: Act::Local(100 + SORTS.iter().position(|x| x.0 == *v).unwrap() as u32) }).collect();
+                let mut items: Vec<OptionItem> = sorts().iter().map(|(v, l)| OptionItem { label: trf!(tr().library.sort_by, name = l), on: Some(self.sort == *v), act: Act::Local(100 + sorts().iter().position(|x| x.0 == *v).unwrap() as u32) }).collect();
                 self.menu = self.shown(st);
                 for (i, f) in self.menu.iter().enumerate() {
-                    items.push(OptionItem { label: format!("Show: {}", label(f)), on: Some(self.tab() == f.as_str()), act: Act::Local(200 + i as u32) });
+                    items.push(OptionItem { label: trf!(tr().library.show_filter, name = label(f)), on: Some(self.tab() == f.as_str()), act: Act::Local(200 + i as u32) });
                 }
-                items.push(OptionItem { label: "New collection".into(), on: None, act: Act::Local(ACT_NEW_COLLECTION) });
+                items.push(OptionItem { label: tr().library.new_collection.into(), on: None, act: Act::Local(ACT_NEW_COLLECTION) });
                 if self.target().is_some() {
-                    items.push(OptionItem { label: "Rename collection".into(), on: None, act: Act::Local(ACT_RENAME) });
-                    items.push(OptionItem { label: "Delete collection".into(), on: None, act: Act::Local(ACT_DELETE) });
+                    items.push(OptionItem { label: tr().library.rename_collection.into(), on: None, act: Act::Local(ACT_RENAME) });
+                    items.push(OptionItem { label: tr().library.delete_collection.into(), on: None, act: Act::Local(ACT_DELETE) });
                 }
                 fx.fb(Feedback::Open);
-                st.options = Some(OptionsSpec { title: "Library view".into(), sub: Some("Sort, filter and collections".into()), items });
+                st.options = Some(OptionsSpec { title: tr().library.library_view.into(), sub: Some(tr().library.library_view_sub.into()), items });
                 true
             }
             Btn::Lt | Btn::Rt => {
@@ -494,16 +493,16 @@ impl Page for Library {
         match code {
             ACT_ADD_MENU => {
                 let mut items = vec![
-                    OptionItem { label: "A game from a file or folder".into(), on: None, act: Act::Open(crate::state::Overlay::Other(crate::features::gamemgmt::PICK)) },
-                    OptionItem { label: "A web game".into(), on: None, act: Act::Local(0) },
+                    OptionItem { label: tr().library.add_file_game.into(), on: None, act: Act::Open(crate::state::Overlay::Other(crate::features::gamemgmt::PICK)) },
+                    OptionItem { label: tr().library.add_web_game.into(), on: None, act: Act::Local(0) },
                 ];
-                items.push(OptionItem { label: "A PC to stream from".into(), on: None, act: Act::PcSetup });
-                st.options = Some(OptionsSpec { title: "Add to your library".into(), sub: None, items });
+                items.push(OptionItem { label: tr().library.add_pc_stream.into(), on: None, act: Act::PcSetup });
+                st.options = Some(OptionsSpec { title: tr().library.add_title.into(), sub: None, items });
             }
             0 => {
-                st.osk = Some(crate::state::OskReq::new("Web game address", "", Some("https://game.example"), crate::state::OskFor::WebGameUrl));
+                st.osk = Some(crate::state::OskReq::new(tr().library.web_game_address, "", Some("https://game.example"), crate::state::OskFor::WebGameUrl));
             }
-            100..=199 => self.sort = SORTS[(code - 100) as usize].0,
+            100..=199 => self.sort = sorts()[(code - 100) as usize].0,
             200..=299 => {
                 if let Some(f) = self.menu.get((code - 200) as usize).cloned() {
                     self.set_filter(f);
@@ -518,9 +517,9 @@ impl Page for Library {
             ACT_DELETE => {
                 if let Some(name) = self.target() {
                     st.options = Some(OptionsSpec {
-                        title: format!("Delete {name}?"),
-                        sub: Some("The games stay in your library.".into()),
-                        items: vec![OptionItem { label: "Delete collection".into(), on: None, act: Act::Local(ACT_DELETE_YES) }, OptionItem { label: "Keep it".into(), on: None, act: Act::None }],
+                        title: trf!(tr().library.delete_title, name = name),
+                        sub: Some(tr().library.games_stay.into()),
+                        items: vec![OptionItem { label: tr().library.delete_collection.into(), on: None, act: Act::Local(ACT_DELETE_YES) }, OptionItem { label: tr().library.keep_it.into(), on: None, act: Act::None }],
                     });
                 }
             }
@@ -528,7 +527,7 @@ impl Page for Library {
                 if let Some(name) = self.target() {
                     if st.user.delete(&name) {
                         st.user_changed();
-                        st.toast(format!("{name} deleted"), crate::state::Tone::Info, rare_render::clock::secs());
+                        st.toast(trf!(tr().library.deleted_toast, name = name), crate::state::Tone::Info, rare_render::clock::secs());
                     }
                     self.focus_col = None;
                     self.set_filter(COLS.into());
@@ -536,7 +535,7 @@ impl Page for Library {
             }
             ACT_SYSTEMS_MORE => {
                 let items = self.sys_menu.iter().enumerate().map(|(i, id)| OptionItem { label: rare_emu::systems::by_id(id).map(|s| s.name).unwrap_or(id).to_string(), on: Some(self.system.as_deref() == Some(id.as_str())), act: Act::Local(ACT_SYSTEM_PICK + i as u32) }).collect();
-                st.options = Some(OptionsSpec { title: "Systems".into(), sub: Some("Show one system's games".into()), items });
+                st.options = Some(OptionsSpec { title: tr().library.systems.into(), sub: Some(tr().library.systems_sub.into()), items });
             }
             c if (ACT_SYSTEM_PICK..ACT_SYSTEM_PICK + 100).contains(&c) => {
                 if let Some(id) = self.sys_menu.get((c - ACT_SYSTEM_PICK) as usize).cloned() {
@@ -577,9 +576,9 @@ impl Page for Library {
         if st.overlay.is_some() {
             return vec![];
         }
-        let mut v = vec![hint(Key::LtRt, "Sections"), hint(Key::Select, "View")];
+        let mut v = vec![hint(Key::LtRt, tr().common.sections), hint(Key::Select, tr().common.view)];
         if self.collection().is_some() {
-            v.push(hint(Key::B, "Collections"));
+            v.push(hint(Key::B, tr().library.collections));
         }
         v
     }
@@ -614,7 +613,7 @@ fn android_body(ui: &mut Ui, st: &State, acts: &mut Acts, games: &[&Game], grid_
     let job = rare_android::jobs::current();
     let setup = job.as_ref().filter(|j| j.kind == rare_android::jobs::Kind::Setup);
     let line = |ui: &mut Ui, j: &rare_android::jobs::Job| -> El {
-        let text = if j.line.is_empty() { "Starting".to_string() } else { j.line.clone() };
+        let text = if j.line.is_empty() { tr().library.starting.to_string() } else { j.line.clone() };
         let bar = match j.pct {
             Some(p) => crate::features::downloads::bar(ui, None, p, false),
             None => {
@@ -627,22 +626,22 @@ fn android_body(ui: &mut Ui, st: &State, acts: &mut Acts, games: &[&Game], grid_
         ui.bx(s().col().gap(0.6).wp(1.0).max_w(36.0)).child(ui.text_s(s().wp(1.0).min0(), text, T::new(Ty::Small).c(tok::fg(0.85)).trunc())).child(bar)
     };
     match crate::features::android::status() {
-        Status::Unavailable => kit::empty(ui, s(), "Android isn't available here", Some("Android apps need Rare OS on this device."), vec![]),
-        Status::NeedsUpdate => kit::empty(ui, s(), "Android comes with the next Rare OS update", Some("Update Rare OS in Settings > System. Then set up Android here with one press."), vec![]),
+        Status::Unavailable => kit::empty(ui, s(), tr().library.android_unavailable_title, Some(tr().library.android_unavailable_body), vec![]),
+        Status::NeedsUpdate => kit::empty(ui, s(), tr().library.android_update_title, Some(tr().library.android_update_body), vec![]),
         Status::NotSetUp => match setup {
             Some(j) => {
                 let body = line(ui, j);
-                let note = ui.text_s(s().wp(1.0).max_w(36.0).mt(0.9), "Getting Android takes a few minutes. You can keep using Rare.", T::new(Ty::Small).c(tok::MUTED).wrap());
-                let head = ui.text_s(s().mb(0.9), "Setting up Android", T::new(Ty::Row).w(600));
+                let note = ui.text_s(s().wp(1.0).max_w(36.0).mt(0.9), tr().library.android_wait_note, T::new(Ty::Small).c(tok::MUTED).wrap());
+                let head = ui.text_s(s().mb(0.9), tr().library.setting_up_android, T::new(Ty::Row).w(600));
                 ui.bx(s().col().items_center().py(4.0).wp(1.0)).child(head).child(body).child(note)
             }
             None => {
-                let go = kit::button(ui, B::new("Set up Android", acts.tag(Act::Legacy("android:setup".into()))).primary().def(true).icon(BtnIcon::Lucide("download", 1.0, false)).hint("Set up"));
-                kit::empty(ui, s(), "Play Android games", Some("Rare gets Android without Google apps (about 1 GB) and adds F-Droid and Aurora Store, so you can install games with no Google account."), vec![go])
+                let go = kit::button(ui, B::new(tr().library.set_up_android, acts.tag(Act::Legacy("android:setup".into()))).primary().def(true).icon(BtnIcon::Lucide("download", 1.0, false)).hint(tr().library.set_up));
+                kit::empty(ui, s(), tr().library.play_android_title, Some(tr().library.play_android_body), vec![go])
             }
         },
         Status::Ready => {
-            let find = kit::button(ui, B::new("Find on F-Droid", acts.tag(Act::Legacy("android:find".into()))).sm().icon(BtnIcon::Lucide("search", 1.0, false)).hint("Search F-Droid"));
+            let find = kit::button(ui, B::new(tr().library.find_fdroid, acts.tag(Act::Legacy("android:find".into()))).sm().icon(BtnIcon::Lucide("search", 1.0, false)).hint(tr().library.search_fdroid));
             let mut top = ui.bx(s().row().items_center().gap(1.5).mb(1.25)).group(Group::new("library-android-top", [0.0; 4])).child(find);
             if let Some(j) = job.as_ref().filter(|j| j.kind != rare_android::jobs::Kind::Setup) {
                 top = top.child(ui.bx(s().grow().min0()).child(line(ui, j)));
@@ -653,7 +652,7 @@ fn android_body(ui: &mut Ui, st: &State, acts: &mut Acts, games: &[&Game], grid_
             let tiles: Vec<El> = games.iter().enumerate().map(|(i, g)| parts::game_tile(ui, st, acts, g, i == 0, true, tw, None)).collect();
             let mut col = ui.bx(s().col()).child(top);
             if games.iter().all(|g| rare_android::is_store(&g.id)) {
-                col = col.child(ui.text_s(s().mb(1.0).wp(1.0), "Find a game on F-Droid, or open F-Droid or Aurora Store. Games you install show up here.", T::new(Ty::Small).c(tok::MUTED).wrap()));
+                col = col.child(ui.text_s(s().mb(1.0).wp(1.0), tr().library.android_find_note, T::new(Ty::Small).c(tok::MUTED).wrap()));
             }
             col.child(ui.bx(s().grid(grid_cols).gap(1.0)).group(Group::new("library-android", [0.0; 4])).kids(tiles))
         }
@@ -669,11 +668,11 @@ fn app_state(id: &str) -> &'static str {
         Some(a) => {
             let a = a.borrow();
             if a.installing.get(id).is_some_and(|i| i.error.is_none()) {
-                "Installing"
+                tr().library.installing
             } else if a.status.get(id).is_some_and(|s| s.way.is_some() && s.offer.is_none()) {
-                "Ready"
+                tr().library.ready
             } else if a.status.contains_key(id) {
-                "Not installed"
+                tr().common.not_installed
             } else {
                 "\u{a0}"
             }
@@ -693,18 +692,18 @@ fn stream_card(ui: &mut Ui, acts: &mut Acts, id: &str) -> Option<El> {
         .child(icon)
         .child(ui.bx(s().col().grow().min0()).child(ui.text(app.name.clone(), T::new(Ty::Body).w(600).trunc())).child(ui.text(state, T::new(Ty::Small).c(tok::MUTED))));
     let mut steps = ui.bx(s().col().gap(0.4));
-    for (i, step) in app.steps.iter().enumerate() {
-        steps = steps.child(ui.bx(s().row().gap(0.5)).child(ui.text_s(s().w(1.1), format!("{}.", i + 1), T::new(Ty::Small).w(600))).child(ui.text_s(s().grow().min0(), step.clone(), T::new(Ty::Small).c(tok::MUTED).wrap())));
+    for (i, step) in app.step_texts().into_iter().enumerate() {
+        steps = steps.child(ui.bx(s().row().gap(0.5)).child(ui.text_s(s().w(1.1), format!("{}.", i + 1), T::new(Ty::Small).w(600))).child(ui.text_s(s().grow().min0(), step.to_string(), T::new(Ty::Small).c(tok::MUTED).wrap())));
     }
     let card = ui.bx(s().col().gap(1.0).p(1.25)).bg(tok::L2).radius(ui.r(0.5)).child(head).child(steps);
-    let hint = if state == "Ready" { "Open" } else { "Get" };
+    let hint = if state == tr().library.ready { tr().common.open } else { tr().library.get };
     let fl = card.look.clone().bg(tok::L3).scale(1.02);
     Some(kit::nav(card.focus_look(fl), acts.tag(Act::OpenApp(id.to_string())), Some(hint), None, false).key(key(id)))
 }
 
 fn more_ways(ui: &mut Ui, acts: &mut Acts) -> El {
     let cards: Vec<El> = STREAM_APPS.iter().filter_map(|id| stream_card(ui, acts, id)).collect();
-    let head = kit::section_head(ui, s().mb(0.9), "More ways to stream", Some("From a PlayStation, or a PC with Steam"), None);
+    let head = kit::section_head(ui, s().mb(0.9), tr().library.more_ways, Some(tr().library.more_ways_sub), None);
     let grid = ui.bx(s().grid(&[Track::Fr(1.0), Track::Fr(1.0)]).gap(1.1)).group(Group::new("library-stream-apps", [0.0; 4])).kids(cards);
     ui.bx(s().col()).child(head).child(grid)
 }
@@ -732,12 +731,12 @@ impl Library {
         let empty = all.is_empty() && !st.scanning;
         let mut col = ui.bx(s().col()).child(crate::features::emulation::library_head(ui, acts, empty).key(key("emu-head")));
         if empty {
-            let scan = kit::button(ui, B::new("Scan again", acts.tag(Act::Scan)));
-            let folders = kit::button(ui, B::new("ROM folders", acts.tag(Act::Open(crate::state::Overlay::Other(crate::features::emulation::SETUP)))).ghost());
-            return col.child(kit::empty(ui, s(), "No games here yet", Some("Copy games you own into Emulation/roms on this device or your SD card, in the folder for their system (snes, gba, psx...). Rare finds them on the next scan."), vec![scan, folders]).key(key("emu-empty")));
+            let scan = kit::button(ui, B::new(tr().library.scan_again, acts.tag(Act::Scan)));
+            let folders = kit::button(ui, B::new(tr().library.rom_folders, acts.tag(Act::Open(crate::state::Overlay::Other(crate::features::emulation::SETUP)))).ghost());
+            return col.child(kit::empty(ui, s(), tr().library.no_games_title, Some(tr().library.emu_empty_body), vec![scan, folders]).key(key("emu-empty")));
         }
         // The chips: All, then each system with games.
-        let mut chips: Vec<(Option<String>, String)> = vec![(None, format!("All \u{b7} {}", all.len()))];
+        let mut chips: Vec<(Option<String>, String)> = vec![(None, trf!(tr().library.chip_all, n = all.len()))];
         chips.extend(by_sys.iter().map(|(sys, n)| (Some(sys.id.to_string()), format!("{} \u{b7} {n}", sys.short))));
         let cur = chips.iter().position(|c| c.0 == self.system).unwrap_or(0);
         let widths: Vec<f32> = chips.iter().map(|c| c.1.chars().count() as f32 * 0.56 + 2.4).collect();
@@ -751,12 +750,12 @@ impl Library {
             .enumerate()
             .map(|(i, (id, label))| {
                 let on = *id == self.system;
-                let b = B::new(label.clone(), acts.tag(Act::Local(ACT_SYSTEM + i as u32))).sm().hint("Show");
+                let b = B::new(label.clone(), acts.tag(Act::Local(ACT_SYSTEM + i as u32))).sm().hint(tr().library.show);
                 kit::button(ui, if on { b.primary() } else { b }).key(key(&("chip", id)))
             })
             .collect();
         if to - from < chips.len() {
-            els.push(kit::button(ui, B::new(format!("More {}", chips.len() - (to - from)), acts.tag(Act::Local(ACT_SYSTEMS_MORE))).sm().ghost().icon(BtnIcon::Lucide("list", 1.0, false)).hint("All systems")).key(key("chip-more")));
+            els.push(kit::button(ui, B::new(trf!(tr().library.more_n, n = chips.len() - (to - from)), acts.tag(Act::Local(ACT_SYSTEMS_MORE))).sm().ghost().icon(BtnIcon::Lucide("list", 1.0, false)).hint(tr().library.all_systems)).key(key("chip-more")));
         }
         col = col.child(ui.bx(s().row().items_center().gap(0.5).mb(1.1).wp(1.0)).clip().group(Group::new("library-emu-systems", [0.0; 4]).remember()).kids(els).key(key("emu-chips")));
         let ids: Vec<String> = games.iter().map(|g| g.id.clone()).collect();
@@ -776,8 +775,8 @@ impl Library {
         self.cols = st.user.collections.iter().map(|c| c.name.clone()).collect();
         let new = acts.tag(Act::Local(ACT_NEW_COLLECTION));
         if self.cols.is_empty() {
-            let b = kit::button(ui, B::new("New collection", new).primary().def(true).icon(BtnIcon::Lucide("plus", 1.0, false)));
-            return kit::empty(ui, s(), "No collections yet", Some("Press Menu on a game and pick Add to collection."), vec![b]);
+            let b = kit::button(ui, B::new(tr().library.new_collection, new).primary().def(true).icon(BtnIcon::Lucide("plus", 1.0, false)));
+            return kit::empty(ui, s(), tr().library.no_collections_title, Some(tr().library.add_to_collection_body), vec![b]);
         }
         let per = (grid_cols.len() / 2).max(1);
         let gap = 1.0;
@@ -809,7 +808,7 @@ impl Library {
             let band = ui.bx(s().col().justify_center().h(BAND).px(1.0).gap(0.2).min0()).child(name).child(sub);
             let btn = ui.bx(s().col().w(cw)).bg(tok::L2).radius(ui.r(0.5)).clip().child(ui.bx(s().wh(cw, ch)).bg(tok::L3).child(strip)).child(band);
             let btn = btn.nav(|f| {
-                let f = f.tag(tag).hints(Some("Open"), None, None).label(&c.name);
+                let f = f.tag(tag).hints(Some(tr().common.open), None, None).label(&c.name);
                 if i == 0 {
                     f.default()
                 } else {
@@ -819,8 +818,8 @@ impl Library {
             cards.push(kit::tile(btn, 1.03).key(key(&format!("col:{}", c.name))));
         }
         // New collection, last: a card of the same size with a plus.
-        let plus = ui.bx(s().wh(cw, ch + BAND).row().items_center().justify_center().gap(0.6)).bg(tok::L2).radius(ui.r(0.5)).child(kit::icon(ui, "plus", 1.4, tok::ICON2)).child(ui.text("New collection", T::new(Ty::Body).w(500).c(tok::fg(0.85))));
-        let plus = kit::tile(plus.nav(|f| f.tag(new).hints(Some("Create"), None, None).label("New collection")), 1.03);
+        let plus = ui.bx(s().wh(cw, ch + BAND).row().items_center().justify_center().gap(0.6)).bg(tok::L2).radius(ui.r(0.5)).child(kit::icon(ui, "plus", 1.4, tok::ICON2)).child(ui.text(tr().library.new_collection, T::new(Ty::Body).w(500).c(tok::fg(0.85))));
+        let plus = kit::tile(plus.nav(|f| f.tag(new).hints(Some(tr().library.create), None, None).label(tr().library.new_collection)), 1.03);
         cards.push(plus.key(key("new-collection")));
         let tracks: Vec<Track> = (0..per).map(|_| Track::Fr(1.0)).collect();
         ui.bx(s().grid(&tracks).gap_xy(gap, 1.2)).group(Group::new("library-collections", [0.0; 4])).kids(cards)
@@ -834,14 +833,14 @@ fn emulators(ui: &mut Ui, st: &State, acts: &mut Acts, grid_cols: &[Track], tw: 
     if apps.is_empty() {
         return None;
     }
-    let head = kit::section_head(ui, s().mb(0.9), "Emulators", Some(&apps.len().to_string()), None);
+    let head = kit::section_head(ui, s().mb(0.9), tr().library.emulators, Some(&apps.len().to_string()), None);
     let tiles: Vec<El> = apps.iter().map(|g| parts::game_tile(ui, st, acts, g, false, true, tw, None)).collect();
     let grid = ui.bx(s().grid(grid_cols).gap(1.0)).group(Group::new("library-emu-apps", [0.0; 4])).kids(tiles);
     Some(ui.bx(s().col()).child(head).child(grid).key(key("emu-apps")))
 }
 
 fn games_word(n: usize) -> String {
-    format!("{n} {}", if n == 1 { "game" } else { "games" })
+    trn!(tr().common.games_n, n)
 }
 
 /// "Played 2 h ago · 49 h played", or "Not played yet".
@@ -851,7 +850,7 @@ fn played_line(g: &Game) -> String {
     }
     let ago = fmt_ago(g.last_played);
     match parts::fmt_playtime(g.playtime_minutes) {
-        p if p.is_empty() => if g.last_played.is_some() { ago } else { "Not played yet".into() },
+        p if p.is_empty() => if g.last_played.is_some() { ago } else { tr().library.not_played_yet.into() },
         p => format!("{ago} \u{b7} {p}"),
     }
 }

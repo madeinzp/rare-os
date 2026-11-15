@@ -7,18 +7,19 @@ use crate::screens::wallet::home::stack::WalletView;
 use crate::screens::wallet::kit::{btn, btn_icon, empty, fmt_pct, mimg, page, panel, row, Size, Variant};
 use crate::screens::wallet::market::{rarity_badge, verified};
 use crate::screens::wallet::markup::*;
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::types::{NftDetail, OwnerKind};
 
 /// `held`: where the item is, in plain words.
 pub fn held(d: &NftDetail) -> &'static str {
     match d.owner {
-        OwnerKind::Address if d.in_kiosk => "In your kiosk",
-        OwnerKind::Address => "In your wallet",
-        OwnerKind::Object if d.in_kiosk => "In a kiosk",
-        OwnerKind::Object => "Held inside another object",
-        OwnerKind::Shared => "Shared object",
-        OwnerKind::Immutable => "Immutable",
-        OwnerKind::Unknown => "Unknown",
+        OwnerKind::Address if d.in_kiosk => tr().wallet.held_your_kiosk,
+        OwnerKind::Address => tr().wallet.held_your_wallet,
+        OwnerKind::Object if d.in_kiosk => tr().wallet.held_a_kiosk,
+        OwnerKind::Object => tr().wallet.held_object,
+        OwnerKind::Shared => tr().wallet.held_shared,
+        OwnerKind::Immutable => tr().wallet.held_immutable,
+        OwnerKind::Unknown => tr().common.unknown,
     }
 }
 
@@ -45,7 +46,7 @@ pub fn view(q: &Load, can_sign: bool, copied: Option<&str>) -> El<Msg> {
     let Some(d) = &q.data else {
         let mut body = vec![load_bar(q.loading)];
         if q.error {
-            body.push(empty("Could not load this item", None, None, false));
+            body.push(empty(tr().wallet.item_load_failed, None, None, false));
         }
         return page(None, None, None, false, "", body).attr("data-ready", q.error.to_string());
     };
@@ -59,39 +60,39 @@ pub fn view(q: &Load, can_sign: bool, copied: Option<&str>) -> El<Msg> {
     }
     meta = meta.kid_opt(rarity_badge(d.rarity.as_ref(), false, ""));
     if let Some(l) = &d.listing {
-        meta = meta.kid(span("text-secondary").text(format!("Listed for {} SUI", fmt_sui(Some(l.all_in_mist.unwrap_or(l.price_mist)), 3, false, false))));
+        meta = meta.kid(span("text-secondary").text(trf!(tr().wallet.listed_for, price = fmt_sui(Some(l.all_in_mist.unwrap_or(l.price_mist)), 3, false, false))));
     }
     let mut right = div("min-w-0").kid(h1("text-3xl font-bold leading-tight").text(&d.name)).kid(meta);
     if !d.description.is_empty() {
         right = right.kid(p("mt-3 line-clamp-3 text-sm leading-relaxed text-secondary").text(&d.description));
     }
     let main = if !can_sign {
-        btn_icon("user-plus", "Add a signing account", Variant::Primary, Size::Lg, "", Some(Msg::Push(WalletView::Add))).def(true)
+        btn_icon("user-plus", tr().wallet.add_signing_account, Variant::Primary, Size::Lg, "", Some(Msg::Push(WalletView::Add))).def(true)
     } else if d.can_send {
-        btn_icon("arrow-up-right", "Send", Variant::Primary, Size::Lg, "", Some(Msg::Push(WalletView::SendNfts { ids: vec![d.id.clone()], to: None }))).def(true)
+        btn_icon("arrow-up-right", tr().common.send, Variant::Primary, Size::Lg, "", Some(Msg::Push(WalletView::SendNfts { ids: vec![d.id.clone()], to: None }))).def(true)
     } else {
-        btn("Can't send this one", Variant::Dimmed, "", Some(Msg::Nothing)).def(true)
+        btn(tr().wallet.cant_send_this, Variant::Dimmed, "", Some(Msg::Nothing)).def(true)
     };
-    let mut market = btn_icon("external-link", "View in Marketplace", Variant::Secondary, Size::Lg, "", Some(Msg::OpenInMarket(d.id.clone())));
+    let mut market = btn_icon("external-link", tr().wallet.view_in_marketplace, Variant::Secondary, Size::Lg, "", Some(Msg::OpenInMarket(d.id.clone())));
     market.kids[0] = icon("external-link", "").attr("size", "1.05rem");
     right = right.kid(div("mt-5 flex flex-wrap gap-2").kid(main).kid(market));
     if let Some(why) = d.cant_send.as_ref().filter(|_| can_sign && !d.can_send) {
-        right = right.kid(p("mt-2 text-sm text-secondary").text(format!("{why}.")));
+        right = right.kid(p("mt-2 text-sm text-secondary").text(trf!(tr().wallet.cant_send_reason, why = why)));
     }
     if !d.attributes.is_empty() {
-        right = right.kid(h2("mb-2 mt-6 text-lg font-bold").text("Traits")).kid(div("grid grid-cols-3 gap-2").kids(d.attributes.iter().take(9).map(|a| {
+        right = right.kid(h2("mb-2 mt-6 text-lg font-bold").text(tr().wallet.traits)).kid(div("grid grid-cols-3 gap-2").kids(d.attributes.iter().take(9).map(|a| {
             div("min-w-0 rounded-lg border border-border-primary bg-layer-01 px-3 py-2")
                 .key(format!("{}:{}", a.type_, a.value))
                 .kid(div("truncate text-xs text-secondary").text(&a.type_))
                 .kid(div("truncate text-sm font-semibold").text(&a.value))
-                .kid_opt(a.pct.map(|p_| div("text-xs tabular-nums text-secondary").text(format!("{} have this", fmt_pct(p_, 1)))))
+                .kid_opt(a.pct.map(|p_| div("text-xs tabular-nums text-secondary").text(trf!(tr().wallet.trait_share, pct = fmt_pct(p_, 1)))))
         })));
     }
-    let mut rows = vec![row("Held", vec![text(held(d))], "", true)];
+    let mut rows = vec![row(tr().wallet.held, vec![text(held(d))], "", true)];
     if let Some(k) = &d.kiosk_id {
-        rows.push(row("Kiosk", vec![copy_value(&short_digest(k), "Copy kiosk id", copied == Some(k.as_str()), Msg::Copy(k.clone()))], "", true));
+        rows.push(row(tr().wallet.kiosk, vec![copy_value(&short_digest(k), tr().wallet.copy_kiosk_id, copied == Some(k.as_str()), Msg::Copy(k.clone()))], "", true));
     }
-    rows.push(row("Object", vec![copy_value(&short_digest(&d.id), "Copy object id", copied == Some(d.id.as_str()), Msg::Copy(d.id.clone()))], "", true));
+    rows.push(row(tr().wallet.object, vec![copy_value(&short_digest(&d.id), tr().wallet.copy_object_id, copied == Some(d.id.as_str()), Msg::Copy(d.id.clone()))], "", true));
     right = right.kid(panel(None, None, "mt-6 flex flex-col gap-2 px-5 py-4", rows));
     page(
         None,
@@ -107,7 +108,7 @@ pub fn view(q: &Load, can_sign: bool, copied: Option<&str>) -> El<Msg> {
 }
 
 pub fn hints() -> Vec<Hint> {
-    vec![hint("a", "Select"), hint("b", "Back")]
+    vec![hint("a", tr().common.select), hint("b", tr().common.back)]
 }
 
 #[cfg(test)]

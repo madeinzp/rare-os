@@ -236,7 +236,8 @@ pub fn button(ui: &mut Ui, b: Btn) -> El {
         }
         None => {}
     }
-    el = el.child(ui.text(b.label.clone(), T::new(ty).w(weight).c(fg)).focus_color(tok::BG));
+    // The label shrinks (then truncates) rather than spill out when a language runs long.
+    el = el.child(ui.text_s(s().shrink().min0(), b.label.clone(), T::new(ty).w(weight).c(fg).fit()).focus_color(tok::BG));
     let (hint, x, def, disabled, game, tag) = (b.hint.clone(), b.x.clone(), b.def, b.disabled, b.game, b.tag);
     el = el.nav(move |f| {
         let mut f = f.tag(tag).hints(hint.as_deref(), x.as_deref(), None).disabled(disabled);

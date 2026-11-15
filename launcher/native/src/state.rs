@@ -3,6 +3,7 @@
 //! rebuild when the parts they read change (`State::ver`); handlers change it through methods that
 //! bump those versions.
 
+use rare_i18n::{tr, trf};
 use crate::data::model::{Device, Game, Library};
 use crate::data::live::Live;
 use std::collections::HashMap;
@@ -20,7 +21,13 @@ pub enum Tab {
 }
 
 /// The top tabs (store.ts TABS, plus Friends).
+/// English labels: kept until every caller uses [`tabs`] (they are the same list, in order).
 pub const TABS: [(Tab, &str); 6] = [(Tab::Home, "Home"), (Tab::Library, "Library"), (Tab::Games, "Sui Games"), (Tab::Market, "Market"), (Tab::Wallet, "Wallet"), (Tab::Friends, "Friends")];
+
+/// The top tabs with their labels in the current language.
+pub fn tabs() -> [(Tab, &'static str); 6] {
+    [(Tab::Home, tr().common.home), (Tab::Library, tr().common.library), (Tab::Games, tr().app.tab_sui_games), (Tab::Market, tr().common.market), (Tab::Wallet, tr().common.wallet), (Tab::Friends, tr().common.friends)]
+}
 
 impl Tab {
     pub fn parse(s: &str) -> Option<Tab> {
@@ -111,9 +118,9 @@ pub fn start_line(title: &str, s: Option<&Start>, now: f64) -> Option<String> {
         return Some(q.into());
     }
     if now - s.since >= STILL_STARTING {
-        return Some("Still starting. B to cancel.".into());
+        return Some(tr().app.still_starting.into());
     }
-    Some(if s.phase == Phase::Steam { "Starting Steam".into() } else { format!("Starting {title}") })
+    Some(if s.phase == Phase::Steam { tr().app.starting_steam.into() } else { trf!(tr().app.starting, title = title) })
 }
 
 /// The start B would cancel: the newest one still going after STILL_STARTING (progress.ts cancellable).
@@ -378,14 +385,14 @@ impl State {
     /// What a run id is called (store.ts runName): an app, a stream, a game.
     pub fn run_name(&self, id: &str) -> String {
         if id.starts_with("app:") {
-            return crate::screens::apps::catalog::app_by_run_id(id).map(|a| a.name.clone()).unwrap_or_else(|| "The app".into());
+            return crate::screens::apps::catalog::app_by_run_id(id).map(|a| a.name.clone()).unwrap_or_else(|| tr().app.the_app.into());
         }
         if id.starts_with("stream:") {
-            return "The stream".into();
+            return tr().app.the_stream.into();
         }
         // A web game the library doesn't know (added by address): its window's title.
         let web = || (rare_webgame::current_id().as_deref() == Some(id)).then(rare_webgame::current_title).flatten();
-        self.game(id).map(|g| g.title.clone()).or_else(web).unwrap_or_else(|| "The game".into())
+        self.game(id).map(|g| g.title.clone()).or_else(web).unwrap_or_else(|| tr().app.the_game.into())
     }
 
     pub fn is_running(&self, id: &str) -> bool {
@@ -632,10 +639,10 @@ impl State {
 /// Asks for a collection name: a new collection (with `game` in it) or a new name for `rename`.
 pub fn ask_collection(st: &mut State, rename: Option<String>, game: Option<String>) {
     let (title, value) = match &rename {
-        Some(old) => ("New name for the collection", old.clone()),
-        None => ("Name for the new collection", String::new()),
+        Some(old) => (tr().app.collection_rename_title, old.clone()),
+        None => (tr().app.collection_new_title, String::new()),
     };
-    st.osk = Some(OskReq::new(title, value, Some("Co-op nights"), OskFor::Collection { rename, game }));
+    st.osk = Some(OskReq::new(title, value, Some(tr().app.collection_placeholder), OskFor::Collection { rename, game }));
 }
 
 #[cfg(test)]

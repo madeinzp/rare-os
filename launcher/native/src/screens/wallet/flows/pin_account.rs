@@ -3,6 +3,7 @@
 //! (phone over hybrid, security key over USB), the ceremony's live state, the security key's own
 //! PIN, and rare.market's registry. Views and steps: `onboard/pin_account.rs`.
 
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::home::lib::Hint;
 use crate::screens::wallet::home::stack::WalletView;
 use crate::screens::wallet::markup::El as M;
@@ -68,7 +69,7 @@ impl Flow {
             f.has_pin = !w.keystore.pin_accounts().unwrap_or_default().is_empty();
             f.kept = w.keystore.pin_device().map(|p| p.place().describe().to_string()).unwrap_or_default();
         } else {
-            f.kept = "Checked by this SuiPlay's security chip".into();
+            f.kept = tr().wallet_setup.kept_chip.into();
         }
         if fixture {
             f.st.restore = std::env::var("RR_PIN_RESTORE").is_ok();
@@ -264,8 +265,8 @@ impl WalletTab {
                         *via_now.lock().unwrap() = vias[i];
                         *w.passkey_event.lock().unwrap() = None;
                         *w.passkey_note.lock().unwrap() = (n > 1).then(|| match vias[i] {
-                            Via::Phone => format!("Backup {} of {n}: your phone", i + 1),
-                            Via::Usb => format!("Backup {} of {n}: your security key", i + 1),
+                            Via::Phone => trf!(tr().wallet_setup.backup_n_phone, i = i + 1, n = n),
+                            Via::Usb => trf!(tr().wallet_setup.backup_n_key, i = i + 1, n = n),
                         });
                         w.bump();
                     };
@@ -341,7 +342,7 @@ impl WalletTab {
             changed = true;
         }
         if let Some(r) = service::poll(&mut f.power) {
-            let (powered, blocked, msg) = r.unwrap_or((false, false, Some("Could not turn Bluetooth on. Try again.".into())));
+            let (powered, blocked, msg) = r.unwrap_or((false, false, Some(tr().wallet_setup.bluetooth_failed.into())));
             effs.extend(pa::bt_result(&mut f.st, powered, blocked, msg.as_deref()));
             changed = true;
         }

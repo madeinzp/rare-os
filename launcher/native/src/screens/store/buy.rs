@@ -9,6 +9,7 @@ use super::parts::{game_logo, trunc_text};
 use crate::kit::format::fmt_sui;
 use crate::kit::{self, tok, Btn};
 use crate::screens::market::host::*;
+use rare_i18n::{tr, trf};
 use rare_render::scene::layer;
 use rare_render::view::{El, Look, Motion};
 
@@ -67,7 +68,7 @@ pub fn buy_sheet(ui: &mut Ui, g: &StoreGame, b: &Buy, now: f64) -> El {
 
     let names = ui
         .bx(s().col().min0().shrink())
-        .child(ui.text(format!("Buy {}", g.name), T::new(Ty::Row).w(600)))
+        .child(ui.text(trf!(tr().store.buy_title, game = g.name), T::new(Ty::Row).w(600)))
         .child(trunc_text(ui, s(), g.studio.name.clone(), T::new(Ty::Small).c(tok::MUTED)));
     let who = ui.bx(s().row().items_center().gap(0.75).min0().shrink()).child(game_logo(ui, g, 3.0)).child(names);
     let x = kit::focus_icon(ui, "x", 1.25, false, tok::FG, tok::FG);
@@ -81,19 +82,19 @@ pub fn buy_sheet(ui: &mut Ui, g: &StoreGame, b: &Buy, now: f64) -> El {
 
     let mut body = ui
         .bx(s().col().px(2.0).py(1.5))
-        .child(ui.text("Price", T::new(Ty::Small).c(tok::MUTED)))
+        .child(ui.text(tr().store.price, T::new(Ty::Small).c(tok::MUTED)))
         .child(ui.text_s(s().mt(0.25), usd_text(price), T::new(Ty::Display).w(600).tab()));
     if let (true, Some(sv)) = (accept, &sui) {
-        body = body.child(ui.text(format!("or {sv} SUI at today's price"), T::new(Ty::Small).c(tok::MUTED).tab()));
+        body = body.child(ui.text(trf!(tr().store.or_sui, sui = sv), T::new(Ty::Small).c(tok::MUTED).tab()));
     }
-    body = body.child(ui.text_s(s().mt(1.0), "The licence goes to your wallet. You can refund it in full within 48 hours. Network gas is extra.", T::new(Ty::Small).c(tok::MUTED).wrap()));
+    body = body.child(ui.text_s(s().mt(1.0), tr().store.buy_terms, T::new(Ty::Small).c(tok::MUTED).wrap()));
     match &b.phase {
         Phase::Idle => {}
-        Phase::Working(_) => body = body.child(ui.text_s(s().mt(0.75), "Review and approve in Rare Wallet.", T::new(Ty::Small).c(tok::fg(0.8)).wrap())),
+        Phase::Working(_) => body = body.child(ui.text_s(s().mt(0.75), tr().store.approve_in_wallet, T::new(Ty::Small).c(tok::fg(0.8)).wrap())),
         Phase::Error(m) => body = body.child(ui.text_s(s().mt(0.75), m.clone(), T::new(Ty::Small).c(tok::NEG).wrap())),
     }
 
-    let usdc_label = if b.phase == Phase::Working(Coin::Usdc) { "Waiting for approval".to_string() } else { format!("Pay {} in USDC", usd_text(price)) };
+    let usdc_label = if b.phase == Phase::Working(Coin::Usdc) { tr().store.waiting_approval.to_string() } else { trf!(tr().store.pay_usdc, price = usd_text(price)) };
     let usdc = kit::button(ui, Btn { full: true, ..Btn::new(usdc_label, T_USDC).primary().def(true).disabled(working) });
     let mut foot = ui
         .bx(s().row().gap(0.5).px(2.0).pb(1.0).pt(1.0 + 1.0 / ui.rem))
@@ -101,11 +102,11 @@ pub fn buy_sheet(ui: &mut Ui, g: &StoreGame, b: &Buy, now: f64) -> El {
         .child(ui.bx(s().row().flex(1.0)).child(usdc));
     if accept {
         let label = if b.phase == Phase::Working(Coin::Sui) {
-            "Waiting for approval".to_string()
+            tr().store.waiting_approval.to_string()
         } else {
             match &sui {
-                Some(v) => format!("Pay {v} SUI"),
-                None => "Pay in SUI".into(),
+                Some(v) => trf!(tr().store.pay_sui, sui = v),
+                None => tr().store.pay_in_sui.into(),
             }
         };
         let sb = kit::button(ui, Btn { full: true, ..Btn::new(label, T_SUI).disabled(working || sui.is_none()) });

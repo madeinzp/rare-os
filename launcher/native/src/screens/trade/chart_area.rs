@@ -7,6 +7,7 @@
 //! `ChartMode` is the pure state machine (tested); `ChartArea` is its panel on the scene plus the
 //! engine chart (`rare_render::chart`), painted in the scene's paint slot (`SLOT`) so sheets and toasts sit over it.
 
+use rare_i18n::{tr, trf};
 use crate::kit::format::grouped;
 use crate::screens::market::host::*;
 use rare_render::chart::{self, Candle, Chart, ChartType, Indicator, Textures, INDICATOR_STEPS};
@@ -47,7 +48,10 @@ impl Default for ChartMode {
 }
 
 /// The hint bar while chart mode is on (button as hints.ts names it, label).
-pub const HINTS: [(&str, &str); 8] = [("left", "Move"), ("up", "Zoom"), ("lt", "Shorter"), ("rt", "Longer"), ("y", "Candles or line"), ("x", "Volume"), ("a", "Indicators"), ("b", "Leave chart")];
+pub fn hints() -> [(&'static str, &'static str); 8] {
+    let t = &tr().trade;
+    [("left", t.chart_move), ("up", t.chart_zoom), ("lt", t.chart_shorter), ("rt", t.chart_longer), ("y", t.chart_candles_or_line), ("x", t.volume), ("a", t.chart_indicators), ("b", t.leave_chart)]
+}
 
 impl ChartMode {
     pub fn indicators(&self) -> &'static [Indicator] {
@@ -149,7 +153,7 @@ pub fn readout_texts(bars: &[Candle], i: usize, fmt: &dyn Fn(f64) -> String, vol
     out.push((pct, Some(r.change_pct >= 0.0)));
     if volume {
         let v = if r.volume != 0.0 { grouped(super::fmt::precision_num(r.volume, 3), 0, 3) } else { "0".into() };
-        out.push((format!("Vol {v}"), Some(false)));
+        out.push((trf!(tr().trade.vol, value = v), Some(false)));
     }
     out
 }
@@ -264,7 +268,7 @@ impl ChartArea {
             panel = panel.shadow(&[Shadow::new(0.0, 0.0, 0.0, 1.0, tok::BORDER_LIGHT)]);
         }
         let area = ui.bx(s().abs(Some(1.0), Some(0.5), Some(0.0), Some(0.5))).name(AREA).slot(SLOT);
-        let boxn = fill_nav(ui.bx(s().fill()).radius(ui.r(0.5)).child(area), tag, Some("Control chart"), None, false);
+        let boxn = fill_nav(ui.bx(s().fill()).radius(ui.r(0.5)).child(area), tag, Some(tr().trade.control_chart), None, false);
         panel = panel.child(boxn);
         let mut over = ui.bx(s().fill()).look(Look::default().z(3));
         if let Some(i) = self.mode.cursor {
@@ -294,14 +298,14 @@ impl ChartArea {
                 let l: Vec<&str> = ind.iter().map(|k| k.label()).collect();
                 row = row.child(ui.text(l.join(", "), T::new(Ty::Label).c(tok::MUTED)));
             }
-            row = row.child(ui.text(if self.mode.ty == ChartType::Candles { "Candles" } else { "Line" }, T::new(Ty::Label).c(tok::MUTED)));
+            row = row.child(ui.text(if self.mode.ty == ChartType::Candles { tr().trade.candles } else { tr().trade.line }, T::new(Ty::Label).c(tok::MUTED)));
             let g = kit::glyph(ui, kit::Pb::B, kit::GSize::Sm);
-            row = row.child(ui.bx(s().row().items_center().gap(0.35)).child(g).child(ui.text("Leave", T::new(Ty::Label).c(tok::MUTED))));
+            row = row.child(ui.bx(s().row().items_center().gap(0.35)).child(g).child(ui.text(tr().trade.leave, T::new(Ty::Label).c(tok::MUTED))));
             over = over.child(row);
         } else {
             let g = kit::glyph(ui, kit::Pb::A, kit::GSize::Sm);
             // `opacity-0 [[data-area=chart]:focus_&]:opacity-100`: shows while the box has focus.
-            let row = ui.bx(s().abs(Some(0.5), Some(4.5), None, None).row().items_center().gap(0.35)).opacity(if focused { 1.0 } else { 0.0 }).child(g).child(ui.text("Control chart", T::new(Ty::Label).c(tok::MUTED)));
+            let row = ui.bx(s().abs(Some(0.5), Some(4.5), None, None).row().items_center().gap(0.35)).opacity(if focused { 1.0 } else { 0.0 }).child(g).child(ui.text(tr().trade.control_chart, T::new(Ty::Label).c(tok::MUTED)));
             over = over.child(row);
         }
         panel.child(over)

@@ -2,6 +2,7 @@
 //! for nearly everyone until a zone is picked. One press opens Settings' own picker (region, then
 //! city); picking one lands back here on Continue.
 
+use rare_i18n::{tr, trf};
 use super::kit::{done_line, step};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::ui::{button_el, BSize, ButtonSpec, BVariant};
@@ -28,16 +29,16 @@ pub fn zone_label(zone: Option<&str>) -> String {
 pub fn view(zone: Option<&str>, clock: &str, picked: bool) -> El<Msg> {
     let utc = matches!(zone, None | Some("UTC") | Some("Etc/UTC"));
     let line = if picked || !utc {
-        done_line(vec![span("font-semibold").text(zone_label(zone)), span("text-muted").text(format!(", {clock} now"))])
+        done_line(vec![span("").text(trf!(tr().firstrun.zone_now, zone = zone_label(zone), clock = clock))])
     } else {
-        div("text-body text-muted").text(format!("Set to UTC for now, so the clock says {clock}."))
+        div("text-body text-muted").text(trf!(tr().firstrun.utc_for_now, clock = clock))
     };
     let pick_first = utc && !picked;
     let actions = vec![
-        button_el(ButtonSpec::new(if pick_first { "Pick time zone" } else { "Continue" }).v(BVariant::Primary).size(BSize::Lg).def(true).class("min-w-[11rem]"), Some(if pick_first { Msg::Pick } else { Msg::Continue })),
-        button_el(ButtonSpec::new(if pick_first { "Keep UTC" } else { "Change" }).v(BVariant::Ghost).size(BSize::Lg), Some(if pick_first { Msg::Continue } else { Msg::Pick })),
+        button_el(ButtonSpec::new(if pick_first { tr().firstrun.pick_time_zone } else { tr().common.continue_ }).v(BVariant::Primary).size(BSize::Lg).def(true).class("min-w-[11rem]"), Some(if pick_first { Msg::Pick } else { Msg::Continue })),
+        button_el(ButtonSpec::new(if pick_first { tr().firstrun.keep_utc } else { tr().common.change }).v(BVariant::Ghost).size(BSize::Lg), Some(if pick_first { Msg::Continue } else { Msg::Pick })),
     ];
-    step(text("Time zone"), Some(text("So the clock, sleep timers and store sale ends show your time.")), vec![line], actions, false).on_pad("b", Msg::Back)
+    step(text(tr().firstrun.time_zone_title), Some(text(tr().firstrun.time_zone_body)), vec![line], actions, false).on_pad("b", Msg::Back)
 }
 
 #[cfg(test)]

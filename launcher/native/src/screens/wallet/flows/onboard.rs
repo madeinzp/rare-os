@@ -3,6 +3,7 @@
 //! keystore. The pages' views and pure state live in `onboard/*` and `pages/watch.rs`; this file
 //! performs their effects: the keyboard, the PIN gate, and the keystore work on a worker.
 
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::home::lib::Hint;
 use crate::screens::wallet::home::stack::{ImportWhat, WalletView};
 use crate::screens::wallet::markup::El as M;
@@ -177,7 +178,7 @@ impl WalletTab {
                 let q = create_phrase::make_quiz(&words, &rare_wallet::keys::wordlist()[..], &mut rnd_source());
                 create_phrase::quiz(&mut self.flows.onboard.create, q);
             }
-            E::Gate => self.start_gate(Who::Create, "Enter your PIN to add this phrase"),
+            E::Gate => self.start_gate(Who::Create, tr().wallet_setup.gate_add_phrase),
             E::Add { words, pin } => self.start_job(Who::Create, Job::Phrase { words, pin }),
             E::AskPass { confirm } => ask_pass(st, confirm),
         }
@@ -205,10 +206,10 @@ impl WalletTab {
         match e {
             E::AskWord(i) => {
                 self.flows.onboard.ask_word = i;
-                st.ask_text(K_WORD, format!("Word {}", i + 1), "", Some("First letters"));
+                st.ask_text(K_WORD, trf!(tr().wallet_setup.word_n, n = i + 1), "", Some(tr().wallet_setup.first_letters));
             }
-            E::AskPaste => st.ask_text(K_PASTE, "Paste all words", "", Some("12 or 24 words")),
-            E::AskKey => crate::screens::wallet::sign::host::ask_secret(st, K_KEY, "Private key"),
+            E::AskPaste => st.ask_text(K_PASTE, tr().wallet_setup.paste_all, "", Some(tr().wallet_setup.paste_placeholder)),
+            E::AskKey => crate::screens::wallet::sign::host::ask_secret(st, K_KEY, tr().wallet_setup.way_key_title),
             E::AskPass { confirm } => ask_pass(st, confirm),
             E::NextWord(i) => self.flows.onboard.next_word = Some((i, rare_render::clock::secs() + 0.12)),
             // Restore a PIN account: the words go to the PIN account flow (PIN, the backup's sign in)
@@ -222,7 +223,7 @@ impl WalletTab {
                 self.stack.push(WalletView::PinAccount, None);
                 self.ver += 1;
             }
-            E::Gate => self.start_gate(Who::Import(what), "Enter your PIN to add this wallet"),
+            E::Gate => self.start_gate(Who::Import(what), tr().wallet_setup.gate_add_wallet),
             E::AddPhrase { words, pin } => self.start_job(Who::Import(what), Job::Phrase { words, pin }),
             E::AddKey { key, pin } => self.start_job(Who::Import(what), Job::Key { key, pin }),
         }
@@ -232,9 +233,10 @@ impl WalletTab {
 
     /// The Watch page's messages (page.rs routes `Msg::Watch` here).
     pub(in crate::screens::wallet) fn watch_msg(&mut self, st: &mut State, m: watch::Msg) {
+        let asks_address = matches!(m, watch::Msg::TypeAddress);
         match watch::update(&mut self.watch, m) {
             Some(watch::Effect::Ask { prompt, value, placeholder }) => {
-                let key = if prompt.starts_with("Address") { K_ADDR } else { K_NAME };
+                let key = if asks_address { K_ADDR } else { K_NAME };
                 st.ask_text(key, prompt, value, Some(placeholder));
             }
             Some(watch::Effect::Watch { input, name }) => self.start_watch(input, name),
@@ -251,7 +253,7 @@ impl WalletTab {
             let address = match w.rt.block_on(resolve_recipient(&w.names(), &input)) {
                 RecipientState::Ready { address, .. } => address,
                 RecipientState::Invalid { msg } | RecipientState::Missing { msg, .. } | RecipientState::Error { msg, .. } => return Err(Failure::msg(&msg)),
-                _ => return Err(Failure::msg("Enter a 0x address or a .sui name")),
+                _ => return Err(Failure::msg(tr().wallet_setup.enter_address_or_name)),
             };
             let label = name.or_else(|| (!input.starts_with("0x")).then(|| input.clone()));
             let r = run_watch(&w.keystore, &address, label.as_deref());
@@ -271,12 +273,12 @@ impl WalletTab {
             return;
         }
         if self.fixture {
-            st.toast("Account added", Tone::Info, rare_render::clock::secs());
+            st.toast(tr().wallet_setup.toast_account_added, Tone::Info, rare_render::clock::secs());
             return;
         }
         f.derive_busy = true;
         f.derive_error = None;
-        self.start_gate(Who::Derive, "Enter your PIN to add an account");
+        self.start_gate(Who::Derive, tr().wallet_setup.gate_add_account);
         self.ver += 1;
     }
 
@@ -357,11 +359,11 @@ impl WalletTab {
                 let f = &mut self.flows.onboard;
                 f.derive_busy = false;
                 if let Err(e) = res {
-                    let msg = plain_error(&e, "Could not add the account");
+                    let msg = plain_error(&e, tr().wallet_setup.add_account_failed);
                     f.derive_error = Some(msg);
                     PENDING_TOAST.with(|t| *t.borrow_mut() = Some((self.flows.onboard.derive_error.clone().unwrap_or_default(), Tone::Error, now)));
                 } else {
-                    PENDING_TOAST.with(|t| *t.borrow_mut() = Some(("Account added".into(), Tone::Info, now)));
+                    PENDING_TOAST.with(|t| *t.borrow_mut() = Some((tr().wallet_setup.toast_account_added.into(), Tone::Info, now)));
                 }
             }
         }
@@ -469,7 +471,7 @@ impl WalletTab {
 }
 
 fn ask_pass(st: &mut State, confirm: bool) {
-    let (key, title) = if confirm { (K_PASS2, "Confirm passphrase") } else { (K_PASS, "Passphrase") };
+    let (key, title) = if confirm { (K_PASS2, tr().wallet_setup.confirm_passphrase) } else { (K_PASS, tr().wallet_setup.passphrase) };
     crate::screens::wallet::sign::host::ask_secret(st, key, title);
 }
 

@@ -2,6 +2,7 @@
 //! Rare Wallet on the matching page (the same screens the wallet's own welcome uses), so there is
 //! one set of flows to keep right. Phase 3, workstream 14.
 
+use rare_i18n::tr;
 use super::wallet::home::stack::{PasskeyMode, WalletView};
 use super::wallet::markup::*;
 use super::wallet::ui::{button_el, ButtonSpec, BVariant};
@@ -23,12 +24,12 @@ pub fn view() -> El<Msg> {
     div("fade-in fixed inset-0 z-40 flex items-center justify-center bg-bg").attr("data-nav-scope", "").kid(
         div("flex w-[26rem] flex-col items-center gap-[0.8rem]")
             .kid(brand_mark("4.2rem"))
-            .kid(h1("mt-[0.6rem] text-[1.9rem] font-bold tracking-[-0.03em]").text("Sign in to Rare"))
-            .kid(p("mb-[0.8rem] text-center text-[0.92rem] leading-relaxed text-muted").text("One account for Rare Wallet and Rare Marketplace. Your games work without signing in."))
-            .kid(button_el(ButtonSpec::new("Sign in with a passkey").v(BVariant::Primary).def(true).class("w-full"), Some(Msg::Open(WalletView::Passkey { mode: PasskeyMode::Signin }))))
-            .kid(button_el(ButtonSpec::new("Create account").class("w-full"), Some(Msg::Open(WalletView::Passkey { mode: PasskeyMode::Create }))))
-            .kid(button_el(ButtonSpec::new("Other ways to sign in").class("w-full"), Some(Msg::Open(WalletView::Add))))
-            .kid(button_el(ButtonSpec::new("Not now").v(BVariant::Ghost).class("mt-[0.4rem]"), Some(Msg::NotNow))),
+            .kid(h1("mt-[0.6rem] text-[1.9rem] font-bold tracking-[-0.03em]").text(tr().signin.title))
+            .kid(p("mb-[0.8rem] text-center text-[0.92rem] leading-relaxed text-muted").text(tr().signin.body))
+            .kid(button_el(ButtonSpec::new(tr().signin.passkey).v(BVariant::Primary).def(true).class("w-full"), Some(Msg::Open(WalletView::Passkey { mode: PasskeyMode::Signin }))))
+            .kid(button_el(ButtonSpec::new(tr().signin.create_account).class("w-full"), Some(Msg::Open(WalletView::Passkey { mode: PasskeyMode::Create }))))
+            .kid(button_el(ButtonSpec::new(tr().signin.other_ways).class("w-full"), Some(Msg::Open(WalletView::Add))))
+            .kid(button_el(ButtonSpec::new(tr().signin.not_now).v(BVariant::Ghost).class("mt-[0.4rem]"), Some(Msg::NotNow))),
     )
 }
 

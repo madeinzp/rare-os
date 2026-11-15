@@ -8,6 +8,7 @@ use crate::screens::wallet::home::page::{ActivityLoad, PortfolioLoad};
 use crate::screens::wallet::home::stack::WalletView;
 use crate::screens::wallet::kit::{avatar, btn_icon, delta, empty, page_with, panel, row, Size, Variant};
 use crate::screens::wallet::markup::*;
+use rare_i18n::{tr, trf};
 
 pub struct Props<'a> {
     pub coin_type: &'a str,
@@ -25,7 +26,7 @@ pub enum Msg {
 pub fn view(pr: &Props) -> El<Msg> {
     let ty = norm_type(pr.coin_type);
     let t = pr.pf.data.as_ref().and_then(|d| d.tokens.iter().find(|x| norm_type(&x.coin_type) == ty));
-    let symbol = t.map(|t| t.symbol.clone()).unwrap_or_else(|| pr.coin_type.rsplit("::").next().filter(|s| !s.is_empty()).unwrap_or("Coin").to_string());
+    let symbol = t.map(|t| t.symbol.clone()).unwrap_or_else(|| pr.coin_type.rsplit("::").next().filter(|s| !s.is_empty()).unwrap_or(tr().wallet.col_coin).to_string());
     let recent: Vec<_> = pr.act.items.iter().filter(|a| a.changes.iter().any(|c| norm_type(&c.coin_type) == ty)).take(8).collect();
 
     let mut title = span("flex items-center gap-3").kid(avatar(t.and_then(|t| t.icon_url.as_deref()), &symbol, "2.25rem", false)).kid(text(&symbol));
@@ -35,37 +36,37 @@ pub fn view(pr: &Props) -> El<Msg> {
 
     let value = match t.and_then(|t| t.value_usd) {
         Some(v) => fmt_usd(Some(v)),
-        None if pr.pf.data.is_some() => "No price".into(),
+        None if pr.pf.data.is_some() => tr().wallet.no_price.into(),
         None => "--".into(),
     };
     let mut card = vec![
-        div("text-sm text-secondary").text("Your balance"),
+        div("text-sm text-secondary").text(tr().wallet.your_balance),
         div("mt-1 text-4xl font-bold tabular-nums").kid(text(format!("{} ", fmt_token(Some(t.map(|t| t.amount).unwrap_or(0.0)), 6)))).kid(span("text-xl font-medium text-secondary").text(&symbol)),
         div("mt-1 text-lg tabular-nums text-secondary").text(value),
     ];
     if let Some((tok, price)) = t.and_then(|t| t.price_usd.map(|p| (t, p))) {
         card.push(
             div("mt-5 flex flex-col gap-2 border-t border-border-primary pt-4")
-                .kid(row("Price", vec![span("tabular-nums").text(if price >= 1.0 { fmt_usd(Some(price)) } else { format!("${}", to_precision(price, 3)) })], "", true))
-                .kid(row("24h", vec![delta(tok.change_24h, 2, "")], "", true)),
+                .kid(row(tr().wallet.price, vec![span("tabular-nums").text(if price >= 1.0 { fmt_usd(Some(price)) } else { format!("${}", to_precision(price, 3)) })], "", true))
+                .kid(row(tr().wallet.h24, vec![delta(tok.change_24h, 2, "")], "", true)),
         );
     }
     let send = if pr.can_sign {
-        btn_icon("arrow-up-right", "Send", Variant::Primary, Size::Lg, "flex-1", Some(Msg::Push(WalletView::Send { coin_type: Some(pr.coin_type.to_string()), to: None }))).def(true)
+        btn_icon("arrow-up-right", tr().common.send, Variant::Primary, Size::Lg, "flex-1", Some(Msg::Push(WalletView::Send { coin_type: Some(pr.coin_type.to_string()), to: None }))).def(true)
     } else {
-        btn_icon("user-plus", "Add a signing account", Variant::Primary, Size::Lg, "flex-1", Some(Msg::Push(WalletView::Add))).def(true)
+        btn_icon("user-plus", tr().wallet.add_signing_account, Variant::Primary, Size::Lg, "flex-1", Some(Msg::Push(WalletView::Add))).def(true)
     };
     let left = div("flex flex-col gap-4 self-start")
         .kid(panel(None, None, "p-6", card))
-        .kid(div("flex gap-2").kid(send).kid(btn_icon("arrow-down-left", "Receive", Variant::Secondary, Size::Lg, "flex-1", Some(Msg::Push(WalletView::Receive)))));
+        .kid(div("flex gap-2").kid(send).kid(btn_icon("arrow-down-left", tr().common.receive, Variant::Secondary, Size::Lg, "flex-1", Some(Msg::Push(WalletView::Receive)))));
     let mut right = div("min-w-0")
-        .kid(h2("mb-2 text-xl font-bold").text("Recent activity"))
+        .kid(h2("mb-2 text-xl font-bold").text(tr().wallet.recent_activity))
         .kid(div("").attr("data-nav-group", "wallet-coin-activity").kids(recent.iter().enumerate().map(|(i, a)| activity_row(a, i, pr.tz_min, Msg::Push(WalletView::Activity { digest: a.digest.clone() })))));
     if pr.act.ready && recent.is_empty() {
-        right = right.kid(empty(&format!("No {symbol} activity yet"), None, None, true));
+        right = right.kid(empty(&trf!(tr().wallet.no_coin_activity, symbol = symbol), None, None, true));
     }
     if pr.act.error && !pr.act.ready {
-        right = right.kid(empty("Could not load activity", None, None, true));
+        right = right.kid(empty(tr().wallet.could_not_load_activity, None, None, true));
     }
     page_with(
         Some(title),
@@ -79,7 +80,7 @@ pub fn view(pr: &Props) -> El<Msg> {
 }
 
 pub fn hints() -> Vec<Hint> {
-    vec![hint("a", "Open"), hint("b", "Back")]
+    vec![hint("a", tr().common.open), hint("b", tr().common.back)]
 }
 
 #[cfg(test)]

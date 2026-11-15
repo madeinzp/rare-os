@@ -1,6 +1,7 @@
 //! The library and device models, the same JSON as src-tauri's model.rs and lib/types.ts, so the
 //! backend's cache (~/.cache/rare/library.json) and the rare-library crate's values load as is.
 
+use rare_i18n::{tr, trf, trn};
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize, Default, Clone, Debug, PartialEq)]
@@ -249,13 +250,13 @@ pub fn source_label(s: &str) -> &'static str {
         "gog" => "GOG",
         "battlenet" => "Battle.net",
         "itch" => "itch.io",
-        "local" => "Local",
-        "web" => "Web",
-        "apps" => "Emulators",
+        "local" => tr().data.source_local,
+        "web" => tr().data.source_web,
+        "apps" => tr().data.source_emulators,
         "rare" => "Rare Store",
-        "cloud" => "Cloud",
+        "cloud" => tr().data.source_cloud,
         "android" => "Android",
-        "emu" => "Emulation",
+        "emu" => tr().data.source_emulation,
         _ => "",
     }
 }
@@ -292,30 +293,41 @@ pub fn now_secs() -> i64 {
 pub const REAL_TIME: i64 = 978_307_200;
 
 pub fn fmt_ago(t: Option<i64>) -> String {
-    let Some(t) = t.filter(|t| *t >= REAL_TIME) else { return "Never played".into() };
+    let Some(t) = t.filter(|t| *t >= REAL_TIME) else { return tr().data.never_played.into() };
     let s = now_secs() - t;
     if s < 3600 {
-        return "Played just now".into();
+        return tr().data.played_just_now.into();
     }
     if s < 86400 {
-        return format!("Played {} h ago", (s as f64 / 3600.0).round());
+        return trn!(tr().data.played_hours_ago, (s as f64 / 3600.0).round() as i64);
     }
     if s < 86400 * 2 {
-        return "Played yesterday".into();
+        return tr().data.played_yesterday.into();
     }
     if s < 86400 * 30 {
-        return format!("Played {} days ago", (s as f64 / 86400.0).round());
+        return trn!(tr().data.played_days_ago, (s as f64 / 86400.0).round() as i64);
     }
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     let tt = t as libc::time_t;
     // SAFETY: localtime_r fills tm.
     unsafe { libc::localtime_r(&tt, &mut tm) };
-    const M: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     // Older than about half a year: with the year, so "Jan 1" never reads as this week's.
     if s > 86400 * 180 {
-        return format!("Played {} {}, {}", M[tm.tm_mon.clamp(0, 11) as usize], tm.tm_mday, tm.tm_year + 1900);
+        return trf!(tr().data.played_on_year, month = month_short(tm.tm_mon), day = tm.tm_mday, year = tm.tm_year + 1900);
     }
-    format!("Played {} {}", M[tm.tm_mon.clamp(0, 11) as usize], tm.tm_mday)
+    trf!(tr().data.played_on, month = month_short(tm.tm_mon), day = tm.tm_mday)
+}
+
+/// The short month name ("Jan") for a `tm_mon` (0 to 11), in the current language.
+pub fn month_short(m: i32) -> &'static str {
+    let t = tr().data;
+    [t.month_jan, t.month_feb, t.month_mar, t.month_apr, t.month_may, t.month_jun, t.month_jul, t.month_aug, t.month_sep, t.month_oct, t.month_nov, t.month_dec][m.clamp(0, 11) as usize]
+}
+
+/// The short weekday name ("Sun") for a `tm_wday` (0 is Sunday), in the current language.
+pub fn weekday_short(d: i32) -> &'static str {
+    let t = tr().data;
+    [t.day_sun, t.day_mon, t.day_tue, t.day_wed, t.day_thu, t.day_fri, t.day_sat][d.clamp(0, 6) as usize]
 }
 
 /// One game on a paired PC (rare-stream StreamApp).
@@ -348,13 +360,13 @@ impl PcShelf {
     /// The second line under a cover (logic.ts playState + tileLine).
     pub fn tile_line(&self, app: u32, running: &[String]) -> String {
         if running.iter().any(|r| *r == self.run_id(app)) {
-            return "Playing".into();
+            return tr().common.playing.into();
         }
         if !self.online {
-            return if self.can_wake { format!("{} is asleep", self.name) } else { format!("{} is off", self.name) };
+            return if self.can_wake { trf!(tr().data.pc_asleep, name = self.name) } else { trf!(tr().data.pc_off, name = self.name) };
         }
         match self.current_game {
-            Some(g) if g == app => "Running on your PC".into(),
+            Some(g) if g == app => tr().data.running_on_pc.into(),
             _ => self.name.clone(),
         }
     }

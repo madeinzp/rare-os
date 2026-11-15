@@ -894,7 +894,7 @@ impl Nav {
                 a: it.hint_a.clone(),
                 x: it.hint_x.clone(),
                 y: it.hint_y.clone(),
-                menu: it.game.then(|| "Options".to_string()),
+                menu: it.game.then(|| hints::words().options.to_string()),
                 focused: true,
             },
             None => hints::Focused::default(),
@@ -1011,6 +1011,26 @@ impl FocusMap {
 ///   Y  "Search" unless a screen claims it
 /// Screens and overlays push their extra hints on the stack; the topmost wins.
 pub mod hints {
+    /// The words the bar adds by itself, in the UI's language (`set_words`; English until then).
+    #[derive(Clone, Copy, Debug)]
+    pub struct Words {
+        pub select: &'static str,
+        pub back: &'static str,
+        pub options: &'static str,
+        pub menu: &'static str,
+        pub hold_view_menu: &'static str,
+    }
+
+    static WORDS: std::sync::RwLock<Words> = std::sync::RwLock::new(Words { select: "Select", back: "Back", options: "Options", menu: "Menu", hold_view_menu: "Hold View for the Rare menu" });
+
+    pub fn set_words(w: Words) {
+        *WORDS.write().unwrap_or_else(|e| e.into_inner()) = w;
+    }
+
+    pub fn words() -> Words {
+        *WORDS.read().unwrap_or_else(|e| e.into_inner())
+    }
+
     /// A glyph in the hint bar (`PadButton` in lib/types.ts).
     #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
     pub enum Key {
@@ -1095,9 +1115,9 @@ pub mod hints {
     /// button ("Menu"); in guest mode Steam keeps it, so the hint is the View hold.
     pub fn exit_hint(guest: bool) -> Hint {
         if guest {
-            hint(Key::Select, "Hold View for the Rare menu")
+            hint(Key::Select, words().hold_view_menu)
         } else {
-            hint(Key::Rare, "Menu")
+            hint(Key::Rare, words().menu)
         }
     }
 
@@ -1176,11 +1196,11 @@ pub mod hints {
             }
         }
         if f.focused {
-            let a = f.a.clone().or_else(|| get(&by, Key::A)).unwrap_or_else(|| "Select".into());
+            let a = f.a.clone().or_else(|| get(&by, Key::A)).unwrap_or_else(|| words().select.into());
             set(&mut by, Key::A, a);
         }
         if can_back && get(&by, Key::B).is_none() {
-            set(&mut by, Key::B, "Back".into());
+            set(&mut by, Key::B, words().back.into());
         }
         ORDER.iter().filter_map(|&b| get(&by, b).filter(|l| !l.is_empty()).map(|label| Hint { b, label })).collect()
     }

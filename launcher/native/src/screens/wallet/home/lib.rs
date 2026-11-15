@@ -3,6 +3,7 @@
 //! the loading bar, the copy button, and plain PIN errors.
 
 use crate::screens::wallet::fmt::{date_md, local};
+use rare_i18n::{tr, trf, trn};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::types::RareAccount;
 
@@ -16,16 +17,16 @@ pub fn is_sui_type(t: &str) -> bool {
 /// `kindLabel`: how the account signs, as a short plain label.
 pub fn kind_label(a: &RareAccount) -> &'static str {
     match a.kind.as_str() {
-        "watch" => "Watch only",
+        "watch" => tr().wallet.kind_watch,
         "ledger" => "Ledger",
         "keystone" => "Keystone",
-        "passkey" => "Passkey",
-        "social" => "Social",
+        "passkey" => tr().wallet.kind_passkey,
+        "social" => tr().wallet.kind_social,
         _ => {
             if a.hd.is_some() {
-                "Recovery phrase"
+                tr().wallet.kind_phrase
             } else {
-                "Private key"
+                tr().wallet.kind_key
             }
         }
     }
@@ -62,10 +63,10 @@ pub fn day_label(ts: i64, now: i64, tz_min: i32) -> String {
     let d = local(ts, tz_min);
     let n = local(now, tz_min);
     if d.days == n.days {
-        return "Today".into();
+        return tr().wallet.today.into();
     }
     if d.days == local(now - 86_400_000, tz_min).days {
-        return "Yesterday".into();
+        return tr().wallet.yesterday.into();
     }
     date_md(ts, tz_min, d.year != n.year)
 }
@@ -95,12 +96,12 @@ pub enum SecretFail {
 /// `secretError`: a plain message for a wrong or throttled PIN.
 pub fn secret_error(e: &SecretFail, noun: &str) -> String {
     match e {
-        SecretFail::Wrong { retry_after_ms } if *retry_after_ms > 1000 => format!("Wrong {noun}. Wait {} seconds and try again.", retry_after_ms.div_ceil(1000)),
-        SecretFail::Wrong { .. } => format!("Wrong {noun}. Try again."),
-        SecretFail::Throttled { retry_after_ms } => format!("Too many tries. Wait {} seconds.", retry_after_ms.div_ceil(1000)),
-        SecretFail::Locked => "The wallet is locked.".into(),
+        SecretFail::Wrong { retry_after_ms } if *retry_after_ms > 1000 => trn!(tr().wallet.wrong_wait, retry_after_ms.div_ceil(1000), noun = noun),
+        SecretFail::Wrong { .. } => trf!(tr().wallet.wrong_try_again, noun = noun),
+        SecretFail::Throttled { retry_after_ms } => trn!(tr().wallet.too_many_tries, retry_after_ms.div_ceil(1000)),
+        SecretFail::Locked => tr().wallet.wallet_locked.into(),
         SecretFail::Other(Some(m)) if m.chars().count() < 140 => m.clone(),
-        SecretFail::Other(_) => "That didn't work. Try again.".into(),
+        SecretFail::Other(_) => tr().wallet.didnt_work.into(),
     }
 }
 

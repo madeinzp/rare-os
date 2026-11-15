@@ -1,6 +1,7 @@
 //! Marketplace search (marketplace/SearchPage.tsx): the on-screen keyboard for the term (the app
 //! runs it and calls `set_term`), then wallets and collections.
 
+use rare_i18n::{tr, trf};
 use super::data::Answers;
 use super::host::*;
 use super::parts::*;
@@ -17,7 +18,9 @@ pub const T_WALLET: u32 = 100;
 pub const T_COLL: u32 = 1000;
 
 /// What the keyboard is asked for (askText's title and placeholder).
-pub const ASK: &str = "osk:Search Rare Marketplace|Collection name, wallet or name.sui";
+pub fn ask() -> String {
+    format!("osk:{}|{}", tr().market.ask_title, tr().market.ask_hint)
+}
 
 pub struct SearchPage {
     pub a: Rc<Answers>,
@@ -52,16 +55,16 @@ impl SearchPage {
 
 pub fn view(ui: &mut Ui, a: &Answers, q: &str, frame: u64) -> El {
     let mut page = ui.bx(s().fill().col().px(2.5).pb(2.5).pt(1.0)).scrolls_y(key(&format!("mk-search-{frame}")));
-    let field = search_field(ui, s().wp(1.0), 3.0, if q.is_empty() { "Search collections" } else { q }, q.is_empty(), BASE, 1.1, T_FIELD);
+    let field = search_field(ui, s().wp(1.0), 3.0, if q.is_empty() { tr().market.search_collections } else { q }, q.is_empty(), BASE, 1.1, T_FIELD);
     page = page.child(field);
     let res: Option<SearchResult> = if q.is_empty() { None } else { a.get(&paths::search(q)) };
     let Some(r) = res else { return page };
     if r.collections.is_empty() && r.accounts.is_empty() {
-        return page.child(empty(ui, &format!("No results for \"{q}\""), None, None, false));
+        return page.child(empty(ui, &trf!(tr().market.no_results, q = q), None, None, false));
     }
     let h2 = |ui: &Ui, txt: &str| ui.text_s(s().mb(0.5), txt, t(XS).c(tok::MUTED));
     if !r.accounts.is_empty() {
-        let mut sec = ui.bx(s().col().mt(1.5)).child(h2(ui, "WALLETS"));
+        let mut sec = ui.bx(s().col().mt(1.5)).child(h2(ui, tr().market.wallets_caps));
         for (i, w) in r.accounts.iter().enumerate() {
             let name = w.name.clone().unwrap_or_else(|| short_addr(Some(&w.address)));
             let av = wallet_avatar(ui, s(), &w.address, 2.0);
@@ -77,7 +80,7 @@ pub fn view(ui: &mut Ui, a: &Answers, q: &str, frame: u64) -> El {
         page = page.child(sec);
     }
     if !r.collections.is_empty() {
-        let mut sec = ui.bx(s().col().mt(1.5)).child(h2(ui, "COLLECTIONS"));
+        let mut sec = ui.bx(s().col().mt(1.5)).child(h2(ui, tr().market.collections_caps));
         for (i, c) in r.collections.iter().enumerate() {
             let av = avatar(ui, s(), c.r#ref.image_url.as_deref(), &c.r#ref.name, 2.5, false);
             let mut name = ui.bx(s().row().items_center().gap(0.375).grow()).child(ui.text(c.r#ref.name.clone(), t(SM).w(600).trunc()));
@@ -86,8 +89,8 @@ pub fn view(ui: &mut Ui, a: &Answers, q: &str, frame: u64) -> El {
             }
             let fl = sui(ui, s(), c.floor_mist.as_deref(), 2, false, t(SM).w(600));
             let vol = sui(ui, s(), Some(&c.volume_mist), 2, true, t(SM).w(600));
-            let floor = ui.bx(s().col().items_end().w(10.0)).child(ui.text("Floor", t(XS).c(tok::MUTED))).child(fl);
-            let volume = ui.bx(s().col().items_end().w(10.0)).child(ui.text("Volume 7d", t(XS).c(tok::MUTED))).child(vol);
+            let floor = ui.bx(s().col().items_end().w(10.0)).child(ui.text(tr().market.floor, t(XS).c(tok::MUTED))).child(fl);
+            let volume = ui.bx(s().col().items_end().w(10.0)).child(ui.text(tr().market.volume_7d, t(XS).c(tok::MUTED))).child(vol);
             let row = ui.bx(s().row().items_center().gap(0.75).h(4.0).wp(1.0).px(0.75)).radius(ui.r(0.5)).child(av).child(name).child(floor).child(volume).key(key(&c.r#ref.slug));
             sec = sec.child(fill_nav(row, T_COLL + i as u32, None, None, i == 0));
         }
@@ -113,9 +116,9 @@ impl MkPage for SearchPage {
     fn press(&mut self, cx: &mut Cx, b: Pad, now: f64) -> Act {
         let _ = (cx, now);
         match b {
-            Pad::Y => Act::Out(Out::Act(ASK.into())),
+            Pad::Y => Act::Out(Out::Act(ask())),
             Pad::A => match self.host.tag() {
-                Some(T_FIELD) => Act::Out(Out::Act(ASK.into())),
+                Some(T_FIELD) => Act::Out(Out::Act(ask())),
                 Some(t) if (T_WALLET..T_COLL).contains(&t) => {
                     let r = self.result().unwrap_or_default();
                     r.accounts.get((t - T_WALLET) as usize).map(|w| Act::Push(View::Account { address: w.address.clone(), label: w.name.clone().unwrap_or_else(|| short_addr(Some(&w.address))) })).unwrap_or(Act::None)
@@ -153,6 +156,6 @@ impl MkPage for SearchPage {
     }
 
     fn hints(&self) -> Vec<(&'static str, String)> {
-        vec![("a", "Open".into()), ("y", "Edit search".into()), ("b", "Back".into())]
+        vec![("a", tr().common.open.into()), ("y", tr().market.edit_search.into()), ("b", tr().common.back.into())]
     }
 }

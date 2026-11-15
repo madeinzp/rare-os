@@ -22,6 +22,7 @@ use rare_wallet::sign::{OriginKind, SignError, SignOptions, SignOrigin, Signing,
 use rare_wallet::sponsor::{Category, Sponsor, SponsorApi};
 use rare_wallet::vault::{default_dir, Kdf, Vault};
 use rare_wallet::WalletEvent;
+use rare_i18n::tr;
 use serde_json::Value;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{channel, Receiver};
@@ -204,7 +205,7 @@ pub fn work<T: Send + 'static>(f: impl FnOnce(&'static Wallet) -> T + Send + 'st
         .spawn(move || {
             let r = match wallet() {
                 Some(w) => Ok(f(w)),
-                None => Err("Rare Wallet can't reach the network right now".to_string()),
+                None => Err(tr().wallet.no_network.to_string()),
             };
             let _ = tx.send(r);
         })
@@ -223,7 +224,7 @@ pub fn poll<T>(rx: &mut Option<Receiver<Result<T, String>>>) -> Option<Result<T,
         Err(std::sync::mpsc::TryRecvError::Empty) => None,
         Err(std::sync::mpsc::TryRecvError::Disconnected) => {
             *rx = None;
-            Some(Err("The wallet stopped. Try again.".into()))
+            Some(Err(tr().wallet.stopped_try_again.into()))
         }
     }
 }
@@ -290,7 +291,7 @@ impl rare_sui::signer::TxSigner for WalletTxSigner {
     fn sign_personal_message(&self, message: &[u8], title: &str) -> rare_sui::BoxFut<'_, String> {
         let (msg, title) = (message.to_vec(), title.to_string());
         Box::pin(async move {
-            let w = wallet().ok_or_else(|| rare_sui::Error::invalid("Rare Wallet is not available"))?;
+            let w = wallet().ok_or_else(|| rare_sui::Error::invalid(tr().wallet.not_available))?;
             let o = SignOptions { account: Some(self.account.clone()), title: Some(title), ..Default::default() };
             let s = w.signing.clone();
             let r = tokio::task::spawn_blocking(move || s.sign_personal_message(msg, o).and_then(|t| t.wait())).await.map_err(|e| rare_sui::Error::invalid(e.to_string()))?;
@@ -300,7 +301,7 @@ impl rare_sui::signer::TxSigner for WalletTxSigner {
     fn sign_and_execute(&self, tx: rare_sui::ptb::Tx, title: &str) -> rare_sui::BoxFut<'_, String> {
         let title = title.to_string();
         Box::pin(async move {
-            let w = wallet().ok_or_else(|| rare_sui::Error::invalid("Rare Wallet is not available"))?;
+            let w = wallet().ok_or_else(|| rare_sui::Error::invalid(tr().wallet.not_available))?;
             let o = SignOptions { account: Some(self.account.clone()), title: Some(title), ..Default::default() };
             let s = w.signing.clone();
             let r = tokio::task::spawn_blocking(move || s.sign_and_execute_with_cover(tx, Category::Walrus, o).and_then(|t| t.wait())).await.map_err(|e| rare_sui::Error::invalid(e.to_string()))?;
@@ -325,7 +326,7 @@ pub struct WalletExecutor;
 impl rare_market::inventory::trade::Executor for WalletExecutor {
     fn sign_and_execute(&self, tx: rare_sui::ptb::Tx, account: &str, origin: &rare_market::inventory::trade::Origin, title: &str) -> rare_market::Result<rare_market::inventory::trade::ExecStatus> {
         use rare_market::inventory::trade::ExecStatus;
-        let w = wallet().ok_or_else(|| rare_market::Error::new("Rare Wallet is not available"))?;
+        let w = wallet().ok_or_else(|| rare_market::Error::new(tr().wallet.not_available))?;
         let kind = if origin.kind == "market" { OriginKind::Market } else { OriginKind::Wallet };
         let o = SignOptions { account: Some(account.to_string()), origin: Some(SignOrigin::new(origin.name, kind)), title: Some(title.to_string()), ..Default::default() };
         match w.signing.sign_and_execute_with_cover(tx, Category::Trade, o).and_then(|t| t.wait()) {
@@ -369,7 +370,7 @@ pub fn identity_maker() -> rare_trade::swap::IdentityMaker {
 /// A Trade sign request through the review sheet (blocks until answered). Rare covers the fee
 /// when the wallet is short of SUI and the sponsor offers trades.
 pub fn trade_sign(req: &rare_trade::wallet::SignRequest, reader: Option<&dyn rare_trade::chain::ChainReader>) -> rare_trade::wallet::SignOutcome {
-    let Some(w) = wallet() else { return rare_trade::wallet::SignOutcome::Failed("Rare Wallet is not available".into()) };
+    let Some(w) = wallet() else { return rare_trade::wallet::SignOutcome::Failed(tr().wallet.not_available.into()) };
     let out = rare_wallet::adapters::trade_sign(&w.signing, req, None, reader);
     if matches!(out, rare_trade::wallet::SignOutcome::Sent { dry_run: false, .. }) {
         crate::data::keep::nudge();
@@ -379,7 +380,7 @@ pub fn trade_sign(req: &rare_trade::wallet::SignRequest, reader: Option<&dyn rar
 
 /// The wallet's own sends (Send, Send collectibles): review, sign, submit. Blocks.
 pub fn send(tx: TxInput, account: &str, title: &str) -> Result<rare_wallet::sign::SignResult, SignError> {
-    let w = wallet().ok_or_else(|| SignError::Chain("Rare Wallet is not available".into()))?;
+    let w = wallet().ok_or_else(|| SignError::Chain(tr().wallet.not_available.into()))?;
     let o = SignOptions { account: Some(account.to_string()), origin: Some(SignOrigin::wallet()), title: Some(title.to_string()), ..Default::default() };
     let r = w.signing.sign_and_execute(tx, o)?.wait();
     if r.is_ok() {
@@ -402,7 +403,7 @@ impl rare_friends::WalletSigner for LazyFriendsSigner {
         }
         match friends_signer() {
             Some(s) => s.sign_personal_message(message, prompt),
-            None => Err(rare_friends::Error::Other("Rare Wallet can't reach the network right now".into())),
+            None => Err(rare_friends::Error::Other(tr().wallet.no_network.into())),
         }
     }
 }
@@ -414,7 +415,7 @@ impl rare_friends::resolve::RecipientResolver for LazyFriendsResolver {
     fn resolve_recipient(&self, text: &str) -> rare_friends::resolve::Recipient {
         match friends_recipients() {
             Some(r) => r.resolve_recipient(text),
-            None => rare_friends::resolve::Recipient::Error { msg: "Name lookup is not available right now".into() },
+            None => rare_friends::resolve::Recipient::Error { msg: tr().wallet.name_lookup_unavailable.into() },
         }
     }
 }
@@ -431,28 +432,42 @@ fn sign_silently(w: &Wallet, address: &str, message: &[u8]) -> Option<String> {
     signer.sign_personal_message(message).ok().map(|(_, s)| s)
 }
 
-/// How each kind of account approves a signature, in plain words (Friends' gate, the review sheet).
-pub const METHOD_SILENT: &str = "This account is on this SuiPlay, so it signs in by itself. Nothing to approve.";
-pub const METHOD_PIN: &str = "You approve with your Rare Wallet PIN.";
-pub const METHOD_PASSKEY_BOTH: &str = "You approve with your PIN on this SuiPlay, or with the passkey on your phone: Rare shows a QR code to scan.";
-pub const METHOD_PASSKEY_PHONE: &str = "You approve with your passkey: Rare shows a QR code, you scan it with your phone and confirm with your face or fingerprint. Keep Bluetooth on.";
-pub const METHOD_PIN_ACCOUNT: &str = "You approve with your PIN on this SuiPlay. Your backup (phone or security key) can always sign too.";
-pub const METHOD_LEDGER: &str = "You approve on your Ledger. Connect it and open the Sui app.";
-pub const METHOD_KEYSTONE: &str = "You approve on your Keystone over a USB-C cable.";
+/// How the player approves with each kind of account, in the current language.
+pub fn method_silent() -> &'static str {
+    tr().wallet.method_silent
+}
+pub fn method_pin() -> &'static str {
+    tr().wallet.method_pin
+}
+pub fn method_passkey_both() -> &'static str {
+    tr().wallet.method_passkey_both
+}
+pub fn method_passkey_phone() -> &'static str {
+    tr().wallet.method_passkey_phone
+}
+pub fn method_pin_account() -> &'static str {
+    tr().wallet.method_pin_account
+}
+pub fn method_ledger() -> &'static str {
+    tr().wallet.method_ledger
+}
+pub fn method_keystone() -> &'static str {
+    tr().wallet.method_keystone
+}
 
 /// How `address` approves a signature now.
 pub fn sign_method(address: &str) -> String {
-    let Some(w) = wallet() else { return METHOD_PIN.into() };
+    let Some(w) = wallet() else { return method_pin().into() };
     let Some(a) = w.keystore.meta().ok().and_then(|m| m.accounts.into_iter().find(|a| a.address.eq_ignore_ascii_case(address))) else { return String::new() };
     let locked = w.keystore.needs_unlock(&a.address).unwrap_or(true);
     match a.kind {
-        AccountKind::Native if !locked => METHOD_SILENT,
-        AccountKind::Native => METHOD_PIN,
-        AccountKind::Passkey if w.keystore.is_pin_account(&a.address) => METHOD_PIN_ACCOUNT,
-        AccountKind::Passkey if a.passkey.as_ref().and_then(|p| p.local_key) != Some(false) && w.keystore.has_vault().unwrap_or(false) => METHOD_PASSKEY_BOTH,
-        AccountKind::Passkey => METHOD_PASSKEY_PHONE,
-        AccountKind::Ledger => METHOD_LEDGER,
-        AccountKind::Keystone => METHOD_KEYSTONE,
+        AccountKind::Native if !locked => method_silent(),
+        AccountKind::Native => method_pin(),
+        AccountKind::Passkey if w.keystore.is_pin_account(&a.address) => method_pin_account(),
+        AccountKind::Passkey if a.passkey.as_ref().and_then(|p| p.local_key) != Some(false) && w.keystore.has_vault().unwrap_or(false) => method_passkey_both(),
+        AccountKind::Passkey => method_passkey_phone(),
+        AccountKind::Ledger => method_ledger(),
+        AccountKind::Keystone => method_keystone(),
         _ => "",
     }
     .into()

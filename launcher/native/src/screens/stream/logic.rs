@@ -1,5 +1,7 @@
 //! PC streaming: the pure parts (stream/logic.ts, stream/types.ts). Which PC shows on Home, what a
 //! tile says, what Play does, and the quality presets for the SuiPlay. Tests mirror logic.test.ts.
+use rare_i18n::{tr, trf};
+
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Codec {
@@ -159,10 +161,10 @@ pub fn play_state(host: &Host, app: &StreamApp, running: &[String]) -> PlayState
 /// The second line under a cover.
 pub fn tile_line(host: &Host, state: PlayState) -> String {
     match state {
-        PlayState::Playing => "Playing".into(),
-        PlayState::OnPc => "Running on your PC".into(),
-        PlayState::Asleep => format!("{} is asleep", host.name),
-        PlayState::Offline => format!("{} is off", host.name),
+        PlayState::Playing => tr().common.playing.into(),
+        PlayState::OnPc => tr().stream.running_on_pc.into(),
+        PlayState::Asleep => trf!(tr().stream.host_asleep, name = host.name.clone()),
+        PlayState::Offline => trf!(tr().stream.host_off, name = host.name.clone()),
         _ => host.name.clone(),
     }
 }
@@ -189,7 +191,7 @@ pub fn auto_codec(decode: Option<Decode>, host_codecs: Option<u32>) -> Option<Co
 
 pub fn codec_label(c: Codec) -> &'static str {
     match c {
-        Codec::Auto => "Auto",
+        Codec::Auto => tr().common.auto,
         Codec::Av1 => "AV1",
         Codec::Hevc => "HEVC",
         Codec::H264 => "H.264",

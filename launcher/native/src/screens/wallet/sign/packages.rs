@@ -75,7 +75,7 @@ const KNOWN_FEE_RECIPIENTS: &[(&str, &str)] = &[("0x1dd4889f1ba614d0b44bd0fda31d
 
 pub fn known_fee(address: &str) -> Option<&'static str> {
     let n = norm_id(address);
-    KNOWN_FEE_RECIPIENTS.iter().find(|(a, _)| norm_id(a) == n).map(|(_, l)| *l)
+    KNOWN_FEE_RECIPIENTS.iter().find(|(a, _)| norm_id(a) == n).map(|_| rare_i18n::tr().wallet_sign.rare_fee)
 }
 
 #[derive(Clone, Debug, PartialEq)]

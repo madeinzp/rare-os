@@ -247,7 +247,7 @@ fn apply(note: bool) {
 }
 
 fn osd(gamepad: bool) {
-    let (icon, text) = if gamepad { ("input-gaming", "Controller") } else { ("input-mouse", "Mouse and keyboard") };
+    let (icon, text) = if gamepad { ("input-gaming", rare_i18n::tr().features.desktop_osd_controller) } else { ("input-mouse", rare_i18n::tr().features.desktop_osd_mouse) };
     let r = Connection::new_session().map_err(|e| e.to_string()).and_then(|c| {
         c.with_proxy("org.kde.plasmashell", "/org/kde/osdService", TIMEOUT).method_call::<(), _, _, _>("org.kde.osdService", "showText", (icon, text)).map_err(|e| e.to_string())
     });

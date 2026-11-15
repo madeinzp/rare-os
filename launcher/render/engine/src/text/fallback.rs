@@ -77,18 +77,22 @@ pub fn name_rank(cls: Class, file: &str) -> Option<u8> {
                 None
             }
         }
+        // Noto Sans CJK's variable collection first (every weight), then its Regular: Fedora ships
+        // the static weights next to it and "Black" sorts first by name.
         Class::Cjk => [
-            ("notosanscjk", 0),
-            ("sourcehansans", 1),
-            ("notoserifcjk", 2),
-            ("sourcehanserif", 3),
-            ("wqy", 4),
-            ("droidsansfallback", 4),
-            ("hiraginosans", 5),
-            ("pingfang", 5),
-            ("hiragino", 6),
-            ("applesdgothic", 6),
-            ("cjk", 7),
+            ("notosanscjkvf", 0),
+            ("notosanscjkregular", 1),
+            ("notosanscjk", 2),
+            ("sourcehansans", 3),
+            ("notoserifcjk", 4),
+            ("sourcehanserif", 5),
+            ("wqy", 6),
+            ("droidsansfallback", 6),
+            ("hiraginosans", 7),
+            ("pingfang", 7),
+            ("hiragino", 8),
+            ("applesdgothic", 8),
+            ("cjk", 9),
         ]
         .iter()
         .find(|(p, _)| n.contains(p))
@@ -358,7 +362,9 @@ mod tests {
         assert_eq!(name_rank(Class::Emoji, "NotoColorEmoji.ttf"), Some(0));
         assert_eq!(name_rank(Class::Emoji, "Apple Color Emoji.ttc"), Some(0));
         assert_eq!(name_rank(Class::Cjk, "NotoSansCJK-VF.ttc"), Some(0));
-        assert_eq!(name_rank(Class::Cjk, "NotoSansCJK-Regular.ttc"), Some(0));
+        assert_eq!(name_rank(Class::Cjk, "NotoSansCJK-Regular.ttc"), Some(1));
+        assert_eq!(name_rank(Class::Cjk, "NotoSansCJK-Black.ttc"), Some(2));
+        assert_eq!(name_rank(Class::Cjk, "NotoSansMonoCJK-VF.ttc"), Some(9));
         assert_eq!(name_rank(Class::Cjk, "Inter.ttf"), None);
         assert_eq!(name_rank(Class::Other, "NotoSans-Regular.ttf"), Some(0));
         assert_eq!(name_rank(Class::Other, "NotoSansMono-Regular.ttf"), None);

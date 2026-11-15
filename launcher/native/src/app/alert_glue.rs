@@ -1,6 +1,7 @@
 //! The price alert sheet on a live coin page: opened from Trade's "Price alert" button over the
 //! launcher, saved on rare.market for this device (`screens::notify::live`).
 
+use rare_i18n::tr;
 use super::*;
 use crate::screens::notify::alert::AlertSheet;
 use crate::screens::notify::live::{self, LiveAlerts};
@@ -8,7 +9,7 @@ use crate::screens::notify::live::{self, LiveAlerts};
 impl App {
     pub(super) fn open_price_alert(&mut self, coin_type: &str, symbol: &str, price: f64, now: f64) {
         if !(price > 0.0) {
-            self.st.toast("Price alerts need a price for this coin.", Tone::Info, now);
+            self.st.toast(tr().app.alert_needs_price, Tone::Info, now);
             return;
         }
         let t = clock::secs();

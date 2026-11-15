@@ -3,6 +3,7 @@
 
 use super::model::{ChainBuild, ChainRelease, InstalledAt, Licence, StoreGame};
 use crate::kit::format::grouped;
+use rare_i18n::{tr, trf, trn};
 
 pub const DAY_MS: f64 = 86_400_000.0;
 /// A positive launch check keeps a game launching offline this long.
@@ -71,7 +72,7 @@ pub fn on_sale(g: &StoreGame, now: f64) -> bool {
 /// micro-USD as dollars ("$14.99", "Free").
 pub fn usd_text(micro: u64) -> String {
     if micro == 0 {
-        return "Free".into();
+        return tr().store.free.into();
     }
     let cents = (micro + 5_000) / 10_000;
     format!("${}.{:02}", grouped((cents / 100) as f64, 0, 0), cents % 100)
@@ -81,10 +82,10 @@ pub fn usd_text(micro: u64) -> String {
 pub fn time_left(ms: f64) -> String {
     let h = (ms / 3_600_000.0).round().max(1.0);
     if h < 48.0 {
-        return format!("{h} h");
+        return trf!(tr().store.hours_short, h = h);
     }
     let d = (h / 24.0).round();
-    format!("{d} {}", if d == 1.0 { "day" } else { "days" })
+    trn!(tr().store.days_n, d)
 }
 
 pub fn steam_app_id(url: Option<&str>) -> Option<u64> {
@@ -98,9 +99,9 @@ fn platform_name(p: &str) -> &str {
     match p {
         "linux-x86_64" => "Linux",
         "windows-x86_64" => "Windows",
-        "web" => "Web",
+        "web" => tr().store.platform_web,
         "pc" => "PC",
-        "mobile" => "Mobile",
+        "mobile" => tr().store.platform_mobile,
         "suiplay" => "SuiPlay",
         other => other,
     }
@@ -130,20 +131,20 @@ pub fn size_text(b: u64) -> String {
 /// Where a link listing lives, for its tile and page.
 pub fn link_where(g: &StoreGame) -> &'static str {
     if g.links.steam.is_some() {
-        "On Steam"
+        tr().store.on_steam
     } else if g.links.epic.is_some() {
-        "On Epic Games"
+        tr().store.on_epic
     } else if g.links.play.is_some() {
-        "Plays in the browser"
+        tr().store.plays_in_browser
     } else {
-        "Website"
+        tr().store.website
     }
 }
 
 pub fn status_word(s: &str) -> &str {
     match s {
-        "live" => "Live",
-        "beta" => "Beta",
+        "live" => tr().store.status_live,
+        "beta" => tr().store.status_beta,
         other => other,
     }
 }
@@ -156,8 +157,8 @@ pub fn studio_line(g: &StoreGame) -> String {
 /// The tile's status line: "Live · Linux", "Beta · Website".
 pub fn card_status(g: &StoreGame) -> String {
     let st = match g.status.as_deref() {
-        Some("live") => "Live",
-        Some("beta") => "Beta",
+        Some("live") => tr().store.status_live,
+        Some("beta") => tr().store.status_beta,
         _ => "",
     };
     let where_ = if g.is_link() { link_where(g).to_string() } else { platform_text(&g.platforms) };
@@ -185,16 +186,16 @@ pub fn plain(m: &str) -> String {
     let net = ["failed to fetch", "networkerror", "load failed", "error sending request", "dns"].iter().any(|k| low.contains(k));
     let rm = low.strip_prefix("rare.market ").is_some_and(|r| r.chars().next().is_some_and(|c| c.is_ascii_digit()));
     if net || rm {
-        return "Couldn't reach rare.market. Check the connection and try again.".into();
+        return tr().store.err_unreachable.into();
     }
     if m.starts_with("no_licence") {
-        return "This wallet doesn't hold a licence for this game.".into();
+        return tr().store.err_no_licence.into();
     }
     if m.starts_with("no_build") {
-        return "There's no build for this device yet.".into();
+        return tr().store.err_no_build.into();
     }
     if m.starts_with("uploads_closed") {
-        return "Downloads open soon.".into();
+        return tr().store.err_uploads_closed.into();
     }
     // A leading "code: " goes.
     let out = match m.split_once(": ") {
@@ -202,7 +203,7 @@ pub fn plain(m: &str) -> String {
         _ => m,
     };
     if out.is_empty() {
-        "That didn't go through. Try again.".into()
+        tr().store.err_generic.into()
     } else {
         out.to_string()
     }
@@ -210,7 +211,6 @@ pub fn plain(m: &str) -> String {
 
 /// "Nov 3" for a UTC time in ms (toLocaleDateString month short, day numeric; the launcher runs in UTC here).
 pub fn month_day(ms: f64) -> String {
-    const M: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     let days = (ms / DAY_MS).floor() as i64;
     // Howard Hinnant's civil_from_days.
     let z = days + 719_468;
@@ -221,7 +221,7 @@ pub fn month_day(ms: f64) -> String {
     let mp = (5 * doy + 2) / 153;
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
-    format!("{} {}", M[(m - 1) as usize], d)
+    rare_i18n::fmt::date_md(m as u32, d as u32)
 }
 
 #[cfg(test)]

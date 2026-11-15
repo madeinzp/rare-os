@@ -7,6 +7,7 @@
 //!   Then      Sui Games, On Sui, your collectibles, Apps, Emulators, On your PC, Top collections
 //!             and Latest sales, Rare.
 
+use rare_i18n::{tr, trf, trn};
 use crate::act::Act;
 use crate::data::catalog::SuiGame;
 use crate::data::live::{CollectionRow, Sale};
@@ -141,11 +142,11 @@ impl Home {
         // game, so A still plays it).
         let logo = kit::steam(ui, 2.1, tok::FG);
         let inner = ui.bx(s().fill().col().items_center().justify_center()).radius(ui.r(0.5)).bg(tok::L2).child(logo);
-        let label = strip_label(ui, "Steam", if st.steam_sign_in { "Sign in to play your Steam games" } else { "Store, library and downloads" });
+        let label = strip_label(ui, "Steam", if st.steam_sign_in { tr().home.steam_sign_in_sub } else { tr().home.steam_store_sub });
         let tag = acts.tag(Act::SteamBigPicture);
         self.strip_tags.push(tag);
         self.steam_tag = Some(tag);
-        tiles.push(self.strip_tile(ui, 0, inner, label, tag, "Open Steam", None, false).key(key("steam-tile")));
+        tiles.push(self.strip_tile(ui, 0, inner, label, tag, tr().home.open_steam, None, false).key(key("steam-tile")));
         let n = games.len().min(16) + 1;
         for (i, g) in games.iter().take(16).enumerate() {
             let i = i + 1;
@@ -158,16 +159,16 @@ impl Home {
             }
             let tag = acts.game(Act::Launch(g.id.clone()), &g.id);
             self.strip_tags.push(tag);
-            let label = strip_label(ui, &g.title, if running { "Playing" } else { crate::data::model::source_label(&g.source) });
-            tiles.push(self.strip_tile(ui, i, inner, label, tag, if running { "Resume" } else { "Play" }, Some(&g.id), i == 1).key(key(&g.id)));
+            let label = strip_label(ui, &g.title, if running { tr().common.playing } else { crate::data::model::source_label(&g.source) });
+            tiles.push(self.strip_tile(ui, i, inner, label, tag, if running { tr().common.resume } else { tr().common.play }, Some(&g.id), i == 1).key(key(&g.id)));
         }
         // The Library tile at the end.
         let grid = kit::icon_s(ui, "layout-grid", 1.5, tok::FG, 1.75, false);
         let inner = ui.bx(s().fill().col().items_center().justify_center().gap(0.25)).radius(ui.r(0.5)).bg(tok::L2).child(grid);
-        let label = strip_label(ui, "All games", &format!("{} in your library", st.one_each(st.games().iter().filter(|g| g.installed && g.source != "emu")).len()));
+        let label = strip_label(ui, tr().home.all_games, &trf!(tr().home.in_library, n = st.one_each(st.games().iter().filter(|g| g.installed && g.source != "emu")).len()));
         let tag = acts.tag(Act::Tab(Tab::Library));
         self.strip_tags.push(tag);
-        tiles.push(self.strip_tile(ui, n, inner, label, tag, "Library", None, false).key(key("all-games")));
+        tiles.push(self.strip_tile(ui, n, inner, label, tag, tr().common.library, None, false).key(key("all-games")));
         // data-rail data-nav-group="strip": h-[13.5rem] gap-[0.75rem] px-[2.5rem], the rail's 1.4rem
         // room above and below.
         ui.bx(s().row().items_start().h(13.5).gap(0.75).px(2.5).py(1.4).my(-1.4)).scrolls_x(key("home.strip")).group(Group::new("strip", [0.0; 4]).rail()).kids(tiles)
@@ -190,7 +191,7 @@ impl Home {
             .child(inner)
             .child(label)
             .nav(move |f| {
-                let mut f = f.tag(tag).hints(Some(&a), if is_game { Some("Details") } else { None }, None);
+                let mut f = f.tag(tag).hints(Some(&a), if is_game { Some(tr().common.details) } else { None }, None);
                 if is_game {
                     f = f.game();
                 }
@@ -210,13 +211,13 @@ impl Home {
         // Steam waits for a sign-in: Play hands Steam the screen for it (launch.rs steam_questions).
         let sign_in = !running && st.steam_sign_in && g.source == "steam";
         let line = if running {
-            start_line(&g.title, start, ui.now).unwrap_or_else(|| "Now playing".into())
+            start_line(&g.title, start, ui.now).unwrap_or_else(|| tr().home.now_playing.into())
         } else if sign_in {
-            rare_launch::steamlogin::SIGN_IN.into()
+            tr().home.steam_needs_sign_in.into()
         } else if g.last_played.unwrap_or(0) > 0 {
-            "Continue playing".into()
+            tr().home.continue_playing.into()
         } else {
-            "In your library".into()
+            tr().home.in_your_library.into()
         };
         let mut status = ui.bx(s().row().items_center().gap(0.5));
         if running {
@@ -229,11 +230,11 @@ impl Home {
         let meta = meta_line(ui, s(), &game_meta(g), T::new(Ty::Body).c(tok::fg(0.75)));
         let mut body = ui.bx(s().col().justify_end().gap(1.0).grow()).child(status).child(logo).child(meta);
         if buttons {
-            let play_label = if running { "Resume" } else if g.source == "apps" { "Open" } else { "Play" };
+            let play_label = if running { tr().common.resume } else if g.source == "apps" { tr().common.open } else { tr().common.play };
             let play_tag = acts.game(Act::Launch(g.id.clone()), &g.id);
             let details_tag = acts.game(Act::OpenGame(g.id.clone()), &g.id);
-            let play = kit::button(ui, B::new(play_label, play_tag).primary().lg().hint(if running { "Resume" } else { "Play" }).icon(BtnIcon::Lucide("play", 1.1, true)).min_w(10.0).game());
-            let details = kit::button(ui, B::new("Details", details_tag).lg().game());
+            let play = kit::button(ui, B::new(play_label, play_tag).primary().lg().hint(if running { tr().common.resume } else { tr().common.play }).icon(BtnIcon::Lucide("play", 1.1, true)).min_w(10.0).game());
+            let details = kit::button(ui, B::new(tr().common.details, details_tag).lg().game());
             self.hero_tags.extend([play_tag, details_tag]);
             body = body.child(ui.bx(s().row().gap(0.75).mt(0.35)).group(Group::new("hero", [0.0; 4]).remember()).child(play).child(details));
         }
@@ -243,12 +244,12 @@ impl Home {
     fn stage(&mut self, ui: &mut Ui, st: &State, acts: &mut Acts) -> El {
         let Some(g) = self.stage_game(st) else {
             // Nothing installed yet.
-            let steam = kit::button(ui, B::new("Open Steam", acts.tag(Act::SteamBigPicture)).primary().lg().def(true).icon(BtnIcon::Steam(1.15)));
-            let browse = kit::button(ui, B::new("Browse Sui games", acts.tag(Act::Tab(Tab::Games))).lg());
+            let steam = kit::button(ui, B::new(tr().home.open_steam, acts.tag(Act::SteamBigPicture)).primary().lg().def(true).icon(BtnIcon::Steam(1.15)));
+            let browse = kit::button(ui, B::new(tr().home.browse_sui_games, acts.tag(Act::Tab(Tab::Games))).lg());
             return ui
                 .bx(s().col().justify_end().gap(1.0).pb(0.5).grow())
-                .child(ui.text("Welcome to Rare", T::new(Ty::Hero).w(700)))
-                .child(ui.text_s(s().max_w(32.0), "Your games from Steam, Epic, GOG, itch.io and your folders show up here.", T::new(Ty::Body).c(tok::MUTED).wrap()))
+                .child(ui.text(tr().home.welcome, T::new(Ty::Hero).w(700)))
+                .child(ui.text_s(s().max_w(32.0), tr().home.welcome_body, T::new(Ty::Body).c(tok::MUTED).wrap()))
                 .child(ui.bx(s().row().gap(0.75)).group(Group::new("hero", [0.0; 4]).remember()).child(steam).child(browse));
         };
         let cell = ui.bx(s().col().justify_end().grow());
@@ -261,11 +262,11 @@ impl Home {
         if let Some(a) = &st.account {
             return your_items(ui, st, acts, a);
         }
-        let sign = kit::button(ui, B::new("Sign in", acts.tag(Act::Open(Overlay::Other("signin")))).primary());
+        let sign = kit::button(ui, B::new(tr().common.sign_in, acts.tag(Act::Open(Overlay::Other("signin")))).primary());
         let price = sui_price(ui, st);
         kit::panel(ui, s().col().w(24.0).gap(1.0).self_end().p(1.25))
-            .child(ui.text("Your items", T::new(Ty::Label).c(tok::MUTED)))
-            .child(ui.text_s(s().wp(1.0), "Sign in with a passkey to see your items.", T::new(Ty::Body).c(tok::MUTED).wrap()))
+            .child(ui.text(tr().home.your_items, T::new(Ty::Label).c(tok::MUTED)))
+            .child(ui.text_s(s().wp(1.0), tr().home.sign_in_items_body, T::new(Ty::Body).c(tok::MUTED).wrap()))
             .child(ui.bx(s().row()).group(Group::new("yourrare", [0.0; 4]).remember()).child(sign))
             .child(price)
     }
@@ -275,17 +276,18 @@ impl Home {
 /// game, then your total and today's change. A opens the Wallet.
 fn your_items(ui: &mut Ui, st: &State, acts: &mut Acts, a: &crate::data::account::HomeAccount) -> El {
     let muted = T::new(Ty::Meta).c(tok::MUTED);
-    let mut p = ui.bx(s().col().w(24.0).self_end().p(1.25)).bg(tok::L1).radius(ui.r(0.75)).clip().child(ui.text("Items in your games", T::new(Ty::Label).c(tok::MUTED)));
+    let mut p = ui.bx(s().col().w(24.0).self_end().p(1.25)).bg(tok::L1).radius(ui.r(0.75)).clip().child(ui.text(tr().home.items_in_games, T::new(Ty::Label).c(tok::MUTED)));
     let mut value = ui.bx(s().row().items_end().gap(0.4).mt(0.25).min_h(2.5));
     let mut line = ui.bx(s().min_h(1.25));
     if let Some(g) = &a.in_games {
         value = value.child(ui.text(g.value.clone(), T::new(Ty::Px(2.0, 2.5)).w(600).mono())).child(ui.text("SUI", T::new(Ty::Row).w(500).c(tok::MUTED)));
         let words = if g.items == 0 {
-            "No game items yet".to_string()
+            tr().home.no_game_items.to_string()
         } else {
-            let it = format!("{} {}", kit::format::grouped(g.items as f64, 0, 0), if g.items == 1 { "item" } else { "items" });
+            let it = trn!(tr().common.items_n, g.items as f64, n = kit::format::grouped(g.items as f64, 0, 0));
             if g.offers > 0 {
-                format!("{it}, {} {}", kit::format::grouped(g.offers as f64, 0, 0), if g.offers == 1 { "offer" } else { "offers" })
+                let offers = trn!(tr().home.offers_n, g.offers as f64, n = kit::format::grouped(g.offers as f64, 0, 0));
+                trf!(tr().home.items_and_offers, items = it, offers = offers)
             } else {
                 it
             }
@@ -306,20 +308,20 @@ fn your_items(ui: &mut Ui, st: &State, acts: &mut Acts, a: &crate::data::account
             );
         }
         if g.games.len() > 4 {
-            list = list.child(ui.text(format!("and {} more", g.games.len() - 4), muted));
+            list = list.child(ui.text(trf!(tr().home.and_more, n = g.games.len() - 4), muted));
         }
         p = p.child(list);
     }
     p = p.child(ui.bx(s().wp(1.0).h_px(1.0).my(1.0)).bg(tok::HAIR));
     let total = kit::num(ui, s(), NumKind::Money, a.total_usd, NumOptions::default(), T::new(Ty::Row).w(600), false).unwrap_or_else(|| ui.bx(s().h(1.6)));
-    let mut foot = ui.bx(s().row().items_end().justify_between().gap(1.0)).child(ui.bx(s().col().min0()).child(ui.text("Your total", T::new(Ty::Label).c(tok::MUTED))).child(total));
+    let mut foot = ui.bx(s().row().items_end().justify_between().gap(1.0)).child(ui.bx(s().col().min0()).child(ui.text(tr().home.your_total, T::new(Ty::Label).c(tok::MUTED))).child(total));
     // Today's change only when it is a cent or more (an empty wallet reads $0.00 once).
     if let Some(d) = kit::num(ui, s(), NumKind::Pnl, a.change_usd.filter(|c| c.abs() >= 0.005), NumOptions::default(), T::new(Ty::Small).w(500), true) {
         foot = foot.child(d);
     }
     p = p.child(foot).child(sui_price(ui, st));
     let tag = acts.tag(Act::Tab(Tab::Wallet));
-    ui.bx(s().row().self_end()).group(Group::new("yourrare", [0.0; 4]).remember()).child(kit::nav(kit::tile(p, 1.02), tag, Some("Open your items"), None, false))
+    ui.bx(s().row().self_end()).group(Group::new("yourrare", [0.0; 4]).remember()).child(kit::nav(kit::tile(p, 1.02), tag, Some(tr().home.open_your_items), None, false))
 }
 
 /// The name under a strip tile (`.strip-label`): it shows while the tile has focus, scaled with it.
@@ -364,7 +366,7 @@ pub fn sui_game_card(ui: &mut Ui, acts: &mut Acts, g: &SuiGame, def: bool) -> El
     }
     let tag = acts.tag(Act::SuiGame(g.slug.clone()));
     let card = ui.bx(s().col().justify_between().h(8.0).w(20.0).p(1.0)).bg(tok::L1).radius(ui.r(0.5)).border(1.0, tok::HAIR).child(head).child(foot);
-    kit::nav(kit::tile(card, 1.06), tag, Some("Details"), None, def).key(key(&g.slug))
+    kit::nav(kit::tile(card, 1.06), tag, Some(tr().common.details), None, def).key(key(&g.slug))
 }
 
 /// rare.market's GameLogo: the logo on a rounded tile, or the first letter.
@@ -417,7 +419,7 @@ fn rare_card(ui: &mut Ui, acts: &mut Acts, act: Act, label: &str, sub: &str, ima
             .child(ui.text(sub, T::new(Ty::Meta).c(if art { tok::WHITE.alpha(0.6) } else { tok::MUTED }).trunc())),
     );
     let tag = acts.tag(act);
-    kit::nav(kit::tile(c, 1.06), tag, Some("Open"), None, false).key(key(label))
+    kit::nav(kit::tile(c, 1.06), tag, Some(tr().common.open), None, false).key(key(label))
 }
 
 const COLL_COLS: [Track; 4] = [Track::Rem(1.25), Track::Fr(1.0), Track::Rem(6.5), Track::Rem(4.75)];
@@ -425,9 +427,9 @@ const SALE_COLS: [Track; 3] = [Track::Fr(1.0), Track::Rem(6.5), Track::Rem(3.25)
 
 fn top_collections(ui: &mut Ui, acts: &mut Acts, rows: Option<&Vec<CollectionRow>>) -> El {
     let right = ui.text("rare.market", T::new(Ty::Small).c(tok::MUTED));
-    let head = kit::section_head(ui, s().mb(0.5).px(0.75), "Top collections", Some("24h volume"), Some(right));
+    let head = kit::section_head(ui, s().mb(0.5).px(0.75), tr().home.top_collections, Some(tr().home.volume_24h), Some(right));
     let lbl = T::new(Ty::Label).w(500).c(tok::MUTED);
-    let hr = kit::head_row(ui, &COLL_COLS, vec![ui.text("#", lbl), ui.text("Collection", lbl), ui.text_s(s().wp(1.0), "Floor", lbl.right()), ui.text_s(s().wp(1.0), "24h", lbl.right())]);
+    let hr = kit::head_row(ui, &COLL_COLS, vec![ui.text("#", lbl), ui.text(tr().home.col_collection, lbl), ui.text_s(s().wp(1.0), tr().home.col_floor, lbl.right()), ui.text_s(s().wp(1.0), tr().home.col_24h, lbl.right())]);
     let mut list = ui.bx(s().col()).group(Group::new("home-collections", [0.0; 4]));
     match rows {
         None => list = list.child(ui.bx(s().h(16.25))),
@@ -447,7 +449,7 @@ fn top_collections(ui: &mut Ui, acts: &mut Acts, rows: Option<&Vec<CollectionRow
                     kit::cell(ui, true).child(delta),
                 ];
                 let tag = acts.tag(Act::Market(format!("collection:{}", r.slug)));
-                list = list.child(kit::row(ui, &COLL_COLS, tag, Some("Open collection"), cells).key(key(&r.slug)));
+                list = list.child(kit::row(ui, &COLL_COLS, tag, Some(tr().home.open_collection), cells).key(key(&r.slug)));
             }
         }
     }
@@ -455,10 +457,10 @@ fn top_collections(ui: &mut Ui, acts: &mut Acts, rows: Option<&Vec<CollectionRow
 }
 
 fn latest_sales(ui: &mut Ui, acts: &mut Acts, sales: Option<&Vec<Sale>>, now_ms: f64) -> El {
-    let live = ui.bx(s().row().items_center().gap(0.45)).child(kit::dot(ui, s(), DotTone::Brand, true)).child(ui.text("Live", T::new(Ty::Small).c(tok::MUTED)));
-    let head = kit::section_head(ui, s().mb(0.5).px(0.75), "Latest sales", None, Some(live));
+    let live = ui.bx(s().row().items_center().gap(0.45)).child(kit::dot(ui, s(), DotTone::Brand, true)).child(ui.text(tr().home.live, T::new(Ty::Small).c(tok::MUTED)));
+    let head = kit::section_head(ui, s().mb(0.5).px(0.75), tr().home.latest_sales, None, Some(live));
     let lbl = T::new(Ty::Label).w(500).c(tok::MUTED);
-    let hr = kit::head_row(ui, &SALE_COLS, vec![ui.text("Item", lbl), ui.text_s(s().wp(1.0), "Price", lbl.right()), ui.text_s(s().wp(1.0), "Time", lbl.right())]);
+    let hr = kit::head_row(ui, &SALE_COLS, vec![ui.text(tr().home.col_item, lbl), ui.text_s(s().wp(1.0), tr().home.col_price, lbl.right()), ui.text_s(s().wp(1.0), tr().home.col_time, lbl.right())]);
     let mut list = ui.bx(s().col()).group(Group::new("home-sales", [0.0; 4]));
     match sales {
         None => list = list.child(ui.bx(s().h(16.25))),
@@ -478,7 +480,7 @@ fn latest_sales(ui: &mut Ui, acts: &mut Acts, sales: Option<&Vec<Sale>>, now_ms:
                     _ => Act::Tab(Tab::Market),
                 };
                 let tag = acts.tag(target);
-                list = list.child(kit::row(ui, &SALE_COLS, tag, Some("View item"), cells).key(key(&e.id)));
+                list = list.child(kit::row(ui, &SALE_COLS, tag, Some(tr().home.view_item), cells).key(key(&e.id)));
             }
         }
     }
@@ -518,11 +520,11 @@ pub fn pc_tile(ui: &mut Ui, st: &State, acts: &mut Acts, pc: &crate::data::model
     let tag = acts.tag(Act::PcSheet(pc.uuid.clone(), a.id));
     let mut b = ui.bx(s().wh(9.0, 13.5)).bg(tok::L3).radius(ui.r(0.5)).clip().child(pic);
     let line = pc.tile_line(a.id, &st.running);
-    if line == "Playing" || line == "Running on your PC" {
-        b = b.child(kit::dot(ui, s().abs(Some(0.6), Some(0.6), None, None), DotTone::Primary, line == "Playing"));
+    if line == rare_i18n::tr().common.playing || line == rare_i18n::tr().data.running_on_pc {
+        b = b.child(kit::dot(ui, s().abs(Some(0.6), Some(0.6), None, None), DotTone::Primary, line == rare_i18n::tr().common.playing));
     }
     ui.bx(s().col().w(w))
-        .child(kit::nav(kit::tile(b, 1.06), tag, Some("Open"), None, def))
+        .child(kit::nav(kit::tile(b, 1.06), tag, Some(tr().common.open), None, def))
         .child(ui.text_s(s().mt(0.85).px(0.1), a.name.clone(), T::new(Ty::Meta).w(500).c(tok::fg(0.85)).trunc()))
         .child(ui.text_s(s().px(0.1), line, T::new(Ty::Label).c(tok::MUTED).trunc()))
         .key(key(&a.id))
@@ -539,11 +541,11 @@ pub fn app_tile(ui: &mut Ui, acts: &mut Acts, id: &str, name: &str, icon: &str, 
         None => (None, true, false),
     };
     let sub = if installing.is_some() {
-        "Installing"
+        tr().home.installing
     } else if running {
-        "Running"
+        tr().home.running
     } else if !ready && known {
-        "Not installed"
+        tr().common.not_installed
     } else {
         "\u{a0}"
     };
@@ -559,11 +561,11 @@ pub fn app_tile(ui: &mut Ui, acts: &mut Acts, id: &str, name: &str, icon: &str, 
         let track = ui.bx(s().abs(None, Some(0.75), Some(0.75), Some(0.75)).h(0.35)).bg(tok::L4).radius(ui.r(0.175)).clip().child(fill);
         b = b.child(track);
     }
-    let hint = if running { "Resume" } else if ready || !known { "Open" } else { "Get" };
+    let hint = if running { tr().common.resume } else if ready || !known { tr().common.open } else { tr().home.get };
     // Named for the focus line (journeys) and screen readers: the name sits under the tile.
     let label = name.to_string();
     let b = kit::tile(b, 1.06).nav(move |f| {
-        let f = f.tag(tag).hints(Some(hint), Some("Details"), None).label(&label);
+        let f = f.tag(tag).hints(Some(hint), Some(tr().common.details), None).label(&label);
         if def {
             f.default()
         } else {
@@ -598,18 +600,18 @@ impl Page for Home {
         // Apps right under the stage (Down, Down from the shelf): Xbox Cloud, GeForce NOW, Steam...
         let n_apps = st.running.iter().filter(|r| r.starts_with("app:")).count();
         let apps: Vec<El> = APPS.iter().map(|(id, name, icon)| app_tile(ui, acts, id, name, icon, false, st.is_running(&crate::screens::apps::run_id(id)))).collect();
-        below = below.child(kit::rail(ui, s(), "media-apps", Some("Apps"), (n_apps > 0).then(|| format!("{n_apps} running")).as_deref(), apps).key(key("media-apps")));
+        below = below.child(kit::rail(ui, s(), "media-apps", Some(tr().common.apps), (n_apps > 0).then(|| trf!(tr().home.n_running, n = n_apps)).as_deref(), apps).key(key("media-apps")));
         if !st.sui_games.is_empty() {
             let cards: Vec<El> = st.sui_games.iter().take(10).map(|g| sui_game_card(ui, acts, g, false)).collect();
-            below = below.child(kit::rail(ui, s(), "suigames", Some("Sui Games"), Some("from Rare"), cards).key(key("suigames")));
+            below = below.child(kit::rail(ui, s(), "suigames", Some(tr().home.sui_games), Some(tr().home.from_rare), cards).key(key("suigames")));
         }
         // Free to claim: Epic's weekly games, GOG and Steam giveaways, Steam free weekends (rare.market).
         if let Some(free) = crate::data::knowledge::free_games().filter(|f| !f.is_empty()) {
             let now = crate::data::model::now_secs();
             let n = free.iter().filter(|f| !f.upcoming).count();
             let cards: Vec<El> = free.iter().take(12).map(|f| free_card(ui, acts, f, now)).collect();
-            let note = if n > 0 { format!("{n} free now") } else { "Coming up".to_string() };
-            below = below.child(kit::rail(ui, s(), "free-games", Some("Free to claim"), Some(&note), cards).key(key("free-games")));
+            let note = if n > 0 { trf!(tr().home.n_free_now, n = n) } else { tr().home.coming_up.to_string() };
+            below = below.child(kit::rail(ui, s(), "free-games", Some(tr().home.free_to_claim), Some(&note), cards).key(key("free-games")));
         }
         // Stats and wishlist: the pages, then wishlist games on sale.
         below = below.child(play_rail(ui, acts).key(key("play")));
@@ -623,16 +625,16 @@ impl Page for Home {
                     let name = crate::data::account::shown_name(a, pl);
                     let total = pl.and_then(|p| p.total_usd).or(a.total_usd);
                     let change = pl.and_then(|p| p.change_usd).or(a.change_usd).filter(|c| c.abs() >= 0.005);
-                    let owned = pl.and_then(|p| p.owned_games).filter(|n| *n > 0).map(|n| format!("{n} Sui {} owned", if n == 1 { "game" } else { "games" })).unwrap_or_else(|| "Your profile".into());
+                    let owned = pl.and_then(|p| p.owned_games).filter(|n| *n > 0).map(|n| trn!(tr().home.sui_games_owned, n as f64)).unwrap_or_else(|| tr().home.your_profile.into());
                     // The pick on this device first (it shows the moment it is made), then rare.market's.
                     let pic = match crate::data::live::picked(&a.address).map(|p| p.image_url).filter(|u| !u.is_empty()).or_else(|| pl.and_then(|p| p.avatar.clone())).as_deref() {
                         Some(src) => kit::avatar(ui, s(), Some(src), &name, 2.75, false),
                         None => crate::screens::market::parts::account_avatar(ui, s(), &a.address, 2.75),
                     };
                     let value = kit::num(ui, s(), NumKind::Money, total, NumOptions::default(), T::new(Ty::Row).w(600), false).unwrap_or_else(|| ui.text("--", T::new(Ty::Row).c(tok::MUTED)));
-                    let mut bottom = ui.bx(s().row().items_end().justify_between().gap(1.0)).child(ui.bx(s().col().shrink()).child(ui.text("Total value", label)).child(value));
+                    let mut bottom = ui.bx(s().row().items_end().justify_between().gap(1.0)).child(ui.bx(s().col().shrink()).child(ui.text(tr().home.total_value, label)).child(value));
                     if let Some(d) = kit::num(ui, s(), NumKind::Pnl, change, NumOptions::default(), T::new(Ty::Small).w(500), true) {
-                        bottom = bottom.child(ui.bx(s().col().items_end()).child(ui.text("Today", label)).child(d));
+                        bottom = bottom.child(ui.bx(s().col().items_end()).child(ui.text(tr().home.today, label)).child(d));
                     }
                     let head = ui
                         .bx(s().row().items_center().gap(0.75))
@@ -640,7 +642,7 @@ impl Page for Home {
                         .child(ui.bx(s().col().shrink()).child(ui.text(name, T::new(Ty::Body).w(600).trunc())).child(ui.text(owned, T::new(Ty::Meta).c(tok::MUTED).trunc())));
                     let t = ui.bx(s().col().justify_between().gap(0.75).wh(19.0, 12.0).p(1.1)).bg(tok::L1).radius(ui.r(0.5)).border(1.0, tok::HAIR).child(head).child(bottom);
                     let tag = acts.tag(Act::Open(Overlay::Other("profile")));
-                    kit::nav(kit::tile(t, 1.03), tag, Some("Profile"), None, false)
+                    kit::nav(kit::tile(t, 1.03), tag, Some(tr().home.profile), None, false)
                 }
                 None => {
                     let t = ui
@@ -648,18 +650,18 @@ impl Page for Home {
                         .bg(tok::L1)
                         .radius(ui.r(0.5))
                         .border(1.0, tok::HAIR)
-                        .child(ui.text("Your Sui profile", T::new(Ty::Body).w(600)))
-                        .child(ui.text_s(s().wp(1.0), "Add a Rare Wallet account to see your name, picture, games you own and cloud saves.", T::new(Ty::Small).c(tok::MUTED).wrap()));
+                        .child(ui.text(tr().home.your_sui_profile, T::new(Ty::Body).w(600)))
+                        .child(ui.text_s(s().wp(1.0), tr().home.add_account_body, T::new(Ty::Small).c(tok::MUTED).wrap()));
                     let tag = acts.tag(Act::Tab(Tab::Wallet));
-                    kit::nav(kit::tile(t, 1.03), tag, Some("Open Wallet"), None, false)
+                    kit::nav(kit::tile(t, 1.03), tag, Some(tr().home.open_wallet), None, false)
                 }
             },
-            word_tile(ui, acts, Act::Open(Overlay::Other("saves")), "Cloud saves", 12.0, 12.0, Some("cloud"), "Cloud saves", "Emulator saves on Walrus", false),
-            word_tile(ui, acts, Act::Open(Overlay::Other("share")), "Share", 12.0, 12.0, Some("images"), "Share", "Screenshots and clips", false),
+            word_tile(ui, acts, Act::Open(Overlay::Other("saves")), tr().home.cloud_saves, 12.0, 12.0, Some("cloud"), tr().home.cloud_saves, tr().home.emulator_saves_walrus, false),
+            word_tile(ui, acts, Act::Open(Overlay::Other("share")), tr().common.share, 12.0, 12.0, Some("images"), tr().common.share, tr().home.screenshots_clips, false),
         ];
         on_sui.extend(st.live.mints.iter().flatten().map(|m| mint_card(ui, acts, m)));
         on_sui.push(rare_card_sq(ui, acts, st.live.mints.as_ref().map(|m| m.is_empty())));
-        below = below.child(kit::rail(ui, s(), "sui-shelf", Some("On Sui"), st.live.mints.as_ref().filter(|m| !m.is_empty()).map(|m| format!("{} minting now", m.len())).as_deref(), on_sui).key(key("sui-shelf")));
+        below = below.child(kit::rail(ui, s(), "sui-shelf", Some(tr().home.on_sui), st.live.mints.as_ref().filter(|m| !m.is_empty()).map(|m| trf!(tr().home.n_minting_now, n = m.len())).as_deref(), on_sui).key(key("sui-shelf")));
         // Friends (friends/ui/HomeFriends.tsx): the party, then who is playing; nothing unless the
         // service is ready and there is something to show.
         self.fr_base = None;
@@ -702,7 +704,7 @@ impl Page for Home {
                             .child(ui.bx(s().abs(None, Some(0.0), Some(0.0), Some(0.0)).hp(0.5)).look(Look::default().grad(Gradient { dir: GradDir::ToTop, stops: [tok::BLACK.alpha(0.95), tok::BLACK.alpha(0.5), tok::BLACK.alpha(0.0)], mid: 0.5 })))
                             .child(words);
                         let tag = acts.tag(Act::Market(format!("item:{}", it.id)));
-                        kit::nav(kit::tile(b, 1.06), tag, Some("View"), None, false).key(key(&it.id))
+                        kit::nav(kit::tile(b, 1.06), tag, Some(tr().common.view), None, false).key(key(&it.id))
                     })
                     .collect()
             })
@@ -710,19 +712,19 @@ impl Page for Home {
         // Hidden while empty or loading: no empty owned shelf (the Your Rare panel asks to sign in).
         if !items.is_empty() {
             let note = st.account.as_ref().map(|a| a.label.clone());
-            below = below.child(kit::rail(ui, s(), "collectibles", Some("Your collectibles"), note.as_deref(), items).key(key("collectibles")));
+            below = below.child(kit::rail(ui, s(), "collectibles", Some(tr().home.your_collectibles), note.as_deref(), items).key(key("collectibles")));
         }
         // Emulators.
         let emus = sort_apps(st.games().iter().filter(|g| g.source == "apps").collect());
         if !emus.is_empty() {
             let n = emus.len().to_string();
             let tiles: Vec<El> = emus.iter().take(16).map(|g| parts::game_tile(ui, st, acts, g, false, false, 9.0, None)).collect();
-            below = below.child(kit::rail(ui, s(), "apps", Some("Emulators"), Some(&n), tiles).key(key("apps")));
+            below = below.child(kit::rail(ui, s(), "apps", Some(tr().home.emulators), Some(&n), tiles).key(key("apps")));
         }
         // On your PC: the games on the paired PC that answers, once it does (stream/tiles.tsx).
         if let Some(pc) = st.pc.as_ref().filter(|p| !p.apps.is_empty()) {
             let tiles: Vec<El> = pc.apps.iter().take(16).map(|a| pc_tile(ui, st, acts, pc, a, 9.0, false)).collect();
-            below = below.child(kit::rail(ui, s(), "stream-pc", Some("On your PC"), Some(&pc.name), tiles).key(key("stream-pc")));
+            below = below.child(kit::rail(ui, s(), "stream-pc", Some(tr().home.on_your_pc), Some(&pc.name), tiles).key(key("stream-pc")));
         }
         // Market today.
         let now_ms = crate::app::wall_ms();
@@ -732,9 +734,9 @@ impl Page for Home {
         // Rare.
         let logos: Vec<String> = st.sui_games.iter().filter(|g| !g.logo_url.is_empty()).take(4).map(|g| g.logo_url.clone()).collect();
         let links = vec![
-            rare_card(ui, acts, Act::Tab(Tab::Market), "Marketplace", "Collections and coins", None, &[], "store"),
-            rare_card(ui, acts, Act::Tab(Tab::Games), "Sui Games", "Games and collections", None, &logos, "gamepad-2"),
-            rare_card(ui, acts, Act::OpenWeb("https://rare.market/launchpad".into()), "Launchpad", "New drops", None, &[], "rocket"),
+            rare_card(ui, acts, Act::Tab(Tab::Market), tr().common.marketplace, tr().home.collections_and_coins, None, &[], "store"),
+            rare_card(ui, acts, Act::Tab(Tab::Games), tr().home.sui_games, tr().home.games_and_collections, None, &logos, "gamepad-2"),
+            rare_card(ui, acts, Act::OpenWeb("https://rare.market/launchpad".into()), tr().home.launchpad, tr().home.new_drops, None, &[], "rocket"),
         ];
         below = below.child(kit::rail(ui, s(), "rare", Some("Rare"), None, links).key(key("rare")));
 
@@ -883,7 +885,7 @@ fn free_card(ui: &mut Ui, acts: &mut Acts, f: &crate::data::knowledge::FreeGame,
         .clip()
         .child(art)
         .child(ui.bx(s().col().px(0.9).py(0.7).gap(0.2)).child(ui.text(f.title.clone(), T::new(Ty::Meta).w(600).trunc())).child(ui.text(line, T::new(Ty::Label).c(tok::MUTED).trunc())));
-    let hint = if f.upcoming { format!("Open on {}", f.store_name()) } else { format!("Claim on {}", f.store_name()) };
+    let hint = if f.upcoming { trf!(tr().home.open_on_store, store = f.store_name()) } else { trf!(tr().home.claim_on_store, store = f.store_name()) };
     let tag = acts.tag(Act::OpenWeb(f.url.clone()));
     kit::nav(kit::tile(c, 1.03), tag, Some(&hint), None, false).key(key(&f.id))
 }
@@ -898,21 +900,24 @@ fn play_rail(ui: &mut Ui, acts: &mut Acts) -> El {
     });
     let year = crate::features::stats::civil((crate::data::model::now_secs() + crate::features::stats::utc_offset(crate::data::model::now_secs())).div_euclid(86_400)).0;
     let wl_sub = match (n, sale) {
-        (0, _) => "Games to keep an eye on".to_string(),
-        (n, 0) => format!("{n} {}", if n == 1 { "game" } else { "games" }),
-        (n, s) => format!("{n} {}, {s} on sale", if n == 1 { "game" } else { "games" }),
+        (0, _) => tr().home.games_to_watch.to_string(),
+        (n, 0) => trn!(tr().common.games_n, n as f64),
+        (n, s) => trn!(tr().home.games_on_sale, n as f64, sale = s),
     };
     let mut tiles = vec![
-        word_tile(ui, acts, Act::Open(Overlay::Other(crate::features::stats::STATS)), "Open", 12.0, 12.0, Some("chart-line"), "Your stats", "Playtime and streaks", false).key(key("pl-stats")),
-        word_tile(ui, acts, Act::Open(Overlay::Other(crate::features::stats::YEAR)), "Open", 12.0, 12.0, Some("sparkles"), "Your year", &format!("Your {year} on Rare so far"), false).key(key("pl-year")),
-        word_tile(ui, acts, Act::Open(Overlay::Other(crate::features::wishlist_page::KIND)), "Open", 12.0, 12.0, Some("heart"), "Wishlist", &wl_sub, false).key(key("pl-wish")),
+        word_tile(ui, acts, Act::Open(Overlay::Other(crate::features::stats::STATS)), tr().common.open, 12.0, 12.0, Some("chart-line"), tr().home.your_stats, tr().home.playtime_streaks, false).key(key("pl-stats")),
+        word_tile(ui, acts, Act::Open(Overlay::Other(crate::features::stats::YEAR)), tr().common.open, 12.0, 12.0, Some("sparkles"), tr().home.your_year, &trf!(tr().home.your_year_sub, year = year), false).key(key("pl-year")),
+        word_tile(ui, acts, Act::Open(Overlay::Other(crate::features::wishlist_page::KIND)), tr().common.open, 12.0, 12.0, Some("heart"), tr().home.wishlist, &wl_sub, false).key(key("pl-wish")),
     ];
     for (id, title, steam, p) in deals {
         let mut srcs: Vec<String> = steam.or(p.steam_app_id).map(|a| format!("https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{a}/header.jpg")).into_iter().collect();
         srcs.extend(p.thumb.clone());
         let pic = parts::art(ui, &srcs, &title, Variant::Hero, 18.0, 8.4, 0.5);
         let art = ui.bx(s().wh(18.0, 8.4)).bg(tok::L3).clip().child(pic);
-        let line = format!("{} \u{b7} -{}%{}", money(p.price.unwrap_or(0.0)), p.cut, p.store.as_ref().map(|s| format!(" at {s}")).unwrap_or_default());
+        let line = match p.store.as_ref() {
+            Some(store) => trf!(tr().home.deal_line_store, price = money(p.price.unwrap_or(0.0)), cut = p.cut, store = store),
+            None => trf!(tr().home.deal_line, price = money(p.price.unwrap_or(0.0)), cut = p.cut),
+        };
         let c = ui
             .bx(s().col().w(18.0))
             .bg(tok::L1)
@@ -921,10 +926,10 @@ fn play_rail(ui: &mut Ui, acts: &mut Acts) -> El {
             .child(art)
             .child(ui.bx(s().col().px(0.9).py(0.7).gap(0.2)).child(ui.text(title.clone(), T::new(Ty::Meta).w(600).trunc())).child(ui.text(line, T::new(Ty::Label).c(tok::MUTED).trunc())));
         let tag = acts.tag(Act::Open(Overlay::Other(crate::features::wishlist_page::KIND)));
-        tiles.push(kit::nav(kit::tile(c, 1.03), tag, Some("Wishlist"), None, false).key(key(&id)));
+        tiles.push(kit::nav(kit::tile(c, 1.03), tag, Some(tr().home.wishlist), None, false).key(key(&id)));
     }
-    let note = (sale > 0).then(|| format!("{sale} on sale"));
-    kit::rail(ui, s(), "play", Some("Stats and wishlist"), note.as_deref(), tiles)
+    let note = (sale > 0).then(|| trf!(tr().home.n_on_sale, n = sale));
+    kit::rail(ui, s(), "play", Some(tr().home.stats_and_wishlist), note.as_deref(), tiles)
 }
 
 /// The Launchpad tile at the end of On Sui: the rocket on top like Cloud saves, the words at the bottom.
@@ -936,10 +941,10 @@ fn rare_card_sq(ui: &mut Ui, acts: &mut Acts, none_live: Option<bool>) -> El {
         .radius(ui.r(0.5))
         .border(1.0, tok::HAIR)
         .child(rocket)
-        .child(ui.text("Launchpad", T::new(Ty::Body).w(700).trunc()))
-        .child(ui.text(if none_live == Some(true) { "No live mints" } else { "New drops" }, T::new(Ty::Meta).c(tok::MUTED).trunc()));
+        .child(ui.text(tr().home.launchpad, T::new(Ty::Body).w(700).trunc()))
+        .child(ui.text(if none_live == Some(true) { tr().home.no_live_mints } else { tr().home.new_drops }, T::new(Ty::Meta).c(tok::MUTED).trunc()));
     let tag = acts.tag(Act::OpenWeb("https://rare.market/launchpad".into()));
-    kit::nav(kit::tile(c, 1.06), tag, Some("Open"), None, false)
+    kit::nav(kit::tile(c, 1.06), tag, Some(tr().common.open), None, false)
 }
 
 /// One minting-now tile (HomeSui.tsx MintCard): art, dark fade, name and the supply line.
@@ -956,5 +961,5 @@ fn mint_card(ui: &mut Ui, acts: &mut Acts, m: &rare_sui::live::Mint) -> El {
         .child(ui.bx(s().abs(None, Some(0.0), Some(0.0), Some(0.0)).hp(0.5)).look(Look::default().grad(Gradient { dir: GradDir::ToTop, stops: [tok::BLACK.alpha(0.95), tok::BLACK.alpha(0.5), tok::BLACK.alpha(0.0)], mid: 0.5 })))
         .child(ui.bx(s().abs(None, Some(1.0), Some(0.9), Some(1.0)).col()).child(ui.text(m.name.clone(), T::new(Ty::Body).w(700).c(tok::WHITE).trunc())).child(ui.text(m.sub.clone(), T::new(Ty::Meta).c(tok::WHITE.alpha(0.6)).trunc())));
     let tag = acts.tag(Act::OpenWeb(m.href.clone()));
-    kit::nav(kit::tile(c, 1.06), tag, Some("Mint"), None, false).key(key(&m.key))
+    kit::nav(kit::tile(c, 1.06), tag, Some(tr().home.mint), None, false).key(key(&m.key))
 }

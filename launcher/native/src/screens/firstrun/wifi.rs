@@ -2,6 +2,7 @@
 //! by itself after 1.4 s (not when B brought you back to a connected screen).
 
 use super::kit::{done_line, step, working};
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::ui::{button_el, empty, BSize, ButtonSpec, BVariant};
 
@@ -64,50 +65,50 @@ pub fn bars<M>(signal: u8) -> El<M> {
     } else {
         1
     };
-    span("flex h-[0.95rem] items-end gap-[2px]").label(&format!("Signal {signal}%")).kids((1..=4).map(|i| span(cn(&["w-[3px] rounded-[1px]", if i <= n { "bg-fg/85" } else { "bg-fg/20" }])).attr("style", format!("height: {}%", i * 25)).key(i.to_string())))
+    span("flex h-[0.95rem] items-end gap-[2px]").label(&trf!(tr().firstrun.signal_pct, pct = signal)).kids((1..=4).map(|i| span(cn(&["w-[3px] rounded-[1px]", if i <= n { "bg-fg/85" } else { "bg-fg/20" }])).attr("style", format!("height: {}%", i * 25)).key(i.to_string())))
 }
 
 pub fn view(st: &State) -> El<Msg> {
     let online = st.net.as_ref().is_some_and(|n| n.online);
     let managed = st.net.as_ref().is_some_and(|n| n.managed);
-    let mut actions = vec![button_el(ButtonSpec::new(if online { "Continue" } else { "Continue offline" }).v(if online { BVariant::Primary } else { BVariant::Secondary }).size(BSize::Lg).def(online), Some(Msg::Continue))];
+    let mut actions = vec![button_el(ButtonSpec::new(if online { tr().common.continue_ } else { tr().firstrun.continue_offline }).v(if online { BVariant::Primary } else { BVariant::Secondary }).size(BSize::Lg).def(online), Some(Msg::Continue))];
     if managed {
-        actions.push(button_el(ButtonSpec::new("Scan again").v(BVariant::Ghost).size(BSize::Lg).disabled(st.scanning), Some(Msg::Scan)));
+        actions.push(button_el(ButtonSpec::new(tr().firstrun.scan_again).v(BVariant::Ghost).size(BSize::Lg).disabled(st.scanning), Some(Msg::Scan)));
     }
     let mut c = div("flex flex-col gap-[1rem]");
     match &st.net {
         Some(n) if n.online => {
             c = c.kid(done_line(match &n.wifi {
-                Some(w) => vec![text("Connected to "), span("font-semibold").text(w)],
-                None => vec![text("Connected to the internet")],
+                Some(w) => vec![span("").text(trf!(tr().firstrun.connected_to, name = w))],
+                None => vec![text(tr().firstrun.connected_internet)],
             }))
         }
-        Some(_) => c = c.kid(div("text-body text-muted").text("Not connected yet.")),
+        Some(_) => c = c.kid(div("text-body text-muted").text(tr().firstrun.not_connected_yet)),
         None => {}
     }
     if st.scanning || st.joining.is_some() {
-        let l = st.joining.as_ref().map(|j| format!("Joining {j}")).unwrap_or_else(|| "Looking for networks".into());
+        let l = st.joining.as_ref().map(|j| trf!(tr().firstrun.joining, name = j)).unwrap_or_else(|| tr().firstrun.looking_networks.into());
         c = c.kid(working(true, Some(&l)));
     }
     if let Some(e) = &st.error {
         c = c.kid(div("text-small text-neg").text(e));
     }
     if st.net.as_ref().is_some_and(|n| !n.managed) {
-        c = c.kid(empty("Wi-Fi is managed outside Rare", Some(text("This system doesn't let the launcher change networks. Connect in desktop mode, then come back. If the device is online already, just continue.")), vec![], ""));
+        c = c.kid(empty(tr().firstrun.wifi_managed_title, Some(text(tr().firstrun.wifi_managed_body)), vec![], ""));
     } else if st.nets.as_ref().is_some_and(|n| n.is_empty()) && !st.scanning {
-        c = c.kid(empty("No networks found", Some(text("Move closer to your router, or check that Wi-Fi is turned on, then scan again.")), vec![], ""));
+        c = c.kid(empty(tr().firstrun.no_networks_title, Some(text(tr().firstrun.no_networks_body)), vec![], ""));
     } else {
         c = c.kid(div("flex flex-col gap-[0.4rem]").attr("data-nav-group", "wifi-list").kids(st.nets.as_deref().unwrap_or(&[]).iter().enumerate().map(|(i, n)| {
             let tag = if n.active {
-                span("text-small text-pos").text("Connected")
+                span("text-small text-pos").text(tr().common.connected)
             } else if n.secure {
-                span("text-small text-muted").text("Password")
+                span("text-small text-muted").text(tr().firstrun.password)
             } else {
-                span("text-small text-muted").text("Open")
+                span("text-small text-muted").text(tr().firstrun.open_network)
             };
             button("flex items-center gap-[1rem] rounded-card border border-hair bg-l1 px-[1.2rem] py-[0.85rem] text-left", Some(Msg::Join(n.ssid.clone())))
                 .def(!online && i == 0)
-                .hint_a(if n.active { "Connected" } else { "Join" })
+                .hint_a(if n.active { tr().common.connected } else { tr().firstrun.join })
                 .key(&n.ssid)
                 .kid(icon("wifi", "shrink-0 text-icon").attr("size", "1.15rem"))
                 .kid(span("min-w-0 flex-1 truncate text-body font-medium").text(&n.ssid))
@@ -115,7 +116,7 @@ pub fn view(st: &State) -> El<Msg> {
                 .kid(bars(n.signal))
         })));
     }
-    step(text("Connect to Wi-Fi"), Some(text("Games, updates, Rare Marketplace and your wallet need the internet. Pick your network.")), vec![c], actions, false).on_pad("b", Msg::Back)
+    step(text(tr().firstrun.connect_wifi), Some(text(tr().firstrun.wifi_body)), vec![c], actions, false).on_pad("b", Msg::Back)
 }
 
 pub fn update(st: &mut State, msg: Msg) -> Option<Effect> {
@@ -158,9 +159,9 @@ pub fn joined(st: &mut State, ssid: &str, res: Result<(), String>) {
     if let Err(m) = res {
         let lower = m.to_lowercase();
         st.error = Some(if lower.contains("secret") || lower.contains("password") || lower.contains("802-11-wireless-security") {
-            format!("Couldn't join {ssid}. Check the password and try again.")
+            trf!(tr().firstrun.join_bad_password, name = ssid)
         } else {
-            crate::screens::wallet::fmt::failed(&format!("Couldn't join {ssid}."))
+            crate::screens::wallet::fmt::failed(&trf!(tr().firstrun.join_failed, name = ssid))
         });
     }
 }
@@ -192,7 +193,7 @@ pub fn scanned(st: &mut State, res: Result<Vec<WifiNet>, String>) {
         Err(m) => {
             st.nets = Some(Vec::new());
             log::warn!("wifi scan: {m}");
-            st.error = Some(crate::screens::wallet::fmt::failed("Couldn't look for networks."));
+            st.error = Some(crate::screens::wallet::fmt::failed(tr().firstrun.scan_failed));
         }
     }
 }

@@ -40,6 +40,8 @@ share-video = ["dep:gstreamer", "dep:gstreamer-app", "dep:gstreamer-video"]
 rare-render = { path = "../render/engine" }
 # WS 14 (Phase 3): the markup screens' class strings resolve through rare-tw at run time.
 rare-tw = { path = "../crates/rare-tw" }
+# Every UI string, one catalog per language (Settings > System > Language).
+rare-i18n = { path = "../crates/rare-i18n" }
 # WS 14: the wallet's portfolio and activity (gRPC + the Trade API), on one tokio runtime for the screens.
 rare-sui = { path = "../crates/rare-sui" }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2"] }

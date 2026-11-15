@@ -2,6 +2,7 @@
 //! the Telegram hook): build the quilt for a capture, price it from live Walrus prices, upload it
 //! (Rare Wallet signs and pays, two approvals; or the sponsor stores it), copy the link.
 
+use rare_i18n::{tr, trf};
 use crate::screens::share::format::{self, CostEstimate, DurationId, Network, QuiltFile, SponsorQuote};
 use crate::screens::share::store::{ShareResult, Step};
 use crate::screens::wallet::live;
@@ -50,7 +51,7 @@ fn poster_jpeg(id: &str) -> Option<Vec<u8>> {
 
 /// Reads the capture, builds share.json and the quilt.
 pub(super) fn prepare(c: &Capture, slug: Option<String>) -> Result<Prepared, String> {
-    let sui = live::sui().ok_or("Couldn't reach Sui. Check the connection and try again.")?;
+    let sui = live::sui().ok_or(tr().app.sui_unreachable)?;
     let media = rare_share::read(&c.id)?;
     let poster = if c.kind == Kind::Clip { poster_jpeg(&c.id) } else { None };
     let json = format::build_share_json(c, media.len() as u64, slug.as_deref(), poster.is_some());
@@ -84,12 +85,12 @@ pub(super) fn upload(p: &Prepared, kind: Kind, duration: DurationId, sponsored: 
     let (epochs, _) = format::share_epochs(duration, n);
     let fail = |m: String| (m.contains("declined"), m);
     if sponsored {
-        let base = sponsor_base().ok_or_else(|| (false, "Rare can't cover this one right now.".to_string()))?;
+        let base = sponsor_base().ok_or_else(|| (false, tr().app.sponsor_unavailable.to_string()))?;
         let (quilt_id, blob) = sponsor_store(&base, &p.files, epochs).map_err(|m| (false, m))?;
         return Ok(ShareResult { link: format::share_link(&quilt_id, n), quilt_id, blob_object_id: blob });
     }
-    let signer = crate::features::signer::current().ok_or((false, "Add a Rare Wallet account to share.".to_string()))?;
-    let sui = live::sui().ok_or((false, "Couldn't reach Sui. Check the connection and try again.".to_string()))?;
+    let signer = crate::features::signer::current().ok_or((false, tr().app.share_needs_account.to_string()))?;
+    let sui = live::sui().ok_or((false, tr().app.sui_unreachable.to_string()))?;
     let mut attributes: Vec<(String, String)> = vec![("_walrusBlobType".into(), "quilt".into())];
     attributes.extend(format::share_attributes(kind).into_iter().map(|(k, v)| (k.to_string(), v.to_string())));
     let step = move |s: walrus::Step| {
@@ -101,10 +102,10 @@ pub(super) fn upload(p: &Prepared, kind: Kind, duration: DurationId, sponsored: 
         };
         on_step(m);
     };
-    let title = if kind == Kind::Clip { "Share clip" } else { "Share screenshot" };
+    let title = if kind == Kind::Clip { tr().app.share_clip_title } else { tr().app.share_screenshot_title };
     // Permanent for its epochs: rare.market finds the player from the blob's certify event, which
     // deletable blobs don't carry.
-    let o = walrus::StoreOpts { epochs, attributes, title: title.into(), tag_blob_id: false, deletable: false, titles: Some((title.into(), "Confirm share".into())), on_step: Some(&step) };
+    let o = walrus::StoreOpts { epochs, attributes, title: title.into(), tag_blob_id: false, deletable: false, titles: Some((title.into(), tr().app.confirm_share.into())), on_step: Some(&step) };
     let (blob_id, blob_object) = live::rt().block_on(walrus::store_blob(sui, &http(), signer.as_ref(), p.quilt.clone(), o)).map_err(|e| fail(e.to_string()))?;
     Ok(ShareResult { link: format::share_link(&blob_id, n), quilt_id: blob_id, blob_object_id: Some(blob_object) })
 }
@@ -123,13 +124,13 @@ pub(crate) fn upload_file(name: &str, mime: &str, bytes: Vec<u8>) -> Result<Stri
         }
     }
     let Some(signer) = crate::features::signer::current() else {
-        return Err(sponsor_err.unwrap_or_else(|| "Add a Rare Wallet account to get a link, or save the logs instead.".into()));
+        return Err(sponsor_err.unwrap_or_else(|| tr().app.logs_need_account.into()));
     };
-    let sui = live::sui().ok_or("Couldn't reach Sui. Check the connection and try again.")?;
+    let sui = live::sui().ok_or(tr().app.sui_unreachable)?;
     let sys = live::rt().block_on(walrus::system_info(sui, sui.network())).map_err(|e| e.to_string())?;
     let quilt = walrus::encode_quilt(&[(file.identifier.clone(), file.bytes)], sys.n_shards).map_err(|e| e.to_string())?;
     let attributes: Vec<(String, String)> = vec![("_walrusBlobType".into(), "quilt".into())];
-    let o = walrus::StoreOpts { epochs, attributes, title: "Upload logs".into(), tag_blob_id: false, deletable: false, titles: Some(("Upload logs".into(), "Confirm upload".into())), on_step: None };
+    let o = walrus::StoreOpts { epochs, attributes, title: tr().app.upload_logs_title.into(), tag_blob_id: false, deletable: false, titles: Some((tr().app.upload_logs_title.into(), tr().app.confirm_upload.into())), on_step: None };
     let (blob_id, _) = live::rt().block_on(walrus::store_blob(sui, &http(), signer.as_ref(), quilt, o)).map_err(|e| e.to_string())?;
     Ok(format::quilt_file_url(n, &blob_id, name))
 }
@@ -150,10 +151,10 @@ fn sponsor_store(base: &str, files: &[QuiltFile], epochs: u32) -> Result<(String
     }
     body.extend(format!("--{boundary}--\r\n").into_bytes());
     let agent: ureq::Agent = ureq::Agent::config_builder().timeout_global(Some(std::time::Duration::from_secs(300))).http_status_as_error(false).build().into();
-    let mut r = agent.post(&format!("{base}/store?epochs={epochs}")).header("Content-Type", &format!("multipart/form-data; boundary={boundary}")).send(&body[..]).map_err(|_| "Couldn't reach Walrus. Check the connection and try again.".to_string())?;
+    let mut r = agent.post(&format!("{base}/store?epochs={epochs}")).header("Content-Type", &format!("multipart/form-data; boundary={boundary}")).send(&body[..]).map_err(|_| tr().app.walrus_unreachable.to_string())?;
     let status = r.status().as_u16();
     if !(200..300).contains(&status) {
-        return Err(format!("Rare couldn't store this share ({status})"));
+        return Err(trf!(tr().app.store_failed, status = status));
     }
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "camelCase")]
@@ -193,7 +194,7 @@ pub(super) fn post_telegram(link: &str) -> Result<(), String> {
             return Ok(());
         }
     }
-    Err("Telegram would not open".into())
+    Err(tr().app.telegram_would_not_open.into())
 }
 
 #[cfg(test)]

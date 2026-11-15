@@ -7,6 +7,7 @@
 use super::live::{self, Ran};
 use super::{rows::*, SectionOut};
 use crate::screens::overlay::common::*;
+use rare_i18n::{tr, trf};
 use rare_render::Id;
 use rare_system::support as sup;
 use std::path::PathBuf;
@@ -85,9 +86,9 @@ fn fixture_time() -> sup::TimeInfo {
 /// "New York, America. 3:42 PM"
 pub fn zone_line(zone: Option<&str>) -> String {
     match zone {
-        Some("UTC") => format!("UTC. {}", crate::screens::shell::clock_text()),
-        Some(z) => format!("{}, {}. {}", sup::city_name(z), sup::region_of(z), crate::screens::shell::clock_text()),
-        None => "Not set".into(),
+        Some("UTC") => trf!(tr().settings_more.sup_zone_utc, time = crate::screens::shell::clock_text()),
+        Some(z) => trf!(tr().settings_more.sup_zone, city = sup::city_name(z), region = sup::region_of(z), time = crate::screens::shell::clock_text()),
+        None => tr().settings_more.sup_not_set.into(),
     }
 }
 
@@ -107,21 +108,22 @@ impl SupportRows {
         } else {
             (fixture_time(), None, true)
         };
+        let t = &tr().settings_more;
         let p = panel(cx, parent);
-        let row_ = setting_row(cx, p, "Time zone", Some(&zone_line(time.zone.as_deref())), true);
-        let b = button(cx, row_.right, "Change", Variant::Secondary, Sz::Md, false).sid("time-zone").tag(30);
+        let row_ = setting_row(cx, p, t.sup_time_zone, Some(&zone_line(time.zone.as_deref())), true);
+        let b = button(cx, row_.right, tr().common.change, Variant::Secondary, Sz::Md, false).sid("time-zone").tag(30);
         let zone_btn = nav.add(b.group(10));
         let mut rows = RowSet::default();
-        rows.switch(cx, nav, p, "time-auto", "Automatic time", "Sets the clock from the internet.", time.ntp.unwrap_or(true), false);
-        let row_ = setting_row(cx, p, "Logs for a bug report", Some("The launcher and system logs, in Documents. Keys, passwords and wallets are never in them."), false);
+        rows.switch(cx, nav, p, "time-auto", t.sup_auto_time, t.sup_auto_time_body, time.ntp.unwrap_or(true), false);
+        let row_ = setting_row(cx, p, t.sup_logs, Some(t.sup_logs_body), false);
         let v = |on: bool| if on { Variant::Dimmed } else { Variant::Secondary };
-        let b = button(cx, row_.right, if busy == Some("save") { "Saving" } else { "Save" }, v(busy.is_some()), Sz::Md, false).sid("logs-save").tag(31);
+        let b = button(cx, row_.right, if busy == Some("save") { t.sup_saving } else { tr().common.save }, v(busy.is_some()), Sz::Md, false).sid("logs-save").tag(31);
         let save_btn = nav.add(b.group(10));
-        let b = button(cx, row_.right, if busy == Some("link") { "Uploading" } else { "Get a link" }, v(busy.is_some()), Sz::Md, false).sid("logs-link").tag(32);
+        let b = button(cx, row_.right, if busy == Some("link") { t.sup_uploading } else { t.sup_get_link }, v(busy.is_some()), Sz::Md, false).sid("logs-link").tag(32);
         let link_btn = nav.add(b.group(10));
-        let body = if reset_ok { "Sign out and clear Rare, or erase everything on this device." } else { "Needs the next system update." };
-        let row_ = setting_row(cx, p, "Factory reset", Some(body), false);
-        let b = button(cx, row_.right, "Reset", if reset_ok { Variant::Secondary } else { Variant::Dimmed }, Sz::Md, false).sid("factory-reset").tag(33);
+        let body = if reset_ok { t.sup_reset_body } else { t.sup_needs_update };
+        let row_ = setting_row(cx, p, t.sup_reset, Some(body), false);
+        let b = button(cx, row_.right, t.sup_reset_btn, if reset_ok { Variant::Secondary } else { Variant::Dimmed }, Sz::Md, false).sid("factory-reset").tag(33);
         let reset_btn = nav.add(b.group(10));
         SupportRows { rows, zone_btn, save_btn, link_btn, reset_btn }
     }
@@ -161,7 +163,7 @@ fn saved_where(p: &std::path::Path) -> String {
 }
 
 fn drive_name(p: &std::path::Path) -> String {
-    p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "the drive".into())
+    p.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| tr().settings_more.sup_the_drive.into())
 }
 
 /// The Support acts: `time:zone:<zone>`, `time:ntp:<bool>`, `logs:save`, `logs:link`,
@@ -180,11 +182,11 @@ pub fn run(act: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Ran {
         ("time", "zone") => spawn(Box::new(move || {
             match sup::set_zone(&rest) {
                 Ok(()) => {
-                    live::toast_pub(format!("Time zone set to {}", if rest == "UTC" { "UTC".into() } else { sup::city_name(&rest) }), false);
+                    live::toast_pub(trf!(tr().settings_more.sup_zone_set, zone = if rest == "UTC" { "UTC".into() } else { sup::city_name(&rest) }), false);
                     // The top bar's clock reads the new zone now, not at the next minute.
                     request("support:clock".into());
                 }
-                Err(e) => live::toast_pub(live::failed("Couldn't change the time zone.", &e, None), true),
+                Err(e) => live::toast_pub(live::failed(tr().settings_more.sup_err_zone, &e, None), true),
             }
             let t = sup::time_info();
             edit(|s| s.time = Some(t));
@@ -193,7 +195,7 @@ pub fn run(act: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Ran {
             let on = rest == "true";
             spawn(Box::new(move || {
                 if let Err(e) = sup::set_ntp(on) {
-                    live::toast_pub(live::failed("Couldn't change automatic time.", &e, None), true);
+                    live::toast_pub(live::failed(tr().settings_more.sup_err_ntp, &e, None), true);
                 }
                 let t = sup::time_info();
                 edit(|s| s.time = Some(t));
@@ -212,19 +214,20 @@ pub fn run(act: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Ran {
                 match r {
                     Ok(p) => {
                         let drive = sup::usb_drives().into_iter().next();
-                        let tail = if drive.is_some() { "" } else { " To put them on a USB drive, plug one in and save again." };
-                        live::toast_pub(format!("Saved to {}.{tail}", saved_where(&p)), false);
+                        let t = &tr().settings_more;
+                        let msg = if drive.is_some() { trf!(t.sup_saved_to, path = saved_where(&p)) } else { trf!(t.sup_saved_to_usb_hint, path = saved_where(&p)) };
+                        live::toast_pub(msg, false);
                         if let Some(d) = drive {
                             live::ask_pub(live::Ask {
-                                title: "Copy the logs to the USB drive?".into(),
+                                title: tr().settings_more.sup_copy_title.into(),
                                 sub: drive_name(&d),
-                                body: "A copy goes on the drive, so you can attach it to a bug report from a computer.".into(),
-                                yes: "Copy".into(),
+                                body: tr().settings_more.sup_copy_body.into(),
+                                yes: tr().common.copy.into(),
                                 act: format!("logs:usb:{}", d.display()),
                             });
                         }
                     }
-                    Err(e) => live::toast_pub(live::failed("Couldn't save the logs.", &e, None), true),
+                    Err(e) => live::toast_pub(live::failed(tr().settings_more.sup_err_save, &e, None), true),
                 }
             }))
         }
@@ -233,8 +236,8 @@ pub fn run(act: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Ran {
             spawn(Box::new(move || {
                 let Some(bundle) = get().last_bundle else { return };
                 match sup::copy_to(&bundle, &drive) {
-                    Ok(_) => live::toast_pub(format!("Copied to {}. You can remove the drive.", drive_name(&drive)), false),
-                    Err(e) => live::toast_pub(live::failed("Couldn't copy the logs.", &e, None), true),
+                    Ok(_) => live::toast_pub(trf!(tr().settings_more.sup_copied, name = drive_name(&drive)), false),
+                    Err(e) => live::toast_pub(live::failed(tr().settings_more.sup_err_copy, &e, None), true),
                 }
             }))
         }
@@ -255,7 +258,7 @@ pub fn run(act: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Ran {
                             q.push(SheetReq::Link(link));
                         }
                     }
-                    Err(e) => live::toast_pub(live::failed("Couldn't upload the logs.", &e, Some("Save them instead and copy them to a USB drive.")), true),
+                    Err(e) => live::toast_pub(live::failed(tr().settings_more.sup_err_upload, &e, Some(tr().settings_more.sup_err_upload_hint)), true),
                 }
             }))
         }
@@ -263,18 +266,18 @@ pub fn run(act: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Ran {
             let Some(mode) = sup::ResetMode::parse(mode) else { return Ran::NotMine };
             spawn(Box::new(move || {
                 if !sup::reset_supported() {
-                    live::toast_pub("Needs the next system update.", true);
+                    live::toast_pub(tr().settings_more.sup_needs_update, true);
                     return;
                 }
                 // With parental controls on, the parent's PIN first (answers at once without one).
-                let pin = crate::features::parental::ask("Factory reset", "Enter the parent's PIN to reset this device.", rare_render::clock::secs());
+                let pin = crate::features::parental::ask(tr().settings_more.sup_reset, tr().settings_more.sup_reset_pin, rare_render::clock::secs());
                 if pin.recv().ok() != Some(true) {
-                    live::toast_pub("The device was not reset.", false);
+                    live::toast_pub(tr().settings_more.sup_not_reset, false);
                     return;
                 }
                 // The reset is booked first, so a refusal leaves everything (wallets included) as it was.
                 if let Err(e) = sup::factory_reset(mode) {
-                    live::toast_pub(live::failed("Couldn't start the reset.", &e, None), true);
+                    live::toast_pub(live::failed(tr().settings_more.sup_err_reset, &e, None), true);
                     return;
                 }
                 // Then the wallets: the keyring entry can only be removed from the session.
@@ -282,10 +285,10 @@ pub fn run(act: &str, waker: Arc<dyn Fn() + Send + Sync>) -> Ran {
                 if let Err(e) = vault.reset() {
                     log::warn!("factory reset: wallet vault: {e}");
                 }
-                live::toast_pub("Restarting to reset this device.", false);
+                live::toast_pub(tr().settings_more.sup_restarting, false);
                 std::thread::sleep(std::time::Duration::from_millis(1200));
                 if let Err(e) = rare_system::system::power("reboot") {
-                    live::toast_pub(live::failed("The reset is set for the next start. Restart to finish.", &e, None), true);
+                    live::toast_pub(live::failed(tr().settings_more.sup_err_reboot, &e, None), true);
                 }
             }))
         }

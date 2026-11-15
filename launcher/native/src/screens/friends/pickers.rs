@@ -1,6 +1,7 @@
 //! The pickers that take the right side over until B (FriendsScreen.tsx): invite friends, pick the
 //! party's game, pick an item to send.
 
+use rare_i18n::{tr, trf};
 use super::bits::*;
 use super::model::{FriendsData, LibGame};
 use super::screen::{hair_top, T_GAME, T_INVITE_CANCEL, T_INVITE_GO, T_ITEM, T_PICK_FRIEND};
@@ -46,7 +47,7 @@ pub fn invite_picker(
     let party = party_id.and_then(|id| d.st.parties.iter().find(|p| p.id == id));
     let list = invite_list(d, party);
     let room = invite_room(party);
-    let head = picker_head(ui, "Invite friends", &format!("Up to {room} more"));
+    let head = picker_head(ui, tr().friends.invite_friends, &trf!(tr().friends.up_to_more, n = room));
     let mut panel = crate::kit::panel(ui, s().col());
     for (i, f) in list.iter().enumerate() {
         let on = picked.contains(&f.address);
@@ -82,7 +83,7 @@ pub fn invite_picker(
             fill_nav(
                 row,
                 T_PICK_FRIEND + i as u32,
-                Some(if on { "Remove" } else { "Add" }),
+                Some(if on { tr().common.remove } else { tr().common.add }),
                 None,
                 false,
             )
@@ -92,7 +93,7 @@ pub fn invite_picker(
     if list.is_empty() {
         panel = panel.child(ui.text_s(
             s().px(1.4).py(1.2),
-            "Every friend is already in this party.",
+            tr().friends.all_in_party,
             T::new(Ty::Small).c(tok::MUTED),
         ));
     }
@@ -101,16 +102,16 @@ pub fn invite_picker(
         ui,
         Btn::new(
             if n > 1 {
-                format!("Invite {n} friends")
+                trf!(tr().friends.invite_n_friends, n = n)
             } else {
-                "Invite".into()
+                tr().friends.invite.into()
             },
             T_INVITE_GO,
         )
         .primary()
         .disabled(n == 0),
     );
-    let cancel = button(ui, Btn::new("Cancel", T_INVITE_CANCEL).ghost());
+    let cancel = button(ui, Btn::new(tr().common.cancel, T_INVITE_CANCEL).ghost());
     ui.bx(s().col())
         .child(head)
         .child(panel)
@@ -150,7 +151,7 @@ fn as_ref(g: &LibGame) -> GameRef {
 
 pub fn game_picker(ui: &mut Ui, d: &FriendsData) -> El {
     let games = picker_games(d);
-    let head = picker_head(ui, "Pick the party's game", "Join opens it for everyone");
+    let head = picker_head(ui, tr().friends.pick_party_game, tr().friends.pick_party_game_sub);
     let w = grid_col(ui);
     let mut grid = ui
         .bx(s().grid(&[Track::Fr(1.0); 6]).gap(1.0))
@@ -168,7 +169,7 @@ pub fn game_picker(ui: &mut Ui, d: &FriendsData) -> El {
                 1.06,
             ),
             T_GAME + i as u32,
-            Some("Pick"),
+            Some(tr().friends.pick),
             None,
             false,
         );
@@ -185,7 +186,7 @@ pub fn game_picker(ui: &mut Ui, d: &FriendsData) -> El {
     }
     let mut col = ui.bx(s().col()).child(head).child(grid);
     if games.is_empty() {
-        col = col.child(empty(ui, s(), "No games installed yet", None, Vec::new()));
+        col = col.child(empty(ui, s(), tr().friends.no_games_installed, None, Vec::new()));
     }
     col
 }
@@ -194,8 +195,8 @@ pub fn item_picker(ui: &mut Ui, d: &FriendsData, address: &str) -> El {
     let who = d.st.person_of(address).cloned();
     let head = picker_head(
         ui,
-        &format!("Send an item to {}", label(who.as_ref())),
-        "Rare Wallet shows the review before anything is sent",
+        &trf!(tr().friends.send_item_to, name = label(who.as_ref())),
+        tr().friends.send_item_sub,
     );
     let mut col = ui.bx(s().col()).child(head);
     let items = d.items.as_deref().unwrap_or_default();
@@ -203,7 +204,7 @@ pub fn item_picker(ui: &mut Ui, d: &FriendsData, address: &str) -> El {
         col = col.child(empty(
             ui,
             s(),
-            "No collectibles in this wallet",
+            tr().friends.no_collectibles,
             None,
             Vec::new(),
         ));
@@ -234,7 +235,7 @@ pub fn item_picker(ui: &mut Ui, d: &FriendsData, address: &str) -> El {
                 1.06,
             ),
             T_ITEM + i as u32,
-            Some("Send"),
+            Some(tr().common.send),
             None,
             false,
         );

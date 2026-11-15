@@ -6,6 +6,7 @@ use crate::screens::wallet::fmt::{addr_short, format_amount};
 use crate::screens::wallet::home::lib::{hint, Hint};
 use crate::screens::wallet::kit::{btn, list_button, page, panel, Variant};
 use crate::screens::wallet::markup::*;
+use rare_i18n::{tr, trf, trn};
 
 /// An account that can move its things here.
 #[derive(Clone, Debug, PartialEq)]
@@ -88,78 +89,74 @@ fn row(left: &str, right: String) -> El<Msg> {
     div("flex items-center justify-between gap-4 px-5 py-3").kid(span("text-base text-secondary").text(left)).kid(span("min-w-0 truncate text-right text-base font-medium num").text(right))
 }
 
-fn count(n: usize, one: &str, many: &str) -> String {
-    format!("{n} {}", if n == 1 { one } else { many })
-}
-
 pub fn view(pr: &Props, st: &State) -> El<Msg> {
-    let sub = format!("To {} ({})", pr.to_label, addr_short(pr.to));
+    let sub = trf!(tr().wallet.move_to, name = pr.to_label, addr = addr_short(pr.to));
     let body: Vec<El<Msg>> = match &st.phase {
-        Phase::Pick if pr.froms.is_empty() => vec![p("text-secondary").text("There is no other account on this SuiPlay to move from. Add it first under Add an account, then come back here.")],
+        Phase::Pick if pr.froms.is_empty() => vec![p("text-secondary").text(tr().wallet.move_no_source)],
         Phase::Pick => {
             let mut list = div("flex flex-col gap-1");
             for (i, f) in pr.froms.iter().enumerate() {
                 list = list.kid(list_button(Some(icon("wallet", "").attr("size", "1.4rem")), &f.label, Some(text(format!("{}  {}", addr_short(&f.address), f.method))), None, Msg::Pick(f.address.clone()), i == 0, ""));
             }
-            vec![p("mb-4 text-secondary").text("Pick the account to move from. It approves once, the way it always does."), panel(None, None, "p-1", vec![list])]
+            vec![p("mb-4 text-secondary").text(tr().wallet.move_pick), panel(None, None, "p-1", vec![list])]
         }
-        Phase::Reading(a) => vec![div("flex flex-col items-center gap-3 py-12 text-center").kid(div("pointer-events-none absolute left-0 right-0 top-0 z-30 h-[2px] load-bar")).kid(p("text-lg font-semibold").text(format!("Reading what {} holds", label_of(pr, a))))],
+        Phase::Reading(a) => vec![div("flex flex-col items-center gap-3 py-12 text-center").kid(div("pointer-events-none absolute left-0 right-0 top-0 z-30 h-[2px] load-bar")).kid(p("text-lg font-semibold").text(trf!(tr().wallet.move_reading, name = label_of(pr, a))))],
         Phase::Plan(a, s) if s.empty() => vec![
-            div("flex flex-col items-center gap-3 py-10 text-center").kid(p("text-lg font-semibold").text(format!("{} is empty", label_of(pr, a)))).kid(p("text-secondary").text("There is nothing to move.")),
-            btn("Done", Variant::Primary, "w-full", Some(Msg::Done)).def(true),
+            div("flex flex-col items-center gap-3 py-10 text-center").kid(p("text-lg font-semibold").text(trf!(tr().wallet.move_empty, name = label_of(pr, a)))).kid(p("text-secondary").text(tr().wallet.move_nothing)),
+            btn(tr().common.done, Variant::Primary, "w-full", Some(Msg::Done)).def(true),
         ],
         Phase::Plan(a, s) => {
             let mut rows = div("flex flex-col divide-y divide-border-primary");
             if s.sui > 0 {
-                rows = rows.kid(row("SUI", format!("{} SUI, less the fee", format_amount(s.sui.min(i128::MAX as u128) as i128, 9))));
+                rows = rows.kid(row("SUI", trf!(tr().wallet.move_sui_less_fee, amount = format_amount(s.sui.min(i128::MAX as u128) as i128, 9))));
             }
             for (sym, raw, dec) in s.coins.iter().take(6) {
-                rows = rows.kid(row("Coin", format!("{} {sym}", format_amount((*raw).min(i128::MAX as u128) as i128, *dec))));
+                rows = rows.kid(row(tr().wallet.col_coin, format!("{} {sym}", format_amount((*raw).min(i128::MAX as u128) as i128, *dec))));
             }
             if s.coins.len() > 6 {
-                rows = rows.kid(row("Coins", format!("{} more", s.coins.len() - 6)));
+                rows = rows.kid(row(tr().wallet.coins, trf!(tr().wallet.n_more, n = s.coins.len() - 6)));
             }
             if s.nfts > 0 {
-                rows = rows.kid(row("Collectibles", s.nfts.to_string()));
+                rows = rows.kid(row(tr().wallet.collectibles, s.nfts.to_string()));
             }
             if s.kiosks > 0 {
-                rows = rows.kid(row("Kiosks", format!("{}, {}", s.kiosks, count(s.kiosk_items, "item", "items"))));
+                rows = rows.kid(row(tr().wallet.kiosks, trf!(tr().wallet.kiosks_items, kiosks = s.kiosks, items = trn!(tr().wallet.items_n, s.kiosk_items))));
             } else if s.kiosk_items > 0 {
-                rows = rows.kid(row("Kiosk items", s.kiosk_items.to_string()));
+                rows = rows.kid(row(tr().wallet.kiosk_items, s.kiosk_items.to_string()));
             }
             if s.staked > 0 {
-                rows = rows.kid(row("Staked SUI", count(s.staked, "stake", "stakes")));
+                rows = rows.kid(row(tr().wallet.staked_sui, trn!(tr().wallet.stakes_n, s.staked)));
             }
             if s.names > 0 {
-                rows = rows.kid(row("SuiNS names", s.names.to_string()));
+                rows = rows.kid(row(tr().wallet.suins_names, s.names.to_string()));
             }
-            let mut v = vec![p("mb-4 text-secondary").text(format!("From {} ({}). Listings and locked items move with their kiosk.", label_of(pr, a), addr_short(a))), panel(None, None, "", vec![rows])];
+            let mut v = vec![p("mb-4 text-secondary").text(trf!(tr().wallet.move_from_note, name = label_of(pr, a), addr = addr_short(a))), panel(None, None, "", vec![rows])];
             if !s.stuck.is_empty() {
                 let mut st_rows = div("flex flex-col divide-y divide-border-primary");
                 for (what, why) in s.stuck.iter().take(5) {
                     st_rows = st_rows.kid(div("flex flex-col gap-0.5 px-5 py-3").kid(span("truncate text-base font-medium").text(what)).kid(span("text-sm text-secondary").text(why)));
                 }
                 if s.stuck.len() > 5 {
-                    st_rows = st_rows.kid(div("px-5 py-3 text-sm text-secondary").text(format!("{} more", s.stuck.len() - 5)));
+                    st_rows = st_rows.kid(div("px-5 py-3 text-sm text-secondary").text(trf!(tr().wallet.n_more, n = s.stuck.len() - 5)));
                 }
-                v.push(h2("mb-2 mt-6 text-base font-semibold").text("Stays behind"));
+                v.push(h2("mb-2 mt-6 text-base font-semibold").text(tr().wallet.stays_behind));
                 v.push(panel(None, None, "", vec![st_rows]));
             }
-            let what = if s.txs > 1 { format!("Move everything ({} approvals)", s.txs) } else { "Move everything".to_string() };
+            let what = if s.txs > 1 { trf!(tr().wallet.move_everything_approvals, n = s.txs) } else { tr().wallet.move_everything.to_string() };
             v.push(div("mt-6").kid(btn(&what, Variant::Primary, "w-full", Some(Msg::Move)).def(true)));
             v
         }
-        Phase::Sending(a) => vec![div("flex flex-col items-center gap-3 py-12 text-center").kid(p("text-lg font-semibold").text(format!("Approve with {}", label_of(pr, a)))).kid(p("text-secondary").text("Check the review sheet, then approve the way this account signs."))],
+        Phase::Sending(a) => vec![div("flex flex-col items-center gap-3 py-12 text-center").kid(p("text-lg font-semibold").text(trf!(tr().wallet.approve_with, name = label_of(pr, a)))).kid(p("text-secondary").text(tr().wallet.move_check_sheet))],
         Phase::Done { from, digests } => vec![
             div("flex flex-col items-center gap-3 py-8 text-center")
                 .kid(icon("circle-check", "text-icon-primary").attr("size", "2.5rem").attr("stroke-width", "1.5"))
-                .kid(p("text-lg font-semibold").text("Everything is on its way"))
-                .kid(p("max-w-[32rem] text-secondary").text(format!("{} sent everything it could to {}. {}", label_of(pr, from), pr.to_label, count(digests.len(), "transaction", "transactions")))),
-            btn("Done", Variant::Primary, "w-full", Some(Msg::Done)).def(true),
+                .kid(p("text-lg font-semibold").text(tr().wallet.move_on_its_way))
+                .kid(p("max-w-[32rem] text-secondary").text(trf!(tr().wallet.move_sent_all, from = label_of(pr, from), to = pr.to_label, count = trn!(tr().wallet.transactions_n, digests.len())))),
+            btn(tr().common.done, Variant::Primary, "w-full", Some(Msg::Done)).def(true),
         ],
-        Phase::Failed(m) => vec![p("mb-4 text-negative").text(m), btn("Try again", Variant::Primary, "w-full", Some(Msg::Again)).def(true)],
+        Phase::Failed(m) => vec![p("mb-4 text-negative").text(m), btn(tr().common.try_again, Variant::Primary, "w-full", Some(Msg::Again)).def(true)],
     };
-    page(Some("Move everything to this account"), Some(text(sub)), None, true, "", body)
+    page(Some(tr().wallet.move_everything_here), Some(text(sub)), None, true, "", body)
 }
 
 pub fn update(st: &mut State, msg: Msg) -> Option<Effect> {
@@ -185,7 +182,7 @@ pub fn update(st: &mut State, msg: Msg) -> Option<Effect> {
 }
 
 pub fn hints() -> Vec<Hint> {
-    vec![hint("a", "Select"), hint("b", "Back")]
+    vec![hint("a", tr().common.select), hint("b", tr().common.back)]
 }
 
 #[cfg(test)]

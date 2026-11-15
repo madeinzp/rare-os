@@ -2,6 +2,7 @@
 //! picks the coin from the picker sheet), LT/RT step the amount, X flips the pair, A on the button
 //! opens the review.
 
+use rare_i18n::{tr, trf};
 use super::fmt::*;
 use super::model::*;
 use super::review::{review_sheet, Review};
@@ -144,16 +145,16 @@ pub fn swap_view(d: &SwapData, st: &SwapState) -> SwapView {
     };
     let blocked = from.is_none() || to.is_none() || amount_in == 0 || t.short(from.as_ref()) || t.quote.is_none();
     let why = if d.wallet.is_none() {
-        Some("Add a wallet first".to_string())
+        Some(tr().trade.add_wallet_first.to_string())
     } else if t.short(from.as_ref()) {
-        Some("Not enough balance".into())
+        Some(tr().trade.not_enough_balance.into())
     } else {
         t.quote_error.clone()
     };
     SwapView {
         value: super::token::trim6(t.value),
         balance: match (&from, t.balance) {
-            (Some(c), Some(b)) => format!("Balance {} {}", num_text(NumKind::Amount, Some(base_to_number(b, c.decimals)), NumOptions::default()), c.symbol),
+            (Some(c), Some(b)) => trf!(tr().trade.balance_of, amount = num_text(NumKind::Amount, Some(base_to_number(b, c.decimals)), NumOptions::default()), symbol = c.symbol),
             _ => String::new(),
         },
         in_usd: in_usd.map(|u| num_text(NumKind::Money, Some(u), NumOptions::default())).unwrap_or_default(),
@@ -165,12 +166,12 @@ pub fn swap_view(d: &SwapData, st: &SwapState) -> SwapView {
         },
         out_usd: match out_usd {
             Some(u) => num_text(NumKind::Money, Some(u), NumOptions::default()),
-            None if t.quote_error.is_some() => "No route for this amount".into(),
+            None if t.quote_error.is_some() => tr().trade.no_route.into(),
             None => String::new(),
         },
         blocked,
         why,
-        button: if from.is_some() && to.is_some() { "Review swap".into() } else { "Swap".into() },
+        button: if from.is_some() && to.is_some() { tr().trade.review_swap.into() } else { tr().trade.swap.into() },
     }
 }
 
@@ -216,12 +217,12 @@ impl SwapPage {
 
     pub fn page_hints(&self) -> Vec<(&'static str, String)> {
         if self.st.picking.is_some() {
-            return vec![("a", "Choose".into()), ("b", "Close".into())];
+            return vec![("a", tr().trade.choose.into()), ("b", tr().common.close.into())];
         }
         if self.st.reviewing {
-            return vec![("a", "Select".into()), ("b", "Cancel".into())];
+            return vec![("a", tr().common.select.into()), ("b", tr().common.cancel.into())];
         }
-        vec![("a", "Select".into()), ("lt", "Less".into()), ("rt", "More".into()), ("x", "Flip".into()), ("b", "Back".into())]
+        vec![("a", tr().common.select.into()), ("lt", tr().trade.less.into()), ("rt", tr().common.more.into()), ("x", tr().trade.flip.into()), ("b", tr().common.back.into())]
     }
 
     pub fn press(&mut self, cx: &mut Cx, b: Pad, now: f64) -> Out {
@@ -347,8 +348,8 @@ fn coin_button(ui: &mut Ui, coin: Option<&Coin>, tag: u32) -> El {
         let logo = logo_url(c.logo.as_deref());
         b = b.child(coin_logo(ui, logo.as_deref(), &c.symbol, 2.25));
     }
-    b = b.child(ui.text(coin.map(|c| c.symbol.clone()).unwrap_or_else(|| "Choose a coin".into()), T::new(Ty::Body).w(600)).focus_color(tok::FG));
-    fill_nav(b, tag, Some("Change coin"), None, false)
+    b = b.child(ui.text(coin.map(|c| c.symbol.clone()).unwrap_or_else(|| tr().trade.choose_coin.into()), T::new(Ty::Body).w(600)).focus_color(tok::FG));
+    fill_nav(b, tag, Some(tr().trade.change_coin), None, false)
 }
 
 pub fn view(ui: &mut Ui, d: &SwapData, st: &SwapState) -> El {
@@ -370,33 +371,33 @@ pub fn view(ui: &mut Ui, d: &SwapData, st: &SwapState) -> El {
     }
     let max = t.max(from.as_ref());
     if max.is_finite() && max > 0.0 {
-        let c = chip(ui, "Max", (t.value - max).abs() < 1e-9, T_MAX);
+        let c = chip(ui, tr().trade.max, (t.value - max).abs() < 1e-9, T_MAX);
         chips = chips.child(c);
     }
-    let pay = panel(ui, s().col().mt(1.0).p(1.25)).child(ui.text("You pay", T::new(Ty::Small).c(tok::MUTED))).child(pay_row).child(under).child(chips);
+    let pay = panel(ui, s().col().mt(1.0).p(1.25)).child(ui.text(tr().trade.you_pay, T::new(Ty::Small).c(tok::MUTED))).child(pay_row).child(under).child(chips);
 
     // The flip button between the two boxes.
     let arrow = svg_tinted(ui, "arrow-down-up", ARROW_DOWN_UP.to_string(), 1.1, 1.1, tok::FG);
-    let flip_btn = fill_nav(ui.bx(s().row().items_center().justify_center().size(2.75)).bg(tok::L3).radius(ui.r(1.375)).border(ui.r(0.25), tok::BG).child(arrow), T_FLIP, Some("Flip"), None, false);
+    let flip_btn = fill_nav(ui.bx(s().row().items_center().justify_center().size(2.75)).bg(tok::L3).radius(ui.r(1.375)).border(ui.r(0.25), tok::BG).child(arrow), T_FLIP, Some(tr().trade.flip), None, false);
     let flip = ui.bx(s().row().justify_center().my(-0.75)).look(rare_render::view::Look::default().z(10)).child(flip_btn);
 
     // You get about.
     let out = right_text(ui, s().flex(1.0).min0(), sv.out_text.clone(), T::new(Ty::Display).w(600).tab().c(if sv.out.is_some() { tok::FG } else { tok::MUTED }));
     let get_row = ui.bx(s().row().items_center().gap(0.75).mt(0.5)).child(coin_button(ui, to.as_ref(), T_TO)).child(out);
-    let get = panel(ui, s().col().p(1.25)).child(ui.text("You get about", T::new(Ty::Small).c(tok::MUTED))).child(get_row).child(right_text(ui, s().mt(0.25).wp(1.0), sv.out_usd.clone(), T::new(Ty::Small).c(tok::MUTED)));
+    let get = panel(ui, s().col().p(1.25)).child(ui.text(tr().trade.you_get_about, T::new(Ty::Small).c(tok::MUTED))).child(get_row).child(right_text(ui, s().mt(0.25).wp(1.0), sv.out_usd.clone(), T::new(Ty::Small).c(tok::MUTED)));
 
-    let mut col = ui.bx(s().col().w(34.0).mx_auto()).child(ui.text("Swap", T::new(Ty::Title).w(600))).child(pay).child(flip).child(get);
+    let mut col = ui.bx(s().col().w(34.0).mx_auto()).child(ui.text(tr().trade.swap, T::new(Ty::Title).w(600))).child(pay).child(flip).child(get);
     if let (Some(q), Some(c)) = (&t.quote, &to) {
         let min = format!("{} {}", num_text(NumKind::Amount, Some(base_to_number(min_out(q.amount_out), c.decimals)), NumOptions::default()), c.symbol);
         let v1 = Some(ui.text(min, T::new(Ty::Small).tab()));
         let v2 = Some(ui.text(route_text(q), T::new(Ty::Small).tab()));
         let v3 = Some(ui.text(format!("{:.2}%", q.fee_bps as f64 / 100.0), T::new(Ty::Small).tab()));
-        let l1 = line_el(ui, "Minimum received", v1, false, false);
-        let l2 = line_el(ui, "Route", v2, false, false);
-        let l3 = line_el(ui, "Fee", v3, false, true);
+        let l1 = line_el(ui, tr().trade.minimum_received, v1, false, false);
+        let l2 = line_el(ui, tr().trade.route, v2, false, false);
+        let l3 = line_el(ui, tr().trade.fee, v3, false, true);
         col = col.child(ui.bx(s().col().mt(1.0).px(0.25)).child(l1).child(l2).child(l3));
     }
-    let hint = if sv.blocked { sv.why.clone() } else { Some("Review".into()) };
+    let hint = if sv.blocked { sv.why.clone() } else { Some(tr().trade.review.into()) };
     col = col.child(action(ui, s().mt(1.0), Action { def: true, full: true, disabled: sv.blocked, hint, ..Action::new(sv.button.clone(), Tone::Primary, T_REVIEW) }));
     if let Some(w) = sv.why.as_ref().filter(|_| !t.quoting) {
         col = col.child(center_text(ui, s().mt(0.5).wp(1.0), w.clone(), T::new(Ty::Label).c(tok::MUTED)));
@@ -409,14 +410,14 @@ pub fn view(ui: &mut Ui, d: &SwapData, st: &SwapState) -> El {
     if st.reviewing {
         if let (Some(f), Some(tc)) = (&from, &to) {
             let amt = base_to_number(t.amount_in(Some(f)), f.decimals);
-            let mut lines = vec![("You pay".to_string(), Val::t(format!("{} {}", num_text(NumKind::Amount, Some(amt), NumOptions::default()), f.symbol)), false)];
+            let mut lines = vec![(tr().trade.you_pay.to_string(), Val::t(format!("{} {}", num_text(NumKind::Amount, Some(amt), NumOptions::default()), f.symbol)), false)];
             if let Some(q) = &t.quote {
-                lines.push(("You get about".into(), Val::t(format!("{} {}", num_text(NumKind::Amount, Some(base_to_number(q.amount_out, tc.decimals)), NumOptions::default()), tc.symbol)), true));
-                lines.push(("Minimum received".into(), Val::t(format!("{} {}", num_text(NumKind::Amount, Some(base_to_number(min_out(q.amount_out), tc.decimals)), NumOptions::default()), tc.symbol)), false));
-                lines.push(("Fee".into(), Val::t(format!("{:.2}%", q.fee_bps as f64 / 100.0)), false));
-                lines.push(("Slippage".into(), Val::t("1%"), false));
+                lines.push((tr().trade.you_get_about.into(), Val::t(format!("{} {}", num_text(NumKind::Amount, Some(base_to_number(q.amount_out, tc.decimals)), NumOptions::default()), tc.symbol)), true));
+                lines.push((tr().trade.minimum_received.into(), Val::t(format!("{} {}", num_text(NumKind::Amount, Some(base_to_number(min_out(q.amount_out), tc.decimals)), NumOptions::default()), tc.symbol)), false));
+                lines.push((tr().trade.fee.into(), Val::t(format!("{:.2}%", q.fee_bps as f64 / 100.0)), false));
+                lines.push((tr().trade.slippage.into(), Val::t("1%"), false));
             }
-            let r = Review { title: format!("Swap {} to {}", f.symbol, tc.symbol), sub: None, action: "Confirm swap".into(), tone: Tone::Primary, lines };
+            let r = Review { title: trf!(tr().trade.swap_title, from = f.symbol, to = tc.symbol), sub: None, action: tr().trade.confirm_swap.into(), tone: Tone::Primary, lines };
             page = page.child(review_sheet(ui, &r, d.wallet.is_some()));
         }
     }
@@ -428,9 +429,9 @@ fn picker(ui: &mut Ui, d: &SwapData, which: Picking) -> El {
     let held: HashMap<String, &Holding> = d.portfolio.as_ref().map(|p| p.holdings.iter().map(|h| (normalize_type(&h.coin_type), h)).collect()).unwrap_or_default();
     let search_icon = crate::kit::icon(ui, "search", 1.2, tok::ICON2);
     let search = fill_nav(
-        ui.bx(s().row().items_center().gap(0.6).h(3.0).wp(1.0).px(0.9)).bg(tok::L1).border(1.0, tok::BORDER_LIGHT).radius(ui.r(0.25)).child(search_icon).child(ui.text("Search any coin by name, ticker or coin type", T::new(Ty::Body).c(tok::MUTED))),
+        ui.bx(s().row().items_center().gap(0.6).h(3.0).wp(1.0).px(0.9)).bg(tok::L1).border(1.0, tok::BORDER_LIGHT).radius(ui.r(0.25)).child(search_icon).child(ui.text(tr().trade.search_any_coin, T::new(Ty::Body).c(tok::MUTED))),
         T_PICK_SEARCH,
-        Some("Search coins"),
+        Some(tr().trade.search_coins),
         None,
         false,
     );
@@ -451,7 +452,7 @@ fn picker(ui: &mut Ui, d: &SwapData, which: Picking) -> El {
         list = list.child(row);
     }
     let body = vec![ui.bx(s().col().mb(0.75)).group(crate::kit::group("tr-picker-search", false)).child(search), list];
-    let sh = sheet(ui, if which == Picking::From { "Pay with" } else { "Receive" }, None, body, vec![], false, PICK_SCOPE);
+    let sh = sheet(ui, if which == Picking::From { tr().trade.pay_with } else { tr().common.receive }, None, body, vec![], false, PICK_SCOPE);
     in_flow_sheet(ui, sh)
 }
 

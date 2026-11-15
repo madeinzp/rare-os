@@ -6,11 +6,11 @@
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
 use rare_input::shortcut::{self, Shortcut, MODIFIERS};
+use rare_i18n::{tr, trf};
 use rare_render::input::Pad;
 use rare_render::theme::tok;
 use rare_render::{Id, Node};
 
-const HINT: &str = "Press the keys on a keyboard, or pick them below.";
 
 const T_SAVE: u32 = 100;
 const T_CANCEL: u32 = 101;
@@ -44,11 +44,11 @@ impl ShortcutSheet {
         let r = cx.r();
         let root = cx.scene.root;
         let name = if lc { "LC" } else { "RC" };
-        let sub = format!("{name} holds these keys down for as long as you hold it. Dictation apps and other push-to-talk apps listen for a key like this.");
-        let sh = sheet(cx, root, &format!("{name} key shortcut"), Some(&sub), true, true, now);
+        let sub = trf!(tr().settings_more.sc_sub, name = name);
+        let sh = sheet(cx, root, &trf!(tr().settings_more.sc_title, name = name), Some(&sub), true, true, now);
         let top = cx.scene.add(sh.body, s().col().gap(0.25 * r).mb(1.0 * r).done(), Node::default());
         let shown = cx.scene.add_text(cx.t, top, s().done(), "", ts(r, ty::ROW.0, ty::ROW.1, 600), tok::FG);
-        cx.scene.add_text(cx.t, top, s().done(), HINT, ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
+        cx.scene.add_text(cx.t, top, s().done(), tr().settings_more.sc_hint, ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
         let body = cx.scene.add(sh.body, s().col().wp(1.0).gap(0.75 * r).done(), Node::default());
         let (mods, key) = saved.map(|s| (s.mods(), s.key())).unwrap_or_else(|| (Vec::new(), None));
         let mut me = ShortcutSheet { nav: Nav::default(), body, footer: sh.footer.unwrap(), shown, lc, row, mods, key, held: Vec::new(), chord: Vec::new(), live, message: None };
@@ -68,7 +68,7 @@ impl ShortcutSheet {
     fn show(&mut self, cx: &mut Cx) {
         let t = match self.current() {
             Some(s) => s.label(),
-            None => "No keys picked".into(),
+            None => tr().settings_more.sc_none_picked.into(),
         };
         cx.scene.set_text(cx.t, self.shown, &t);
     }
@@ -89,27 +89,27 @@ impl ShortcutSheet {
         cx.scene.clear_children(self.footer);
         self.show(cx);
 
-        text(cx, self.body, ty::SMALL, 600, tok::MUTED, "Hold with");
+        text(cx, self.body, ty::SMALL, 600, tok::MUTED, tr().settings_more.sc_hold_with);
         let row = cx.scene.add(self.body, s().row().wrap().gap(0.5 * r).wp(1.0).done(), Node::default());
         for (i, m) in MODIFIERS.iter().enumerate() {
             let on = self.mods.contains(m);
-            self.chip(cx, row, shortcut::label_of(*m).unwrap_or("?"), on, T_MOD + i as u32, if on { "Remove" } else { "Add" });
+            self.chip(cx, row, shortcut::label_of(*m).unwrap_or("?"), on, T_MOD + i as u32, if on { tr().common.remove } else { tr().common.add });
         }
 
-        text(cx, self.body, ty::SMALL, 600, tok::MUTED, "Key");
+        text(cx, self.body, ty::SMALL, 600, tok::MUTED, tr().settings_more.sc_key);
         let grid = cx.scene.add(self.body, s().row().wrap().gap(0.5 * r).wp(1.0).done(), Node::default());
         let none_on = self.key.is_none() && !self.mods.is_empty();
-        self.chip(cx, grid, "None", none_on, T_NOKEY, "Pick");
+        self.chip(cx, grid, tr().common.none, none_on, T_NOKEY, tr().settings_more.rm_pick);
         for (i, (code, _, label)) in shortcut::KEYS.iter().enumerate() {
             if MODIFIERS.contains(code) {
                 continue;
             }
-            self.chip(cx, grid, label, self.key == Some(*code), T_KEY + i as u32, "Pick");
+            self.chip(cx, grid, label, self.key == Some(*code), T_KEY + i as u32, tr().settings_more.rm_pick);
         }
 
         let can_save = self.current().is_some();
-        self.nav.add(button(cx, self.footer, "Cancel", Variant::Secondary, Sz::Md, false).hint("Cancel").tag(T_CANCEL).group(2));
-        self.nav.add(button(cx, self.footer, "Save", if can_save { Variant::Primary } else { Variant::Dimmed }, Sz::Md, false).hint("Save").tag(T_SAVE).group(2));
+        self.nav.add(button(cx, self.footer, tr().common.cancel, Variant::Secondary, Sz::Md, false).hint(tr().common.cancel).tag(T_CANCEL).group(2));
+        self.nav.add(button(cx, self.footer, tr().common.save, if can_save { Variant::Primary } else { Variant::Dimmed }, Sz::Md, false).hint(tr().common.save).tag(T_SAVE).group(2));
 
         let key_tag = self.key.and_then(|k| shortcut::KEYS.iter().position(|x| x.0 == k)).map(|i| T_KEY + i as u32);
         let want = focus.or(key_tag);
@@ -157,7 +157,7 @@ impl ShortcutSheet {
 
     /// Writes the shortcut (and the row's choice, when a row opened the sheet) into launcher.json.
     fn save(&mut self) -> Result<(), String> {
-        let Some(s) = self.current() else { return Err("Pick at least one key.".into()) };
+        let Some(s) = self.current() else { return Err(tr().settings_more.sc_pick_one.into()) };
         if !self.live {
             return Ok(());
         }
@@ -258,8 +258,8 @@ impl Screen for ShortcutSheet {
 
     fn bar(&self) -> Option<Vec<rare_render::focus::hints::Hint>> {
         use rare_render::focus::hints::{hint, Key};
-        let a = self.nav.current().map(|f| f.hint.clone()).filter(|h| !h.is_empty()).unwrap_or_else(|| "Select".into());
-        Some(vec![hint(Key::A, &a), hint(Key::B, "Cancel")])
+        let a = self.nav.current().map(|f| f.hint.clone()).filter(|h| !h.is_empty()).unwrap_or_else(|| tr().common.select.into());
+        Some(vec![hint(Key::A, &a), hint(Key::B, tr().common.cancel)])
     }
 
     fn take_message(&mut self) -> Option<String> {

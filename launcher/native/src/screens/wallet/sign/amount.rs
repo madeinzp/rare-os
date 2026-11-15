@@ -3,6 +3,7 @@
 //! submits. Turn `active` off while a sheet is open so keys go to the sheet.
 
 use crate::screens::wallet::markup::*;
+use rare_i18n::tr;
 
 pub const KEYS: [&str; 12] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", ".", "0", "back"];
 
@@ -47,7 +48,7 @@ pub fn clean_typed(text: &str, decimals: u32) -> String {
 
 /// The pad. A sends `on(key)`; X sends `on("back")`; Start sends `submit` when there is one.
 pub fn amount_pad<M: Clone>(active: bool, on: impl Fn(&'static str) -> M, submit: Option<M>) -> El<M> {
-    let mut g = div("grid grid-cols-3 gap-2").role("group").label("Amount keys").kids(KEYS.iter().map(|k| {
+    let mut g = div("grid grid-cols-3 gap-2").role("group").label(tr().wallet_sign.amount_keys).kids(KEYS.iter().map(|k| {
         button(
             cn(&["btn flex h-14 items-center justify-center rounded bg-button-secondary text-2xl font-medium tabular-nums disabled:opacity-40", when(*k == "back", "text-base")]),
             Some(on(k)),
@@ -55,7 +56,7 @@ pub fn amount_pad<M: Clone>(active: bool, on: impl Fn(&'static str) -> M, submit
         .def(*k == "5")
         .disabled(!active)
         .key(*k)
-        .text(if *k == "back" { "Del" } else { k })
+        .text(if *k == "back" { tr().wallet_sign.key_del } else { k })
     }));
     if active {
         g = g.on_pad("x", on("back"));

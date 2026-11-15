@@ -7,9 +7,12 @@ use crate::screens::wallet::home::stack::WalletView;
 use crate::screens::wallet::kit::{btn_icon, list_button, page, sheet, account_avatar, SheetSpec, Size, Variant};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::types::RareAccount;
+use rare_i18n::{tr, trn};
 use std::collections::BTreeMap;
 
-const GROUPS: [(KindGroup, &str); 3] = [(KindGroup::Rare, "Rare accounts"), (KindGroup::Hardware, "Hardware"), (KindGroup::Watch, "Watch")];
+fn group_titles() -> [(KindGroup, &'static str); 3] {
+    [(KindGroup::Rare, tr().wallet.group_rare), (KindGroup::Hardware, tr().wallet.group_hardware), (KindGroup::Watch, tr().wallet.group_watch)]
+}
 
 pub struct Props<'a> {
     pub accounts: &'a [RareAccount],
@@ -71,7 +74,7 @@ fn row_el(a: &RareAccount, current: bool, value: Option<f64>) -> El<Msg> {
                 .kid(span("block font-mono text-sm text-secondary").text(short)),
         )
         .kid(span("shrink-0 text-right tabular-nums").kid(span("block text-base font-semibold").text(value.map(|v| fmt_usd(Some(v))).unwrap_or_default())));
-    b = if current { b.kid(icon("check", "shrink-0 text-icon-primary").attr("size", "1.2rem").label("Current account")) } else { b.kid(span("w-[1.2rem] shrink-0")) };
+    b = if current { b.kid(icon("check", "shrink-0 text-icon-primary").attr("size", "1.2rem").label(tr().wallet.current_account)) } else { b.kid(span("w-[1.2rem] shrink-0")) };
     b
 }
 
@@ -79,13 +82,13 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
     let n = pr.accounts.len();
     let mut right = div("");
     if pr.has_phrase {
-        right = right.kid(btn_icon("plus", if st.busy { "Adding" } else { "Add another from this phrase" }, Variant::Secondary, Size::Lg, "", Some(Msg::AddFromPhrase)));
+        right = right.kid(btn_icon("plus", if st.busy { tr().wallet.adding } else { tr().wallet.add_another_from_phrase }, Variant::Secondary, Size::Lg, "", Some(Msg::AddFromPhrase)));
     }
-    right = right.kid(btn_icon("plus", "Add account", Variant::Primary, Size::Lg, "", Some(Msg::Push(WalletView::Add))));
+    right = right.kid(btn_icon("plus", tr().wallet.add_account, Variant::Primary, Size::Lg, "", Some(Msg::Push(WalletView::Add))));
     // the right side is a fragment on the web: its buttons sit straight in the page's right slot
     let right_kids = right.kids;
     let mut groups = div("flex flex-col gap-6");
-    for (g, t) in GROUPS {
+    for (g, t) in group_titles() {
         let list: Vec<&RareAccount> = pr.accounts.iter().filter(|a| kind_group(a) == g).collect();
         if list.is_empty() {
             continue;
@@ -98,21 +101,21 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
         );
     }
     if n == 0 {
-        groups = groups.kid(div("flex flex-col items-center gap-3 py-16 text-secondary").kid(icon("users", "").attr("size", "1.5rem")).kid(p("text-sm").text("No accounts yet")));
+        groups = groups.kid(div("flex flex-col items-center gap-3 py-16 text-secondary").kid(icon("users", "").attr("size", "1.5rem")).kid(p("text-sm").text(tr().wallet.no_accounts_yet)));
     }
     let mut body = vec![groups];
     if let Some(a) = st.menu.as_ref().and_then(|m| pr.accounts.iter().find(|a| a.address == *m)) {
         body.push(sheet(
             SheetSpec { title: a.label.clone(), subtitle: Some(kind_label(a).into()), icon: None, footer: None, close: Some(Msg::CloseMenu), width: "34rem" },
             vec![div("-mx-2 flex flex-col")
-                .kid(list_button(Some(icon("check", "").attr("size", "1.2rem")), "Use this account", None, None, Msg::Select(a.address.clone()), true, ""))
-                .kid(list_button(Some(icon("pencil", "").attr("size", "1.2rem")), "Rename", None, None, Msg::Rename(a.address.clone()), false, ""))
-                .kid(list_button(Some(icon("copy", "").attr("size", "1.2rem")), "Copy address", None, None, Msg::CopyAddress(a.address.clone()), false, ""))
-                .kid(list_button(Some(icon("arrow-right-left", "").attr("size", "1.2rem")), "Move everything to this account", Some(text("From another account on this SuiPlay")), None, Msg::Push(WalletView::MoveAll { to: a.address.clone() }), false, ""))
-                .kid(list_button(Some(icon("trash-2", "").attr("size", "1.2rem")), "Remove from this device", None, None, Msg::Remove(a.address.clone()), false, ""))],
+                .kid(list_button(Some(icon("check", "").attr("size", "1.2rem")), tr().wallet.use_this_account, None, None, Msg::Select(a.address.clone()), true, ""))
+                .kid(list_button(Some(icon("pencil", "").attr("size", "1.2rem")), tr().wallet.rename, None, None, Msg::Rename(a.address.clone()), false, ""))
+                .kid(list_button(Some(icon("copy", "").attr("size", "1.2rem")), tr().wallet.copy_address, None, None, Msg::CopyAddress(a.address.clone()), false, ""))
+                .kid(list_button(Some(icon("arrow-right-left", "").attr("size", "1.2rem")), tr().wallet.move_everything_here, Some(text(tr().wallet.from_another_account)), None, Msg::Push(WalletView::MoveAll { to: a.address.clone() }), false, ""))
+                .kid(list_button(Some(icon("trash-2", "").attr("size", "1.2rem")), tr().wallet.remove_from_device, None, None, Msg::Remove(a.address.clone()), false, ""))],
         ));
     }
-    let mut pg = page(Some("Accounts"), Some(text(format!("{n} {} on this device", if n == 1 { "account" } else { "accounts" }))), None, false, "", body).attr("data-ready", n.to_string());
+    let mut pg = page(Some(tr().wallet.accounts), Some(text(trn!(tr().wallet.accounts_on_device, n))), None, false, "", body).attr("data-ready", n.to_string());
     // put the fragment's buttons into the right slot
     if let Some(head_row) = pg.kids.get_mut(0).and_then(|inner| inner.kids.get_mut(0)) {
         head_row.kids.push(div("flex shrink-0 items-center gap-2").kids(right_kids));
@@ -124,7 +127,7 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
 }
 
 pub fn hints() -> Vec<Hint> {
-    vec![hint("a", "Use"), hint("x", "Rename"), hint("y", "Actions"), hint("b", "Back")]
+    vec![hint("a", tr().wallet.hint_use), hint("x", tr().wallet.rename), hint("y", tr().wallet.hint_actions), hint("b", tr().common.back)]
 }
 
 /// `focused`: the data-addr of the focused row, for X and Y.

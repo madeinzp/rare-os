@@ -19,6 +19,7 @@ use crate::screens::wallet::render::{build, Built};
 use crate::screens::wallet::service::{self, poll, Wallet};
 use crate::screens::wallet::types::RareAccount;
 use crate::state::{State, Tone};
+use rare_i18n::{tr, trf};
 use rare_render::focus::Focusable;
 use rare_render::view::El;
 use rare_wallet::sign::{SignError, SignKind, TxInput};
@@ -233,10 +234,10 @@ pub fn short_of_funds(e: &str) -> Option<String> {
         let ty = e[i + "sufficient balance of ".len()..].split([':', ' ']).filter(|s| !s.is_empty()).collect::<Vec<_>>();
         // "0x..", "wal", "WAL" (split on ':' leaves the parts of 0x..::wal::WAL)
         let sym = ty.get(2).copied().filter(|s| s.chars().all(|c| c.is_ascii_alphanumeric())).unwrap_or("coins");
-        return Some(format!("This account doesn't have enough {sym}. Add {sym} to it and try again."));
+        return Some(trf!(tr().wallet_sign.short_of_coin, sym = sym));
     }
     if lower.contains("insufficientgas") || lower.contains("insufficient gas") || lower.contains("no valid gas coins") || lower.contains("insufficientcoinbalance") {
-        return Some("This account doesn't have enough SUI to pay the network fee. Add SUI to it and try again.".into());
+        return Some(tr().wallet_sign.short_of_gas.into());
     }
     None
 }
@@ -399,7 +400,7 @@ impl ReviewHost {
         self.rx_status = None;
         self.rx_phone_unlock = None;
         self.rx_reset = None;
-        self.method = r.as_ref().map(|r| service::sign_method(&r.account)).filter(|m| !m.is_empty() && m != service::METHOD_SILENT);
+        self.method = r.as_ref().map(|r| service::sign_method(&r.account)).filter(|m| !m.is_empty() && m.as_str() != service::method_silent());
         if let Some(r) = &r {
             self.accounts = service::wallet().map(|w| w.accounts().0).unwrap_or_default().into_iter().map(|a| RareAccount::from_wallet(&a)).collect();
             if r.kind == SignKind::Transaction {
@@ -423,8 +424,8 @@ impl ReviewHost {
         // Signing a message (signing in to a site or game) needs it too.
         if crate::features::parental::needs_pin(rare_render::clock::secs()) {
             if self.rx_parental.is_none() {
-                let why = if r.kind == SignKind::Transaction { "Enter the PIN to approve this transaction." } else { "Enter the PIN to sign this message." };
-                self.rx_parental = Some(crate::features::parental::ask("Parent's PIN", why, rare_render::clock::secs()));
+                let why = if r.kind == SignKind::Transaction { tr().wallet_sign.parent_pin_tx } else { tr().wallet_sign.parent_pin_msg };
+                self.rx_parental = Some(crate::features::parental::ask(tr().wallet_sign.parent_pin, why, rare_render::clock::secs()));
             }
             self.ver += 1;
             return;
@@ -445,7 +446,7 @@ impl ReviewHost {
             self.pin_for = PinFor::Vault;
             self.unlock = Some((unlock::State::default(), kind));
             if kind == VaultKind::Passphrase {
-                ask_secret(st, ASK_PASS, "Passphrase");
+                ask_secret(st, ASK_PASS, tr().wallet_sign.passphrase);
             }
             self.ver += 1;
             return;
@@ -568,8 +569,8 @@ impl ReviewHost {
                 return Some(review::view(&pr, &self.sheet).map(&Msg::Sheet));
             }
             let method = std::env::var("RR_REVIEW_METHOD").ok().map(|m| match m.as_str() {
-                "both" => service::METHOD_PASSKEY_BOTH,
-                _ => service::METHOD_PASSKEY_PHONE,
+                "both" => service::method_passkey_both(),
+                _ => service::method_passkey_phone(),
             });
             let pr = review::Props { req: &req, flow: None, accounts: &accounts, load: &load, items: &items, force: None, ledger: &LedgerPrompt::default(), keystone: &KeystonePrompt::default(), passkey: &Passkey::Idle, method, phone: false };
             return Some(review::view(&pr, &self.sheet).map(&Msg::Sheet));
@@ -584,23 +585,23 @@ impl ReviewHost {
         if let (Some((ust, _)), PinFor::Device) = (&self.unlock, self.pin_for) {
             let acc = service::wallet().and_then(|w| self.shown.as_ref().and_then(|r| account_of(w, &r.account)));
             let (phone, _) = backups_of(acc.as_ref());
-            let reason = if self.req.as_ref().is_some_and(|q| q.kind == review::ReqKind::Message) { "Enter your PIN to sign" } else { "Enter your PIN to approve" };
-            let pend = unlock::Pending { reason: reason.into(), phone: true, title: Some("Enter your PIN".into()), phone_label: Some(if phone { "Sign with my phone instead" } else { "Sign with my security key instead" }.into()) };
+            let reason = if self.req.as_ref().is_some_and(|q| q.kind == review::ReqKind::Message) { tr().wallet_sign.pin_reason_sign } else { tr().wallet_sign.pin_reason_approve };
+            let pend = unlock::Pending { reason: reason.into(), phone: true, title: Some(tr().wallet_sign.enter_your_pin.into()), phone_label: Some(if phone { tr().wallet_sign.sign_phone_instead_pin } else { tr().wallet_sign.sign_key_instead_pin }.into()) };
             return Some(unlock::view(&pend, VaultKind::Pin, ust, now_ms()).map(&Msg::Unlock));
         }
         if let Some((ust, kind)) = &self.unlock {
             let passkey = self.standalone.is_none() && self.pin_for == PinFor::Vault && self.req.as_ref().is_some_and(|q| self.accounts.iter().any(|a| a.address == q.account && a.kind == "passkey"));
             let reason = match (&self.standalone, &self.req) {
                 _ if self.pin_for == PinFor::Send => match usd_out(self.load.as_ref()) {
-                    Some(v) => format!("This sends about ${v:.2}. Enter your PIN to approve."),
-                    None => "Enter your PIN to approve this send.".into(),
+                    Some(v) => trf!(tr().wallet_sign.pin_reason_send_usd, amount = format!("{v:.2}")),
+                    None => tr().wallet_sign.pin_reason_send.into(),
                 },
                 (Some((r, _)), _) => r.clone(),
-                _ if passkey => "Enter your PIN, or sign with the passkey on your phone.".into(),
-                (None, Some(req)) if req.kind == review::ReqKind::Message => "Enter your PIN to sign".into(),
-                _ => "Enter your PIN to approve".into(),
+                _ if passkey => tr().wallet_sign.pin_reason_passkey.into(),
+                (None, Some(req)) if req.kind == review::ReqKind::Message => tr().wallet_sign.pin_reason_sign.into(),
+                _ => tr().wallet_sign.pin_reason_approve.into(),
             };
-            let title = (self.pin_for == PinFor::Send).then(|| "Enter your PIN".to_string());
+            let title = (self.pin_for == PinFor::Send).then(|| tr().wallet_sign.enter_your_pin.to_string());
             return Some(unlock::view(&unlock::Pending { reason, phone: passkey, title, phone_label: None }, *kind, ust, now_ms()).map(&Msg::Unlock));
         }
         let req = self.req.as_ref()?;
@@ -656,7 +657,7 @@ impl ReviewHost {
                             *w.passkey_event.lock().unwrap() = None;
                         }
                         self.rx_task_backup = Some(service::work(move |w| {
-                            let acc = first_pin_account(w).ok_or_else(|| "No PIN account on this SuiPlay".to_string())?;
+                            let acc = first_pin_account(w).ok_or_else(|| tr().wallet_sign.no_pin_account.to_string())?;
                             let mut ctap = rare_wallet::passkey_account::Ctap { state: &w.passkey, sink: w.sink(), rt: w.rt.clone() };
                             let r = rare_wallet::passkey_account::unlock_with_phone(&w.keystore, &acc, &mut ctap, wv).map_err(|e| e.to_string());
                             *w.passkey_event.lock().unwrap() = None;
@@ -672,12 +673,12 @@ impl ReviewHost {
                         self.rx_task_save = Some(service::work(move |w| match (old, token) {
                             (Some(old), _) => w.keystore.change_pin(&old, &new).map_err(|e| e.to_string()),
                             (None, Some(token)) => {
-                                let acc = first_pin_account(w).ok_or_else(|| "No PIN account on this SuiPlay".to_string())?;
+                                let acc = first_pin_account(w).ok_or_else(|| tr().wallet_sign.no_pin_account.to_string())?;
                                 let r = rare_wallet::passkey_account::reset_pin(&w.keystore, &acc.address, &token, &new).map_err(|e| e.to_string());
                                 w.keystore.disarm();
                                 r
                             }
-                            _ => Err("Unlock with your backup again".to_string()),
+                            _ => Err(tr().wallet_sign.unlock_backup_again.to_string()),
                         }));
                     }
                     None => {}
@@ -731,7 +732,7 @@ impl ReviewHost {
                 let Some((ust, kind)) = self.unlock.as_mut() else { return };
                 let kind = *kind;
                 if um == unlock::Msg::Type {
-                    ask_secret(st, ASK_PASS, "Passphrase");
+                    ask_secret(st, ASK_PASS, tr().wallet_sign.passphrase);
                     return;
                 }
                 match unlock::update(ust, um, now_ms()) {
@@ -754,7 +755,7 @@ impl ReviewHost {
                         self.use_phone = true;
                         self.approve(st);
                     }
-                    Some(unlock::Effect::AskPassphrase) => ask_secret(st, ASK_PASS, "Passphrase"),
+                    Some(unlock::Effect::AskPassphrase) => ask_secret(st, ASK_PASS, tr().wallet_sign.passphrase),
                     Some(unlock::Effect::Finish(ok)) => self.unlocked(st, ok),
                     None => {}
                 }
@@ -771,9 +772,9 @@ impl ReviewHost {
                     }
                     Some(review::Effect::Copy(_)) => {
                         self.copied_until = now + 1.5;
-                        st.toast("Transaction ID copied", Tone::Info, now);
+                        st.toast(tr().wallet_sign.tx_id_copied, Tone::Info, now);
                     }
-                    Some(review::Effect::AskPasskeyPin) => ask_secret(st, ASK_SKPIN, "Security key PIN"),
+                    Some(review::Effect::AskPasskeyPin) => ask_secret(st, ASK_SKPIN, tr().wallet_sign.security_key_pin),
                     None => {}
                 }
             }
@@ -923,7 +924,7 @@ impl Page for ReviewHost {
                     self.standalone = Some(u);
                     self.unlock = Some((unlock::State::default(), kind));
                     if kind == VaultKind::Passphrase {
-                        ask_secret(st, ASK_PASS, "Passphrase");
+                        ask_secret(st, ASK_PASS, tr().wallet_sign.passphrase);
                     }
                     self.ver += 1;
                 }
@@ -966,7 +967,7 @@ impl Page for ReviewHost {
             if let Some(t) = self.task.as_mut() {
                 if pin_tasks::saved(t, r.and_then(|x| x)) {
                     self.task = None;
-                    st.toast("PIN changed", Tone::Info, rare_render::clock::secs());
+                    st.toast(tr().wallet_sign.pin_changed, Tone::Info, rare_render::clock::secs());
                 }
             }
             self.ver += 1;

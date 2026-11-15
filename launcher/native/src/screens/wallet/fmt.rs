@@ -2,6 +2,8 @@
 //! (formatUnits, formatAmount, usd, price), review/packages.ts (shortId, normId) and the kit's Addr.
 //! Base units are integers end to end; only USD display goes through floats, as in TS.
 
+use rare_i18n::{tr, trf};
+
 /// `normalizeSuiAddress`: lower case, `0x`, padded to 64 hex digits.
 pub fn norm_id(id: &str) -> String {
     let s = id.trim();
@@ -293,7 +295,6 @@ pub fn civil(z: i64) -> (i64, u32, u32) {
     (yoe + era * 400 + i64::from(m <= 2), m, d)
 }
 
-pub const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /// Local wall time: ms since the epoch shifted by the device's UTC offset (minutes).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -318,20 +319,16 @@ pub fn local(ms: i64, tz_min: i32) -> Local {
 /// `toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })` in en-US: "3:07 PM".
 pub fn time_hm(ms: i64, tz_min: i32) -> String {
     let l = local(ms, tz_min);
-    let h12 = match l.hour % 12 {
-        0 => 12,
-        h => h,
-    };
-    format!("{h12}:{:02} {}", l.minute, if l.hour < 12 { "AM" } else { "PM" })
+    rare_i18n::fmt::time_hm(l.hour, l.minute)
 }
 
 /// `toLocaleDateString([], { month: "short", day: "numeric" })`: "Mar 4" (with ", 2025" when `year`).
 pub fn date_md(ms: i64, tz_min: i32, year: bool) -> String {
     let l = local(ms, tz_min);
     if year {
-        format!("{} {}, {}", MONTHS[(l.month - 1) as usize], l.day, l.year)
+        rare_i18n::fmt::date_ymd(l.year as i32, l.month, l.day)
     } else {
-        format!("{} {}", MONTHS[(l.month - 1) as usize], l.day)
+        rare_i18n::fmt::date_md(l.month, l.day)
     }
 }
 
@@ -355,14 +352,14 @@ pub fn to_precision(x: f64, p: usize) -> String {
 
 /// `toLocaleString([], { dateStyle: "medium", timeStyle: "short" })` in en-US: "Oct 27, 2026, 3:07 PM".
 pub fn date_time_medium(ms: i64, tz_min: i32) -> String {
-    format!("{}, {}", date_md(ms, tz_min, true), time_hm(ms, tz_min))
+    trf!(tr().wallet.date_time, date = date_md(ms, tz_min, true), time = time_hm(ms, tz_min))
 }
 
 /// lib/fail.ts `failed`: the one sentence a player sees ("Couldn't ... . Try again."); the raw
 /// error goes to the log only.
 pub fn failed(what: &str) -> String {
     log::warn!("error: {what}");
-    format!("{what} Try again.")
+    trf!(tr().wallet.failed_try_again, what = what)
 }
 
 /// `Number.prototype.toFixed(d)`: the exact binary value rounded to `d` decimals, a tie going

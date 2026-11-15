@@ -5,6 +5,7 @@
 //! each update ([`drain`]); the keyboard's answers come back through `Screen::answer`.
 
 use super::data::{self, Answers};
+use rare_i18n::tr;
 use super::feed::Feed;
 use super::host::*;
 use super::shell::Marketplace;
@@ -174,7 +175,7 @@ impl LiveMarket {
             let (key, title, placeholder, value) = match rest.split_once('|') {
                 // The marketplace's search field ("osk:<title>|<placeholder>").
                 Some((t, p)) => (MARKET_SEARCH.to_string(), t.to_string(), Some(p.to_string()), String::new()),
-                None if rest == "search-coin" => (format!("trade:{rest}"), "Search coins".to_string(), Some("Name, symbol or coin type".to_string()), String::new()),
+                None if rest == "search-coin" => (format!("trade:{rest}"), tr().market.search_coins.to_string(), Some(tr().market.search_coins_hint.to_string()), String::new()),
                 None => (format!("trade:{rest}"), rest.replace('-', " "), None, String::new()),
             };
             post(AppAct::Osk { key, title, placeholder, value });

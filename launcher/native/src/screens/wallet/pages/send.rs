@@ -9,6 +9,7 @@ use crate::screens::wallet::home::page::PortfolioLoad;
 use crate::screens::wallet::home::stack::WalletView;
 use crate::screens::wallet::kit::{avatar, btn, btn_full, field, list_button, page, panel, sheet, FieldSpec, SheetSpec, Size, Variant};
 use crate::screens::wallet::markup::*;
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::sign::amount::{amount_pad, base_to_usd, chip_amount, pad_press, parse_units, to_input, usd_to_base, SUI_GAS_RESERVE};
 use crate::screens::wallet::sign::recipient::{recipient_line, recipient_picks, Recent, RecipientState};
 use crate::screens::wallet::types::{PortfolioToken, RareAccount};
@@ -87,6 +88,8 @@ pub struct SendCoin {
     pub max: bool,
     pub balance: i128,
     pub title: String,
+    /// The toast once it went through ("Sent 12.5 SUI").
+    pub done: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -153,22 +156,22 @@ pub fn derive<'a>(pr: &Props<'a>, st: &State) -> Derived<'a> {
         _ => false,
     };
     let cta = if !has_amount {
-        "Enter an amount".to_string()
+        tr().wallet.cta_enter_amount.to_string()
     } else if over {
-        format!("Not enough {symbol}")
+        trf!(tr().wallet.cta_not_enough, symbol = symbol)
     } else if no_gas {
-        "Leave some SUI for gas".into()
+        tr().wallet.cta_leave_gas.into()
     } else if ready.is_none() {
         match pr.rs {
-            RecipientState::Empty => "Enter a recipient",
-            RecipientState::Loading { .. } => "Looking up name",
-            _ => "Check the recipient",
+            RecipientState::Empty => tr().wallet.cta_enter_recipient,
+            RecipientState::Loading { .. } => tr().wallet.cta_looking_up,
+            _ => tr().wallet.cta_check_recipient,
         }
         .into()
     } else if self_ {
-        "Pick another address".into()
+        tr().wallet.cta_pick_another.into()
     } else {
-        "Review".into()
+        tr().wallet.cta_review.into()
     };
     let can_review = pr.can_sign && has_amount && !over && !no_gas && ready.is_some() && !self_ && !st.busy;
     let live = pr.active && !st.picker && !st.busy && !pr.sheet_open;
@@ -184,7 +187,7 @@ pub fn view(pr: &Props, st: &State) -> Option<El<Msg>> {
     } else if d.price.is_some() {
         format!("≈ {}", usd(d.usd_value.unwrap_or(0.0)))
     } else {
-        "No price".into()
+        tr().wallet.no_price.into()
     };
     let mut body = Vec::new();
     if !pr.can_sign {
@@ -193,15 +196,15 @@ pub fn view(pr: &Props, st: &State) -> Option<El<Msg>> {
             None,
             "mx-auto mb-6 max-w-[64rem] px-5 py-4",
             vec![
-                p("text-base font-semibold").text("This account is watch only"),
-                p("mt-1 text-sm text-secondary").text("Add an account that can sign to send from this wallet."),
-                btn("Add an account", Variant::Primary, "mt-3", Some(Msg::Push(WalletView::Add))),
+                p("text-base font-semibold").text(tr().wallet.watch_only_title),
+                p("mt-1 text-sm text-secondary").text(tr().wallet.watch_only_body),
+                btn(tr().wallet.add_an_account, Variant::Primary, "mt-3", Some(Msg::Push(WalletView::Add))),
             ],
         ));
     }
     let picker_btn = button("flex h-16 w-full items-center gap-3 rounded border border-border-light px-4 text-left", Some(Msg::OpenPicker))
         .kid(avatar(d.token.and_then(|t| t.icon_url.as_deref()), &d.symbol, "2.25rem", false))
-        .kid(span("min-w-0 flex-1").kid(span("block truncate text-base font-semibold").text(&d.symbol)).kid(span("block truncate text-xs text-secondary tabular-nums").text(format!("Balance {}", format_units(d.avail, d.decimals, 4)))))
+        .kid(span("min-w-0 flex-1").kid(span("block truncate text-base font-semibold").text(&d.symbol)).kid(span("block truncate text-xs text-secondary tabular-nums").text(trf!(tr().wallet.balance_of, amount = format_units(d.avail, d.decimals, 4)))))
         .kid(icon("chevron-down", "text-icon-secondary").attr("size", "1.25rem"));
     let amount_line = p(cn(&[
         "max-w-full truncate font-bold tabular-nums",
@@ -213,9 +216,9 @@ pub fn view(pr: &Props, st: &State) -> Option<El<Msg>> {
     .text(&shown);
     let conv = if d.price.is_some() {
         button("mt-1 rounded px-2 py-1 text-base text-secondary tabular-nums", Some(Msg::ToggleMode))
-            .label(if st.mode == Mode::Usd { "Type in coins" } else { "Type in USD" })
+            .label(if st.mode == Mode::Usd { tr().wallet.type_in_coins } else { tr().wallet.type_in_usd })
             .kid(text(format!("{converse} ")))
-            .kid(span("ml-1 text-xs").text("Switch"))
+            .kid(span("ml-1 text-xs").text(tr().wallet.switch))
     } else {
         p("mt-1 py-1 text-base text-secondary").text(&converse)
     };
@@ -226,12 +229,12 @@ pub fn view(pr: &Props, st: &State) -> Option<El<Msg>> {
             div("grid grid-cols-3 gap-2")
                 .kid(btn_full("25%", Variant::Secondary, Size::Md, false, "", Some(Msg::Chip(25))))
                 .kid(btn_full("50%", Variant::Secondary, Size::Md, false, "", Some(Msg::Chip(50))))
-                .kid(btn_full("Max", Variant::Secondary, Size::Md, false, "", Some(Msg::Chip(100)))),
+                .kid(btn_full(tr().wallet.max, Variant::Secondary, Size::Md, false, "", Some(Msg::Chip(100)))),
         )
         .kid(amount_pad(d.live, Msg::Key, d.can_review.then_some(Msg::Review)));
     let mut right = div("flex min-w-0 flex-col gap-4").kid(
         div("")
-            .kid(field(FieldSpec { label: Some("To"), value: &st.to, placeholder: Some("0x address or name.sui"), ..Default::default() }, Msg::TypeTo))
+            .kid(field(FieldSpec { label: Some(tr().wallet.to), value: &st.to, placeholder: Some(tr().wallet.recipient_placeholder), ..Default::default() }, Msg::TypeTo))
             .kid_opt(recipient_line(pr.rs, d.self_)),
     );
     if d.ready.is_none() {
@@ -239,19 +242,19 @@ pub fn view(pr: &Props, st: &State) -> Option<El<Msg>> {
     }
     let mut foot = div("mt-auto");
     if st.is_max && d.is_sui {
-        foot = foot.kid(p("mb-2 text-sm text-secondary").text("Max sends everything. The network fee comes out of it."));
+        foot = foot.kid(p("mb-2 text-sm text-secondary").text(tr().wallet.max_note));
     }
     if let Some(e) = &st.error {
         foot = foot.kid(p("mb-2 text-sm text-negative").role("alert").text(e));
     }
-    foot = foot.kid(btn(if st.busy { "Opening review" } else { &d.cta }, if d.can_review { Variant::Primary } else { Variant::Dimmed }, "w-full", d.can_review.then_some(Msg::Review)));
+    foot = foot.kid(btn(if st.busy { tr().wallet.opening_review } else { &d.cta }, if d.can_review { Variant::Primary } else { Variant::Dimmed }, "w-full", d.can_review.then_some(Msg::Review)));
     right = right.kid(foot);
     body.push(div("mx-auto grid max-w-[64rem] grid-cols-[minmax(0,22rem)_minmax(0,1fr)] gap-10").kid(left).kid(right));
     if st.picker {
         let has_current = d.held.iter().any(|t| norm_type(&t.coin_type) == st.coin_type);
         let mut list = div("-mx-4 flex flex-col");
         if d.held.is_empty() {
-            list = list.kid(p("px-4 py-6 text-center text-sm text-secondary").text("No coins in this account yet."));
+            list = list.kid(p("px-4 py-6 text-center text-sm text-secondary").text(tr().wallet.no_coins_in_account));
         }
         for (i, t) in d.held.iter().enumerate() {
             let body_text = format!("{}{}", format_units(t.raw, t.decimals, 4), t.value_usd.map(|v| format!(" · {}", usd(v))).unwrap_or_default());
@@ -260,17 +263,17 @@ pub fn view(pr: &Props, st: &State) -> Option<El<Msg>> {
                     .key(&t.coin_type),
             );
         }
-        body.push(sheet(SheetSpec { title: "Send which coin".into(), subtitle: None, icon: None, footer: None, close: Some(Msg::ClosePicker), width: "36rem" }, vec![list]));
+        body.push(sheet(SheetSpec { title: tr().wallet.send_which_coin.into(), subtitle: None, icon: None, footer: None, close: Some(Msg::ClosePicker), width: "36rem" }, vec![list]));
     }
-    Some(page(Some("Send"), Some(text(format!("From {}", account.label))), None, false, "", body).attr("data-ready", account.address.clone()))
+    Some(page(Some(tr().common.send), Some(text(trf!(tr().wallet.from_account, name = account.label))), None, false, "", body).attr("data-ready", account.address.clone()))
 }
 
 pub fn hints(pr: &Props, st: &State) -> Vec<Hint> {
-    let mut h = vec![hint("a", "Select"), hint("x", "Delete")];
+    let mut h = vec![hint("a", tr().common.select), hint("x", tr().common.delete)];
     if derive(pr, st).can_review {
-        h.push(hint("start", "Review"));
+        h.push(hint("start", tr().wallet.cta_review));
     }
-    h.push(hint("b", "Back"));
+    h.push(hint("b", tr().common.back));
     h
 }
 
@@ -338,7 +341,8 @@ pub fn update(pr: &Props, st: &mut State, msg: Msg) -> Option<Effect> {
                 amount: d.amt,
                 max: st.is_max,
                 balance: d.avail,
-                title: format!("Send {} {}", format_units(d.amt, d.decimals, 4), d.symbol),
+                title: trf!(tr().wallet.send_amount, amount = format_units(d.amt, d.decimals, 4), symbol = d.symbol),
+                done: trf!(tr().wallet.sent_amount, amount = format_units(d.amt, d.decimals, 4), symbol = d.symbol),
             }));
         }
         Msg::Push(v) => return Some(Effect::Push(v)),
@@ -400,7 +404,7 @@ mod tests {
         let e = update(&pr, &mut st, Msg::Review).unwrap();
         assert_eq!(
             e,
-            Effect::Send(SendCoin { to: OTHER.into(), suins: Some("bob.sui".into()), coin_type: norm_type("0x2::sui::SUI"), amount: 12_500_000_000, max: false, balance: 1_204_500_000_000, title: "Send 12.5 SUI".into() })
+            Effect::Send(SendCoin { to: OTHER.into(), suins: Some("bob.sui".into()), coin_type: norm_type("0x2::sui::SUI"), amount: 12_500_000_000, max: false, balance: 1_204_500_000_000, title: "Send 12.5 SUI".into(), done: "Sent 12.5 SUI".into() })
         );
         assert!(view(&pr, &st).unwrap().contains_text("Opening review"));
         sent(&mut st, Err(Some("Could not send".into())));

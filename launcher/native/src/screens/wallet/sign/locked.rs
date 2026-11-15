@@ -7,6 +7,7 @@ use crate::screens::wallet::kit::{btn, sheet, SheetSpec, Variant};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::onboard::ceremony::Via;
 use crate::screens::wallet::onboard::pin_setup;
+use rare_i18n::tr;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Phase {
@@ -65,13 +66,14 @@ pub struct Props<'a> {
     pub forgot: bool,
 }
 
-pub const LOCKED: &str = "Locked. Use your phone to unlock";
-const BODY: &str = "5 wrong PINs locked the key on this SuiPlay. Your phone (or security key) unlocks it, then you pick a new PIN.";
+pub fn locked() -> &'static str {
+    tr().wallet_sign.locked_head
+}
 
 pub fn view(pr: &Props, st: &State) -> El<Msg> {
     let (title, body): (&str, Vec<El<Msg>>) = match &st.phase {
         Phase::Locked => {
-            let (head, body) = if pr.forgot { ("Use your backup to change the PIN", "Your phone or security key signs once, then you pick a new PIN.") } else { (LOCKED, BODY) };
+            let (head, body) = if pr.forgot { (tr().wallet_sign.forgot_head, tr().wallet_sign.forgot_body) } else { (locked(), tr().wallet_sign.locked_body) };
             let mut d = div("flex flex-col items-center gap-4 text-center")
                 .kid(icon("lock", "text-icon-secondary").attr("size", "2.25rem").attr("stroke-width", "1.5"))
                 .kid(p("text-lg font-semibold").role("status").text(head))
@@ -79,7 +81,7 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
             if let Some(e) = &st.error {
                 d = d.kid(p("max-w-[30rem] text-sm text-negative").text(e));
             }
-            (if pr.forgot { "Change PIN" } else { "Locked" }, vec![d])
+            (if pr.forgot { tr().wallet_sign.change_pin_title } else { tr().wallet_sign.locked_title }, vec![d])
         }
         Phase::Unlocking(via) => {
             let mut d = div("flex flex-col items-center gap-4 text-center");
@@ -87,29 +89,29 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
                 (Via::Phone, Passkey::Qr { url }) => {
                     d = d
                         .kid(el(Tag::Qr(url.clone()), "size-[16rem] rounded bg-white p-2"))
-                        .kid(p("max-w-[30rem] text-base").text("Scan this code with your phone's camera, then approve with Face ID or your fingerprint."))
-                        .kid(p("max-w-[30rem] text-sm text-secondary").text("Keep Bluetooth on for both."));
+                        .kid(p("max-w-[30rem] text-base").text(tr().wallet_sign.scan_code))
+                        .kid(p("max-w-[30rem] text-sm text-secondary").text(tr().wallet_sign.keep_bluetooth_both));
                 }
-                (Via::Phone, Passkey::Status { message }) => d = d.kid(div("py-10").kid(p("text-xl font-semibold").text("Approve on your phone")).kid(p("mt-2 text-sm text-secondary").text(message))),
-                (Via::Usb, Passkey::Status { message }) => d = d.kid(div("py-10").kid(p("text-xl font-semibold").text("Touch your security key")).kid(p("mt-2 text-sm text-secondary").text(message))),
-                (Via::Usb, _) => d = d.kid(div("py-10").kid(p("text-xl font-semibold").text("Touch your security key")).kid(p("mt-2 text-sm text-secondary").text("Plug it into the USB-C port on top. Touch it when it blinks."))),
+                (Via::Phone, Passkey::Status { message }) => d = d.kid(div("py-10").kid(p("text-xl font-semibold").text(tr().wallet_sign.approve_on_phone)).kid(p("mt-2 text-sm text-secondary").text(message))),
+                (Via::Usb, Passkey::Status { message }) => d = d.kid(div("py-10").kid(p("text-xl font-semibold").text(tr().wallet_sign.touch_key)).kid(p("mt-2 text-sm text-secondary").text(message))),
+                (Via::Usb, _) => d = d.kid(div("py-10").kid(p("text-xl font-semibold").text(tr().wallet_sign.touch_key)).kid(p("mt-2 text-sm text-secondary").text(tr().wallet_sign.plug_in_key))),
                 (_, Passkey::Error { message }) => d = d.kid(p("text-sm text-negative").text(message)),
-                _ => d = d.kid(div("py-10").kid(p("text-xl font-semibold").text("Getting ready")).kid(div("pointer-events-none absolute left-0 right-0 top-0 z-30 h-[2px] load-bar"))),
+                _ => d = d.kid(div("py-10").kid(p("text-xl font-semibold").text(tr().wallet_sign.getting_ready)).kid(div("pointer-events-none absolute left-0 right-0 top-0 z-30 h-[2px] load-bar"))),
             }
-            ("Unlock this SuiPlay", vec![d])
+            (tr().wallet_sign.unlock_title, vec![d])
         }
         Phase::NewPin | Phase::Saving => {
-            let mut d = div("pt-2").kid(pin_setup::view_pin_only(&st.pin, "Set a new PIN", "Your backup unlocked this SuiPlay. Pick a new PIN for it.", st.phase == Phase::Saving).map(&Msg::Pin));
+            let mut d = div("pt-2").kid(pin_setup::view_pin_only(&st.pin, tr().wallet_sign.set_new_pin, tr().wallet_sign.new_pin_body, st.phase == Phase::Saving).map(&Msg::Pin));
             if let Some(e) = &st.error {
                 d = d.kid(p("mt-3 text-center text-sm text-negative").text(e));
             }
-            (if pr.forgot { "Change PIN" } else { "Unlocked" }, vec![d])
+            (if pr.forgot { tr().wallet_sign.change_pin_title } else { tr().wallet_sign.unlocked_title }, vec![d])
         }
     };
     let mut body = body;
     if st.phase == Phase::Locked {
         let mut ways = div("mx-auto mt-6 flex w-full max-w-[26rem] flex-col gap-3");
-        let (lp, lk) = if pr.forgot { ("Use your phone", "Use your security key") } else { ("Unlock with your phone", "Unlock with your security key") };
+        let (lp, lk) = if pr.forgot { (tr().wallet_sign.use_phone, tr().wallet_sign.use_key) } else { (tr().wallet_sign.unlock_phone, tr().wallet_sign.unlock_key) };
         if pr.phone {
             ways = ways.kid(btn(lp, Variant::Primary, "w-full", Some(Msg::Unlock(Via::Phone))).def(true));
         }
@@ -117,11 +119,11 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
             ways = ways.kid(btn(lk, if pr.phone { Variant::Secondary } else { Variant::Primary }, "w-full", Some(Msg::Unlock(Via::Usb))).def(!pr.phone));
         }
         if !pr.forgot {
-            ways = ways.kid(btn(if pr.phone { "Sign this with your phone instead" } else { "Sign this with your key instead" }, Variant::Secondary, "w-full", Some(Msg::Phone)));
+            ways = ways.kid(btn(if pr.phone { tr().wallet_sign.sign_phone_instead } else { tr().wallet_sign.sign_key_instead }, Variant::Secondary, "w-full", Some(Msg::Phone)));
         }
         body.push(ways);
     }
-    let footer = vec![btn("Cancel", Variant::Secondary, "flex-1", Some(Msg::Cancel))];
+    let footer = vec![btn(tr().common.cancel, Variant::Secondary, "flex-1", Some(Msg::Cancel))];
     sheet(SheetSpec { title: title.into(), subtitle: None, icon: None, footer: Some(footer), close: Some(Msg::Cancel), width: "40rem" }, body)
 }
 
@@ -190,7 +192,7 @@ mod tests {
         let pr = Props { phone: true, key: true, passkey: &Passkey::Idle, forgot: false };
         let mut st = State::default();
         let v = view(&pr, &st);
-        assert!(v.contains_text(LOCKED));
+        assert!(v.contains_text(locked()));
         assert!(v.contains_text("Unlock with your phone") && v.contains_text("Unlock with your security key") && v.contains_text("Sign this with your phone instead"));
         assert_eq!(update(&mut st, Msg::Unlock(Via::Usb)), Some(Effect::Unlock(Via::Usb)));
         assert!(view(&pr, &st).contains_text("Touch your security key"));

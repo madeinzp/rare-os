@@ -3,6 +3,7 @@
 
 use crate::screens::overlay::common::*;
 use crate::screens::settings::{config::Config, rows::*, SectionOut, SectionView};
+use rare_i18n::{tr, trf};
 use rare_render::Id;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -28,10 +29,10 @@ pub struct EmuUpdateInfo {
 
 fn power_label(p: &str) -> &'static str {
     match p {
-        "quiet" => "Quiet",
-        "performance" => "Performance",
-        "custom" => "Custom",
-        _ => "Balanced",
+        "quiet" => tr().emulators.power_quiet,
+        "performance" => tr().emulators.power_performance,
+        "custom" => tr().emulators.power_custom,
+        _ => tr().emulators.power_balanced,
     }
 }
 
@@ -50,15 +51,22 @@ pub fn date_text(secs: Option<i64>) -> String {
     let d = doy - (153 * mp + 2) / 5 + 1;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = if m <= 2 { y + 1 } else { y };
-    const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    format!("{} {}, {}", MONTHS[(m - 1) as usize], d, y)
+    let e = &tr().emulators;
+    let months = [e.month_jan, e.month_feb, e.month_mar, e.month_apr, e.month_may, e.month_jun, e.month_jul, e.month_aug, e.month_sep, e.month_oct, e.month_nov, e.month_dec];
+    trf!(e.date_fmt, month = months[(m - 1) as usize], day = d, year = y)
 }
 
 /// The row's line for an emulator (checked or not).
 pub fn emu_body(e: &EmuInfo, u: Option<&EmuUpdateInfo>) -> String {
     match u {
-        Some(u) if u.available => format!("{} is out{}. Installed {}.", u.tag, if u.verify == "checksum" { ", checksum published" } else { ", no checksum published" }, date_text(e.modified)),
-        _ => format!("Installed {}{}. Starts on {} power.", date_text(e.modified), e.tag.as_ref().map(|t| format!(", {t}")).unwrap_or_default(), power_label(&e.power)),
+        Some(u) if u.available => {
+            let s = if u.verify == "checksum" { tr().emulators.update_out_checksum } else { tr().emulators.update_out_no_checksum };
+            trf!(s, tag = u.tag, date = date_text(e.modified))
+        }
+        _ => match e.tag.as_ref() {
+            Some(t) => trf!(tr().emulators.installed_tag, date = date_text(e.modified), tag = t, power = power_label(&e.power)),
+            None => trf!(tr().emulators.installed, date = date_text(e.modified), power = power_label(&e.power)),
+        },
     }
 }
 
@@ -74,7 +82,7 @@ impl EmulatorsSection {
         let p = panel(cx, parent);
         let installed: Vec<EmuInfo> = list.unwrap_or_default().into_iter().filter(|e| e.path.is_some()).collect();
         if installed.is_empty() {
-            setting_row(cx, p, "No emulators found", Some("Put emulator AppImages in the Applications folder in your home folder and they show up here."), true);
+            setting_row(cx, p, tr().emulators.none_title, Some(tr().emulators.none_body), true);
         }
         let mut f_out = Vec::new();
         for (i, e) in installed.iter().enumerate() {
@@ -83,9 +91,9 @@ impl EmulatorsSection {
             let disabled = busy.is_some();
             let is_busy = busy.as_deref() == Some(e.id.as_str());
             let b = if u.as_ref().is_some_and(|u| u.available) {
-                button(cx, row_.right, if is_busy { "Updating" } else { "Update" }, if disabled { Variant::Dimmed } else { Variant::Primary }, Sz::Md, false)
+                button(cx, row_.right, if is_busy { tr().emulators.updating } else { tr().common.update }, if disabled { Variant::Dimmed } else { Variant::Primary }, Sz::Md, false)
             } else {
-                button(cx, row_.right, if is_busy { "Checking" } else { "Check for update" }, if disabled { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false)
+                button(cx, row_.right, if is_busy { tr().emulators.checking } else { tr().emulators.check_update }, if disabled { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false)
             };
             nav.add(b.sid("emulators").tag(i as u32).group(10));
             f_out.push(u);

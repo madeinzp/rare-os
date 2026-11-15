@@ -285,7 +285,7 @@ impl Marketplace {
                 let ask = matches!(&v, View::Search { q } if q.is_empty());
                 self.push(cx, v, now);
                 if ask {
-                    Out::Act(super::search::ASK.into())
+                    Out::Act(super::search::ask())
                 } else {
                     Out::Moved
                 }

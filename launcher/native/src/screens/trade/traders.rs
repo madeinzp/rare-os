@@ -3,6 +3,7 @@
 //! out. Followed traders and their latest trades sit on the right. X switches 7 and 30 days; A
 //! opens a trader.
 
+use rare_i18n::{tr, trf, trn};
 use super::ui::{coin_logo, tf_chips};
 use crate::kit::format::{NumKind, NumOptions};
 use crate::kit::{cell, dot, head_row, num, panel, row, section_head, spark, DotTone};
@@ -177,13 +178,13 @@ pub fn pct(v: Option<f64>) -> String {
 pub fn ago(ms: f64, now: f64) -> String {
     let s = ((now - ms) / 1000.0).round().max(0.0) as i64;
     if s < 60 {
-        format!("{s}s")
+        trf!(tr().trade.age_s, n = s)
     } else if s < 3600 {
-        format!("{}m", s / 60)
+        trf!(tr().trade.age_m, n = s / 60)
     } else if s < 86_400 {
-        format!("{}h", s / 3600)
+        trf!(tr().trade.age_h, n = s / 3600)
     } else {
-        format!("{}d", s / 86_400)
+        trf!(tr().trade.age_d, n = s / 86_400)
     }
 }
 
@@ -249,16 +250,16 @@ fn ct(ui: &Ui, text: impl Into<String>, t: T, end: bool) -> El {
 /// The section's page (TradersSection's JSX).
 pub fn section(ui: &mut Ui, d: &TradersData, win: Window, sort: Sort) -> El {
     let rows = d.ranked(sort);
-    let mut wins = tf_chips(ui, &["7 days", "30 days"], if win == Window::D7 { 0 } else { 1 }, "tr-traders-win", T_WINDOW);
+    let mut wins = tf_chips(ui, &[tr().trade.days_7, tr().trade.days_30], if win == Window::D7 { 0 } else { 1 }, "tr-traders-win", T_WINDOW);
     // useLandingFocus: the section's first focusable (the window chips), not the search above.
     if let Some(first) = wins.kids.first_mut() {
         *first = default_nav(std::mem::take(first));
     }
-    let sorts = tf_chips(ui, &["Realized P/L", "Win rate"], if sort == Sort::Pnl { 0 } else { 1 }, "tr-traders-sort", T_SORT);
-    let note = format!("At least {} trades and ${}K volume. Wash and bot-like wallets left out.", MIN_TRADES as i64, (MIN_VOLUME_USD / 1000.0) as i64);
+    let sorts = tf_chips(ui, &[tr().trade.realized_pnl, tr().trade.win_rate], if sort == Sort::Pnl { 0 } else { 1 }, "tr-traders-sort", T_SORT);
+    let note = trf!(tr().trade.board_note, trades = MIN_TRADES as i64, volume = (MIN_VOLUME_USD / 1000.0) as i64);
     let bar = ui.bx(s().row().items_center().gap(1.0).mx(2.5).mb(1.0)).child(wins).child(sorts).child(ui.bx(s().ml_auto()).child(ui.text(note, T::new(Ty::Label).c(tok::MUTED))));
 
-    let heads: Vec<El> = ["#", "Trader", "Realized P/L", "Win rate", "Trades", "Volume", "30 days"].iter().enumerate().map(|(i, l)| ct(ui, *l, T::new(Ty::Label).w(500).c(tok::MUTED), i > 1)).collect();
+    let heads: Vec<El> = ["#", tr().trade.trader, tr().trade.realized_pnl, tr().trade.win_rate, tr().trade.trades, tr().trade.volume, tr().trade.days_30].iter().enumerate().map(|(i, l)| ct(ui, *l, T::new(Ty::Label).w(500).c(tok::MUTED), i > 1)).collect();
     let mut table = panel(ui, s().col().min0().p(1.0)).child(head_row(ui, &COLS, heads));
     let mut list = ui.bx(s().col()).group(crate::kit::group("tr-traders", false));
     let following: Vec<String> = d.follows.iter().map(|f| f.address.to_ascii_lowercase()).collect();
@@ -266,7 +267,7 @@ pub fn section(ui: &mut Ui, d: &TradersData, win: Window, sort: Sort) -> El {
         let r = &t.row;
         let mut words: Vec<String> = style_words(&t.tags).into_iter().take(2).collect();
         if let Some(l) = t.linked {
-            words.push(format!("Linked to {} {}", l - 1, if l == 2 { "wallet" } else { "wallets" }));
+            words.push(trn!(tr().trade.linked_wallets, l - 1));
         }
         let mut name_line = ui.bx(s().row().items_center().gap(0.5)).child(ui.text(trader_name(&r.user), T::new(Ty::Body).w(600).trunc()));
         if following.contains(&t.address) {
@@ -294,15 +295,15 @@ pub fn section(ui: &mut Ui, d: &TradersData, win: Window, sort: Sort) -> El {
             cell(ui, true).maybe(num(ui, s(), NumKind::Market, Some(r.volume_usd), NumOptions::default(), small.c(tok::MUTED), true)),
             curve,
         ];
-        let rw = row(ui, &COLS, T_TRADER + i as u32, Some("Open"), cells).with_style(s().grid(&COLS).items_center().h(3.75).wp(1.0).gap_xy(0.5, 0.0).px(0.75).to_style(ui.rem));
+        let rw = row(ui, &COLS, T_TRADER + i as u32, Some(tr().common.open), cells).with_style(s().grid(&COLS).items_center().h(3.75).wp(1.0).gap_xy(0.5, 0.0).px(0.75).to_style(ui.rem));
         list = list.child(rw.key(rare_render::view::key(&t.address)));
     }
     table = table.child(list);
     if rows.is_empty() {
         let msg = if d.board_error {
-            "Top traders are unavailable right now. This page refreshes on its own."
+            tr().trade.traders_unavailable
         } else if d.board_loaded {
-            "No trader passes the activity minimum yet."
+            tr().trade.no_traders
         } else {
             ""
         };
@@ -310,15 +311,15 @@ pub fn section(ui: &mut Ui, d: &TradersData, win: Window, sort: Sort) -> El {
     }
 
     let note = (!d.follows.is_empty()).then(|| d.follows.len().to_string());
-    let mut fol = panel(ui, s().col().p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), "Following", note.as_deref(), None));
+    let mut fol = panel(ui, s().col().p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), tr().trade.following, note.as_deref(), None));
     if d.follows.is_empty() {
-        fol = fol.child(ui.text_s(s().px(0.75).pb(0.5), "Follow a trader to get their trades as they happen.", T::new(Ty::Small).c(tok::MUTED).wrap()));
+        fol = fol.child(ui.text_s(s().px(0.75).pb(0.5), tr().trade.follow_hint, T::new(Ty::Small).c(tok::MUTED).wrap()));
     } else {
         let mut l = ui.bx(s().col()).group(crate::kit::group("tr-following", false));
         for (i, f) in d.follows.iter().enumerate() {
             let av = trader_avatar(ui, &UserChip { address: f.address.clone(), ..Default::default() }, 1.75);
             let r = ui.bx(s().row().items_center().gap(0.75).h(3.0).wp(1.0).px(0.75)).radius(ui.r(0.5)).child(av).child(ui.text(f.name.clone(), T::new(Ty::Body).w(600).trunc()));
-            l = l.child(crate::kit::nav(crate::kit::row_look(r), T_FOLLOWING + i as u32, Some("Open"), None, false));
+            l = l.child(crate::kit::nav(crate::kit::row_look(r), T_FOLLOWING + i as u32, Some(tr().common.open), None, false));
         }
         fol = fol.child(l);
     }

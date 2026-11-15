@@ -8,6 +8,7 @@
 //! modal layer. Views rebuild only when their stamp moves; after a layout every view registers with
 //! Nav, Nav settles focus, and every view draws it (`View::set_focus`).
 
+use rare_i18n::{tr, trf, trn};
 use crate::act::Act;
 use crate::data::backend::Backend;
 use crate::kit::controls::{LOAD_SX, LOAD_X};
@@ -17,7 +18,7 @@ use crate::screens::shell::boot::{Boot, Phase as BootPhase};
 use crate::screens::shell::options::{game_options, Options, SCOPE as SCOPE_OPTIONS};
 use crate::screens::shell::placeholder::Placeholder;
 use crate::screens::shell::{self, clock_text};
-use crate::state::{cancellable, Overlay, OskFor, OskReq, Phase, Start, State, Tab, Tone, TABS};
+use crate::state::{cancellable, Overlay, OskFor, OskReq, Phase, Start, State, Tab, Tone, tabs};
 use rare_render::anim::Keys;
 use rare_render::focus::hints::{compose, hint, Hint, Key, Stack};
 use rare_render::focus::{Dir, Nav, Spot};
@@ -322,8 +323,9 @@ macro_rules! each_view {
 }
 
 impl App {
-    pub fn new(mut scene: Scene, text: TextSys, mut images: ImageLoader, backend: Arc<dyn Backend>, waker: Arc<dyn Fn() + Send + Sync>, s0: Start0) -> App {
+    pub fn new(mut scene: Scene, mut text: TextSys, mut images: ImageLoader, backend: Arc<dyn Backend>, waker: Arc<dyn Fn() + Send + Sync>, s0: Start0) -> App {
         let now = clock::secs();
+        crate::lang::apply(&mut text);
         crate::features::bus::set_waker(waker.clone());
         crate::features::apps::init(backend.clone());
         crate::screens::wallet::service::install();
@@ -497,7 +499,7 @@ impl App {
                     Err(e) => {
                         log::warn!("scan: {e}");
                         if st.library.is_none() {
-                            st.toast("Couldn't read your library. Scan again from the Library tab.", Tone::Error, now);
+                            st.toast(tr().app.library_read_failed, Tone::Error, now);
                         }
                     }
                 }
@@ -554,6 +556,8 @@ impl App {
             "saveconflict" => self.st.open(Some(Overlay::Other(crate::features::cloudsync::CONFLICT))),
             "osk" => self.st.osk = Some(OskReq::new("Sui address or SuiNS name to watch", "rare.sui", Some("0x... or name.sui"), OskFor::Nothing)),
             "handoff" => self.st.handoff_until = Some(now + 3600.0),
+            // act:<act>: what a press would run (act:support:lang-open, the language list)
+            "act" => self.legacy_act(rest),
             "toast" => self.st.toast_for(rest.to_string(), Tone::Info, now, 3600.0),
             "signin" => self.st.open(Some(Overlay::Other("signin"))),
             // A Market page: market:collection:<slug>, market:item:<id>, ...
@@ -749,7 +753,7 @@ impl App {
             Btn::Lb | Btn::Rb => {
                 // LB/RB are always the launcher's tabs: a page or sheet over the tab closes first.
                 self.st.close();
-                let n = TABS.len();
+                let n = tabs().len();
                 let j = match self.st.tab.index() {
                     None => {
                         if b == Btn::Rb {
@@ -760,7 +764,7 @@ impl App {
                     }
                     Some(i) => (i + if b == Btn::Rb { 1 } else { n - 1 }) % n,
                 };
-                self.st.set_tab(TABS[j].0, false);
+                self.st.set_tab(tabs()[j].0, false);
                 self.fx.fb(Feedback::Tab);
                 true
             }
@@ -772,7 +776,7 @@ impl App {
                         let _ = be.quit(&id);
                         Box::new(|_: &mut State, _| {})
                     });
-                    self.st.toast("Cancelled", Tone::Info, now);
+                    self.st.toast(tr().app.cancelled, Tone::Info, now);
                     self.fx.fb(Feedback::Back);
                     return true;
                 }
@@ -931,7 +935,7 @@ impl App {
     fn open_stream_sheet(&mut self, kind: crate::screens::stream::SheetKind, now: f64) {
         use crate::screens::stream::{state::StreamState, StreamUi};
         let Some(api) = self.fx.backend.stream_api() else {
-            self.st.toast("PC streaming isn't set up on this device yet.", Tone::Info, now);
+            self.st.toast(tr().app.pc_streaming_not_set_up, Tone::Info, now);
             return;
         };
         let root = self.scene.root;
@@ -951,7 +955,7 @@ impl App {
             for n in nodes {
                 self.scene.remove(n);
             }
-            self.st.toast("That PC isn't answering.", Tone::Error, now);
+            self.st.toast(tr().app.pc_not_answering, Tone::Error, now);
             return;
         }
         for n in &nodes {
@@ -1363,33 +1367,33 @@ impl App {
                 self.apply_controls();
                 self.rescale = true;
             }
-            "settings:search" => ask(&mut self.st, "Search settings", "Brightness, Wi-Fi, volume", false, "query".into(), None),
+            "settings:search" => ask(&mut self.st, tr().app.search_settings_title, tr().app.search_settings_placeholder, false, "query".into(), None),
             "storage:scan" => {
                 self.run(Act::Scan);
-                self.st.toast("Looking for games", Tone::Info, now);
+                self.st.toast(tr().app.looking_for_games, Tone::Info, now);
             }
             "storage:add-folder" => self.open_folder_pick(),
             _ if a.starts_with("storage:") && self.storage_act(a) => {}
-            "storage:grid-key" => ask(&mut self.st, "SteamGridDB API key", "", true, "gridkey".into(), cfg.steamgriddb_key.clone()),
+            "storage:grid-key" => ask(&mut self.st, tr().app.steamgriddb_key_title, "", true, "gridkey".into(), cfg.steamgriddb_key.clone()),
             // Settings > Ask Rare. The key goes from the keyboard straight to Rare Wallet's vault.
             "ask:model" => {
                 let kind = cfg.agent_provider.as_deref().and_then(rare_agent::provider::Kind::from_id);
-                let ph = kind.map(|k| k.default_model()).filter(|m| !m.is_empty()).unwrap_or("Model name");
-                ask(&mut self.st, "Model", ph, false, "askmodel".into(), cfg.agent_model.clone());
+                let ph = kind.map(|k| k.default_model()).filter(|m| !m.is_empty()).unwrap_or(tr().app.model_name_placeholder);
+                ask(&mut self.st, tr().app.model_title, ph, false, "askmodel".into(), cfg.agent_model.clone());
             }
             "ask:url" => {
                 let kind = cfg.agent_provider.as_deref().and_then(rare_agent::provider::Kind::from_id);
                 let ph = if kind == Some(rare_agent::provider::Kind::Ollama) { "http://192.168.0.20:11434" } else { "https://example.com/v1" };
-                ask(&mut self.st, "Address", ph, false, "askurl".into(), cfg.agent_url.clone());
+                ask(&mut self.st, tr().app.address_title, ph, false, "askurl".into(), cfg.agent_url.clone());
             }
-            "ask:key" => ask(&mut self.st, "API key", "Paste or type your key", true, "askkey".into(), None),
+            "ask:key" => ask(&mut self.st, tr().app.api_key_title, tr().app.api_key_placeholder, true, "askkey".into(), None),
             "ask:key-remove" => {
                 if let Some(k) = cfg.agent_provider.as_deref().and_then(rare_agent::provider::Kind::from_id) {
                     crate::features::agent::save_key(k, None);
                 }
             }
             "ask:test" => {
-                self.st.toast("Asking your model...", Tone::Info, now);
+                self.st.toast(tr().app.asking_model, Tone::Info, now);
                 crate::features::agent::test();
             }
             "open:signin" => self.st.open(Some(Overlay::Other("signin"))),
@@ -1409,7 +1413,7 @@ impl App {
                 let addr = a["accounts:signout:".len()..].to_string();
                 match self.social.clone() {
                     Some(s) => s.sign_out_account(addr),
-                    None => self.st.toast("Signing out needs the live launcher.", Tone::Info, now),
+                    None => self.st.toast(tr().app.sign_out_needs_live, Tone::Info, now),
                 }
             }
             a if a.starts_with("accounts:main:") => {
@@ -1421,7 +1425,7 @@ impl App {
                     w.bump();
                     live::touch();
                 });
-                self.st.toast("Main account changed", Tone::Info, now);
+                self.st.toast(tr().app.main_account_changed, Tone::Info, now);
             }
             "accounts:signin" => {
                 if let Some(s) = self.social.clone() {
@@ -1431,14 +1435,14 @@ impl App {
             }
             "accounts:pin:change" => crate::screens::wallet::service::ask_pin_task(crate::screens::wallet::sign::pin_tasks::Task::Change),
             "accounts:pin:words" => crate::screens::wallet::service::ask_pin_task(crate::screens::wallet::sign::pin_tasks::Task::Words),
-            "accounts:send-pin:set" => ask(&mut self.st, "New PIN for big sends", "6 or more digits", true, "send-pin".into(), None),
-            "accounts:send-pin:off" => ask(&mut self.st, "Enter your PIN to turn it off", "Your PIN", true, "send-pin-off".into(), None),
+            "accounts:send-pin:set" => ask(&mut self.st, tr().app.send_pin_new_title, tr().app.send_pin_new_placeholder, true, "send-pin".into(), None),
+            "accounts:send-pin:off" => ask(&mut self.st, tr().app.send_pin_off_title, tr().app.send_pin_off_placeholder, true, "send-pin-off".into(), None),
             // Steam signs in (and out, or switches) in its own big-screen mode; the Rare button comes back.
             "accounts:steam" => self.open_steam(now),
             "network:portal" => self.portal_sign_in(now),
             "accounts:pick-username" => {
                 if self.social.is_none() {
-                    self.st.toast("Usernames need the live launcher.", Tone::Info, now);
+                    self.st.toast(tr().app.usernames_need_live, Tone::Info, now);
                 } else {
                     // Settings' reading when it is loaded, else what Rare already knows (the profile's
                     // Change username opens this without Settings ever loading).
@@ -1450,15 +1454,24 @@ impl App {
                 }
             }
             "os:restart-open" | "os:restore-open" => self.open_os_sheet(a == "os:restart-open"),
-            "support:tz-open" | "support:reset-open" => self.support_open(a),
-            "ssh:ask-password" => ask(&mut self.st, crate::screens::settings::remote::ask::PASSWORD_TITLE, "At least 8 characters", true, "ssh-password".into(), None),
+            "support:tz-open" | "support:reset-open" | "support:lang-open" => self.support_open(a),
+            // Settings > System > Language: saved, and the app is built again in it.
+            _ if a.starts_with("language:") => {
+                if let Some(l) = rare_i18n::Lang::from_code(&a["language:".len()..]) {
+                    if !self.fixture {
+                        crate::features::config::set(&[("language", l.code().into())]);
+                    }
+                    crate::lang::switch(l);
+                }
+            }
+            "ssh:ask-password" => ask(&mut self.st, crate::screens::settings::remote::ask::password_title(), tr().app.ssh_password_placeholder, true, "ssh-password".into(), None),
             "ssh:ask-key" => {
                 // A key on the clipboard is filled in, so pasting from a laptop is one press.
                 let clip = rare_system::ssh::clipboard_text().filter(|t| !rare_system::ssh::parse_keys(t).is_empty()).map(|t| rare_system::ssh::parse_keys(&t).join("\n"));
-                ask(&mut self.st, crate::screens::settings::remote::ask::KEY_TITLE, "ssh-ed25519 AAAA...", false, "ssh-key".into(), clip);
+                ask(&mut self.st, crate::screens::settings::remote::ask::key_title(), "ssh-ed25519 AAAA...", false, "ssh-key".into(), clip);
             }
-            "ssh:ask-github" => ask(&mut self.st, crate::screens::settings::remote::ask::GITHUB_TITLE, "octocat", false, "ssh-github".into(), None),
-            "streamhost:ask-pin" => ask(&mut self.st, "The PIN Moonlight shows", "4 digits", false, "streamhost-pin".into(), None),
+            "ssh:ask-github" => ask(&mut self.st, crate::screens::settings::remote::ask::github_title(), "octocat", false, "ssh-github".into(), None),
+            "streamhost:ask-pin" => ask(&mut self.st, tr().app.moonlight_pin_title, tr().app.moonlight_pin_placeholder, false, "streamhost-pin".into(), None),
             _ if ["capture:", "discord:", "streamhost:", "nearby:"].iter().any(|p| a.starts_with(p)) => {
                 if let Some((msg, err)) = crate::features::capture::act(a, None).filter(|m| !m.0.is_empty()) {
                     self.st.toast(&msg, if err { Tone::Error } else { Tone::Info }, now);
@@ -1470,9 +1483,9 @@ impl App {
             _ if a.starts_with("developer:endpoint:") => {
                 let field = &a["developer:endpoint:".len()..];
                 let title = match field {
-                    "testnetRpc" => "Testnet RPC address",
-                    "testnetApi" => "Testnet market API address",
-                    _ => "Testnet gas sponsor address",
+                    "testnetRpc" => tr().app.testnet_rpc_title,
+                    "testnetApi" => tr().app.testnet_api_title,
+                    _ => tr().app.testnet_sponsor_title,
                 };
                 let current = match field {
                     "testnetRpc" => cfg.testnet_rpc.clone(),
@@ -1483,13 +1496,13 @@ impl App {
             }
             _ if a.starts_with("network:join:1:") => {
                 let ssid = &a["network:join:1:".len()..];
-                ask(&mut self.st, &format!("Password for {ssid}"), "", true, format!("wifi:{ssid}"), None);
+                ask(&mut self.st, &trf!(tr().app.wifi_password_title, ssid = ssid), "", true, format!("wifi:{ssid}"), None);
             }
             _ if a.starts_with("stores:") => return crate::features::stores::act(&mut self.st, a, now),
             _ if a.starts_with("open-web:") => self.run(Act::OpenWeb(a["open-web:".len()..].to_string())),
             // Fixtures (shots, the crawler) run no system commands: say what would run instead of
             // nothing, so a device-only control is not mistaken for a dead one.
-            _ if self.fixture && live::owns(a) => self.st.toast("Runs on the device (fixture).", Tone::Info, now),
+            _ if self.fixture && live::owns(a) => self.st.toast(tr().app.runs_on_device, Tone::Info, now),
             _ if self.fixture => return false,
             _ => return live::run(a, arg, self.waker.clone()) == live::Ran::Started,
         }
@@ -1512,11 +1525,11 @@ impl App {
         if let Some(id) = rest("storage:move-game:") {
             // The game page's Move: Storage's move for that game, once its sizes are known.
             if !self.st.running.is_empty() {
-                self.st.toast("Close the running game first, then move it.", Tone::Info, now);
+                self.st.toast(tr().app.close_game_then_move, Tone::Info, now);
             } else if fst::snapshot().items.is_some() {
                 fst::start_move(&w, &id);
             } else {
-                self.st.toast("Finding where it can go", Tone::Info, now);
+                self.st.toast(tr().app.finding_where_it_can_go, Tone::Info, now);
                 self.pending_move = Some(id);
                 fst::measure(&w, now);
             }
@@ -1524,23 +1537,23 @@ impl App {
             self.st.toast(t, Tone::Info, now);
         } else if let Some(k) = rest("storage:move:") {
             if !self.st.running.is_empty() {
-                self.st.toast("Close the running game first, then move it.", Tone::Info, now);
+                self.st.toast(tr().app.close_game_then_move, Tone::Info, now);
             } else {
                 fst::start_move(&w, &k);
             }
         } else if let Some(id) = rest("storage:uninstall:") {
             match self.st.game(&id) {
                 Some(g) if crate::features::uninstall::can_uninstall(g) => crate::features::uninstall::open(&mut self.st, &id),
-                Some(_) => self.st.toast("Steam owns this one. Remove it in Steam.", Tone::Info, now),
-                None => self.st.toast("Rare is still reading this one. Try again in a moment.", Tone::Info, now),
+                Some(_) => self.st.toast(tr().app.steam_owns_this, Tone::Info, now),
+                None => self.st.toast(tr().app.still_reading_this, Tone::Info, now),
             }
         } else if let Some(p) = rest("storage:delete-ask:") {
             let size = fst::snapshot().items.and_then(|v| v.into_iter().find(|i| i.key == format!("orphan:{p}"))).map(|i| crate::screens::settings::storage::size_text(i.bytes)).unwrap_or_default();
             let ask = crate::screens::settings::live::Ask {
-                title: "Delete these leftover files?".into(),
+                title: tr().app.leftover_title.into(),
                 sub: size,
-                body: "A game you removed left its Windows saves and settings here. If you reinstall it, saves that aren't in the cloud are gone.\nThis can't be undone.".into(),
-                yes: "Delete".into(),
+                body: tr().app.leftover_body.into(),
+                yes: tr().common.delete.into(),
                 act: format!("storage:delete:{p}"),
             };
             self.open_confirm_sheet(&ask);
@@ -1550,7 +1563,7 @@ impl App {
             fst::clear_cache(&w, &k);
         } else if let Some(path) = rest("storage:folder:") {
             if let Err(e) = std::fs::create_dir_all(&path) {
-                self.st.toast(format!("Couldn't make {path}: {e}"), Tone::Error, now);
+                self.st.toast(trf!(tr().app.make_folder_failed, path = path, error = e), Tone::Error, now);
                 return true;
             }
             if let Some((_, screen, _)) = self.legacy_page.as_mut() {
@@ -1565,7 +1578,7 @@ impl App {
                 "storage:cancel" => fst::cancel(),
                 "storage:setup" => {
                     if self.st.running.iter().any(|r| r.starts_with("steam:")) {
-                        self.st.toast("Close the Steam game first. Steam restarts to add the card.", Tone::Info, now);
+                        self.st.toast(tr().app.close_steam_game_first, Tone::Info, now);
                     } else {
                         fst::start_set_up(&w);
                     }
@@ -1576,17 +1589,17 @@ impl App {
                         _ => fst::snapshot().drives.iter().find(|d| d.kind == rare_library::storage::DriveKind::Sd).map(|d| crate::screens::settings::storage::size_text(d.total)).unwrap_or_default(),
                     };
                     let ask = crate::screens::settings::live::Ask {
-                        title: "Erase and format the SD card?".into(),
-                        sub: if size.is_empty() { String::new() } else { format!("{size} card") },
-                        body: "Everything on the card is deleted, and this can't be undone.\nRare tests the card, formats it for games, then adds it to Steam and to your Games folders. It takes a minute or two. Keep the card in until it's done.".into(),
-                        yes: "Erase and format".into(),
+                        title: tr().app.sd_format_title.into(),
+                        sub: if size.is_empty() { String::new() } else { trf!(tr().app.sd_card_size, size = size) },
+                        body: tr().app.sd_format_body.into(),
+                        yes: tr().app.sd_format_yes.into(),
                         act: "storage:format".into(),
                     };
                     self.open_confirm_sheet(&ask);
                 }
                 "storage:format" => {
                     if self.st.running.iter().any(|r| r.starts_with("steam:")) {
-                        self.st.toast("Close the Steam game first. Steam restarts to add the card.", Tone::Info, now);
+                        self.st.toast(tr().app.close_steam_game_first, Tone::Info, now);
                     } else {
                         fst::start_format(&w);
                     }
@@ -1744,20 +1757,20 @@ impl App {
                 // The send PIN: typed twice, then saved; or typed to turn it off.
                 "send-pin" if !cancelled => {
                     if v.len() < 6 || !v.bytes().all(|b| b.is_ascii_digit()) {
-                        self.st.toast("Use at least 6 digits", Tone::Error, now);
+                        self.st.toast(tr().app.pin_min_digits, Tone::Error, now);
                     } else {
                         *SEND_PIN_FIRST.lock().unwrap() = Some(v);
-                        self.st.osk = Some(OskReq { secret: true, ..OskReq::new("Enter it again", "", Some("The same digits"), OskFor::Settings("send-pin-2".into())) });
+                        self.st.osk = Some(OskReq { secret: true, ..OskReq::new(tr().app.pin_again_title, "", Some(tr().app.pin_again_placeholder), OskFor::Settings("send-pin-2".into())) });
                     }
                 }
                 "send-pin-2" if !cancelled => {
                     let first = SEND_PIN_FIRST.lock().unwrap().take();
                     if first.as_deref() != Some(v.as_str()) {
-                        self.st.toast("The PINs did not match. Try again.", Tone::Error, now);
+                        self.st.toast(tr().app.pin_mismatch, Tone::Error, now);
                     } else {
                         let _ = crate::screens::wallet::service::work(move |w| {
                             match w.send_pin.set(&v, rare_wallet::send_pin::DEFAULT_THRESHOLD_USD) {
-                                Ok(()) => live::toast_pub("PIN for big sends is on", false),
+                                Ok(()) => live::toast_pub(tr().app.send_pin_on, false),
                                 Err(e) => live::toast_pub(rare_wallet::WalletError::parse(&e).message, true),
                             }
                             live::touch();
@@ -1767,7 +1780,7 @@ impl App {
                 "send-pin-off" if !cancelled => {
                     let _ = crate::screens::wallet::service::work(move |w| {
                         match w.send_pin.clear(&v) {
-                            Ok(()) => live::toast_pub("PIN for big sends is off", false),
+                            Ok(()) => live::toast_pub(tr().app.send_pin_off, false),
                             Err(e) => live::toast_pub(rare_wallet::WalletError::parse(&e).message, true),
                         }
                         live::touch();
@@ -1829,7 +1842,7 @@ impl App {
     pub fn ask_search(&mut self) {
         self.st.search.clear();
         self.st.ver.search += 1;
-        self.st.osk = Some(OskReq::new("Search games, Sui games, collections and coins", "", Some("Type a name"), OskFor::Search));
+        self.st.osk = Some(OskReq::new(tr().app.search_title, "", Some(tr().app.search_placeholder), OskFor::Search));
     }
 
     fn default_pad(&mut self, b: Btn, repeat: bool) {
@@ -1922,7 +1935,7 @@ impl App {
                     let r = b.stream_play(&uuid, app);
                     Box::new(move |st: &mut State, now| match r {
                         Ok(()) => {}
-                        Err(e) if e == crate::data::backend::NOT_WIRED => st.toast("PC streaming isn't set up on this device yet.", Tone::Info, now),
+                        Err(e) if e == crate::data::backend::NOT_WIRED => st.toast(tr().app.pc_streaming_not_set_up, Tone::Info, now),
                         Err(e) => st.toast(e, Tone::Error, now),
                     })
                 });
@@ -1979,7 +1992,7 @@ impl App {
             Act::Toast(t) => self.st.toast(t, Tone::Info, now),
             Act::ToggleFav(id) => {
                 let on = self.st.toggle_fav(&id);
-                self.st.toast(if on { "Added to favourites" } else { "Removed from favourites" }, Tone::Info, now);
+                self.st.toast(if on { tr().app.added_to_favourites } else { tr().app.removed_from_favourites }, Tone::Info, now);
             }
             Act::Collections(id) => {
                 if let Some(spec) = crate::screens::shell::options::collection_options(&self.st, &id) {
@@ -1990,7 +2003,7 @@ impl App {
             Act::CollectionToggle(name, id) => {
                 let on = self.st.toggle_in(&name, &id);
                 self.st.user_changed();
-                self.st.toast(if on { format!("Added to {name}") } else { format!("Removed from {name}") }, Tone::Info, now);
+                self.st.toast(if on { trf!(tr().app.added_to, name = name) } else { trf!(tr().app.removed_from, name = name) }, Tone::Info, now);
             }
             Act::NewCollection(game) => crate::state::ask_collection(&mut self.st, None, game),
             Act::ToggleHidden(id) => {
@@ -2012,7 +2025,7 @@ impl App {
             Act::QuitNow(id) => {
                 let name = self.st.run_name(&id);
                 self.fx.fb(Feedback::Back);
-                self.st.toast(format!("Closing {name}"), Tone::Info, now);
+                self.st.toast(trf!(tr().app.closing, name = name), Tone::Info, now);
                 self.fx.spawn(move |b| {
                     let r = b.quit(&id);
                     let running = b.running();
@@ -2020,7 +2033,7 @@ impl App {
                         st.set_running(running);
                         if let Err(e) = r {
                             log::warn!("quit {id}: {e}");
-                            st.toast(format!("Couldn't close {name}."), Tone::Error, now);
+                            st.toast(trf!(tr().app.close_failed, name = name), Tone::Error, now);
                         }
                     })
                 });
@@ -2042,7 +2055,7 @@ impl App {
                         if let Err(e) = r {
                             log::warn!("steam: {e}");
                             st.handoff_until = None;
-                            st.toast("Couldn't open Steam. Try again.", Tone::Error, now);
+                            st.toast(tr().app.open_steam_failed, Tone::Error, now);
                         }
                     })
                 });
@@ -2055,11 +2068,11 @@ impl App {
                         if let Some(l) = lib {
                             st.set_library(l);
                         }
-                        st.toast("Added to Steam.", Tone::Info, now)
+                        st.toast(tr().app.added_to_steam, Tone::Info, now)
                     }
                     Err(e) => {
                         log::warn!("steam library: {e}");
-                        st.toast(crate::screens::settings::live::failed("Couldn't add the folder to Steam.", &e, None), Tone::Error, now)
+                        st.toast(crate::screens::settings::live::failed(tr().app.add_folder_to_steam_failed, &e, None), Tone::Error, now)
                     }
                 })
             }),
@@ -2079,18 +2092,18 @@ impl App {
                                         st.set_library(l);
                                         st.toast(format!("{title} is in your library"), Tone::Info, now);
                                     }
-                                    Err(_) => st.toast("Couldn't read your library. Scan again from the Library tab.", Tone::Error, now),
+                                    Err(_) => st.toast(tr().app.library_read_failed, Tone::Error, now),
                                 }
                             })
                         });
                     }
-                    Err(e) => self.st.toast(crate::screens::settings::live::failed("Couldn't add the web game.", &e, None), Tone::Error, now),
+                    Err(e) => self.st.toast(crate::screens::settings::live::failed(tr().app.add_web_game_failed, &e, None), Tone::Error, now),
                 }
             }
             Act::OpenWeb(url) => {
                 if let Err(e) = crate::features::webgame::open_external(&url) {
                     log::warn!("open web {url}: {e}");
-                    self.st.toast("Couldn't open that page. Try again.", Tone::Error, now);
+                    self.st.toast(tr().app.open_page_failed, Tone::Error, now);
                 }
             }
             Act::PlayWeb { id, title, url } => {
@@ -2103,7 +2116,7 @@ impl App {
                     Box::new(move |st: &mut State, now| match r {
                         Ok(()) => {
                             if starting {
-                                st.toast(format!("Starting {title}"), Tone::Info, now);
+                                st.toast(trf!(tr().app.starting, title = title), Tone::Info, now);
                             }
                             st.set_running(running);
                         }
@@ -2128,15 +2141,14 @@ impl App {
                                 let found = st.games().len().saturating_sub(before);
                                 st.toast(
                                     match found {
-                                        0 => "Scan finished. No new games.".to_string(),
-                                        1 => "Scan finished. 1 new game.".to_string(),
-                                        n => format!("Scan finished. {n} new games."),
+                                        0 => tr().app.scan_none.to_string(),
+                                        n => trn!(tr().app.scan_found, n),
                                     },
                                     Tone::Info,
                                     now,
                                 );
                             }
-                            Err(_) => st.toast("Couldn't read your library. Scan again from the Library tab.", Tone::Error, now),
+                            Err(_) => st.toast(tr().app.library_read_failed, Tone::Error, now),
                         }
                     })
                 });
@@ -2219,7 +2231,7 @@ impl App {
             let running = b.running();
             Box::new(move |st: &mut State, now| match r {
                 Ok(()) => {
-                    st.toast(format!("Starting {}", g.title), Tone::Info, now);
+                    st.toast(trf!(tr().app.starting, title = g.title), Tone::Info, now);
                     for r in &running {
                         st.starts.entry(r.clone()).or_insert(Start { phase: Phase::Steam, since: now });
                     }
@@ -2227,7 +2239,7 @@ impl App {
                     st.set_running(running);
                     exit_tip_once(st, now);
                 }
-                Err(e) if e == crate::data::backend::NOT_WIRED => st.toast("Web games can't start on this device yet.", Tone::Info, now),
+                Err(e) if e == crate::data::backend::NOT_WIRED => st.toast(tr().app.web_games_not_wired, Tone::Info, now),
                 Err(e) => {
                     log::warn!("launch {}: {e}", g.id);
                     st.toast(format!("{} didn't start. Try again.", g.title), Tone::Error, now);
@@ -2245,8 +2257,8 @@ impl App {
         let before = self.scene.children(root);
         let screen: Box<dyn crate::screens::overlay::Screen> = {
             let mut cx = crate::screens::overlay::Cx { scene: &mut self.scene, t: &mut self.text, img: &mut self.images };
-            let body = format!("One game runs at a time. {a} closes first, the way its own Quit does; progress it has not saved is lost.");
-            Box::new(OsSheet::confirm_with(&mut cx, &format!("Close {a} and play {b}?"), "", &body, "Close and play", &format!("Keep playing {a}"), &format!("close-and-play:{old}\u{1f}{new}"), now))
+            let body = trf!(tr().app.close_and_play_body, name = a);
+            Box::new(OsSheet::confirm_with(&mut cx, &trf!(tr().app.close_and_play_title, a = a, b = b), "", &body, tr().app.close_and_play_yes, &trf!(tr().app.keep_playing, name = a), &format!("close-and-play:{old}\u{1f}{new}"), now))
         };
         let nodes: Vec<Id> = self.scene.children(root).into_iter().filter(|n| !before.contains(n)).collect();
         for n in &nodes {
@@ -2261,7 +2273,7 @@ impl App {
     fn close_and_play(&mut self, old: String, new: String) {
         let now = clock::secs();
         let name = self.st.run_name(&old);
-        self.st.toast(format!("Closing {name}"), Tone::Info, now);
+        self.st.toast(trf!(tr().app.closing, name = name), Tone::Info, now);
         self.fx.spawn(move |b| {
             let r = b.quit(&old);
             // Wait for it to be gone (Steam and emulators take a few seconds to save and exit).
@@ -2277,7 +2289,7 @@ impl App {
                     st.acts.push(Act::Launch(new));
                 } else {
                     log::warn!("close and play: {old} still running ({r:?})");
-                    st.toast(format!("Couldn't close {name}. Close it from the Rare menu, then play."), Tone::Error, now);
+                    st.toast(trf!(tr().app.close_failed_play, name = name), Tone::Error, now);
                 }
             })
         });
@@ -2316,6 +2328,10 @@ impl App {
     /// focus and the hints. Returns the next time a frame is needed.
     pub fn update(&mut self) -> Option<f64> {
         let now = clock::secs();
+        // A new language (Settings > System > Language, first run): main builds the app again in it.
+        if crate::lang::take_switched() {
+            self.rescale = true;
+        }
         let review_was = crate::screens::wallet::sign::host::active();
         while let Ok(done) = self.done_rx.try_recv() {
             done(&mut self.st, now);
@@ -2855,9 +2871,9 @@ impl App {
         let base: Vec<Hint> = match &st.overlay {
             _ if setup => Vec::new(),
             // Setup's account pages on the Wallet tab: no tabs or search there.
-            None if crate::features::firstrun::wallet_from_setup() => vec![hint(Key::Quick, "Quick settings")],
-            Some(_) => vec![hint(Key::LbRb, "Tabs")],
-            None => vec![hint(Key::Y, "Search"), hint(Key::LbRb, "Tabs"), hint(Key::Quick, "Quick settings")],
+            None if crate::features::firstrun::wallet_from_setup() => vec![hint(Key::Quick, tr().common.quick_settings)],
+            Some(_) => vec![hint(Key::LbRb, tr().common.tabs)],
+            None => vec![hint(Key::Y, tr().common.search), hint(Key::LbRb, tr().common.tabs), hint(Key::Quick, tr().common.quick_settings)],
         };
         let mut stack = Stack::default();
         stack.push(self.page.page.hints(st));
@@ -2884,7 +2900,7 @@ impl App {
         if let Some(sh) = self.share.as_ref().filter(|_| !crate::screens::wallet::sign::host::active() && st.osk.is_none()) {
             use crate::screens::market::host::Page;
             let mut h: Vec<Hint> = sh.page.hints().into_iter().filter_map(|(k, l)| crate::screens::market::live::hint_key(k).map(|k| hint(k, &l))).collect();
-            h.push(hint(Key::LbRb, "Tabs"));
+            h.push(hint(Key::LbRb, tr().common.tabs));
             over = Some(h);
         }
         self.hints = compose(over.as_deref(), &base, &stack, &self.nav.focused_hints(), can_back);
@@ -3077,11 +3093,11 @@ pub fn on_event(st: &mut State, e: rare_core::Event, now: f64) {
 /// `answer`, so a keyboard opened here for them was dropped).
 pub fn osk_for_act(a: &str) -> Option<(&'static str, &'static str)> {
     Some(match a {
-        "alert:type" => ("Alert price", "Price in USD"),
-        "items:price-other" => ("Price in SUI", "e.g. 12.5"),
-        "stream:ask-address" => ("Add a PC", "192.168.0.20"),
-        "support:reset-type" => ("Type RESET to reset this device", "RESET"),
-        "ask:type" => ("Ask Rare", "Start Hades, turn on Do not disturb..."),
+        "alert:type" => (tr().app.alert_price_title, tr().app.alert_price_placeholder),
+        "items:price-other" => (tr().app.price_sui_title, tr().app.price_sui_placeholder),
+        "stream:ask-address" => (tr().app.add_pc_title, "192.168.0.20"),
+        "support:reset-type" => (tr().app.reset_type_title, "RESET"),
+        "ask:type" => (tr().app.ask_rare_title, tr().app.ask_rare_placeholder),
         _ => return None,
     })
 }
@@ -3135,7 +3151,7 @@ impl App {
                 if let Err(e) = r {
                     log::warn!("steam: {e}");
                     st.handoff_until = None;
-                    st.toast("Couldn't open Steam. Try again.", Tone::Error, now);
+                    st.toast(tr().app.open_steam_failed, Tone::Error, now);
                 }
             })
         });
@@ -3158,7 +3174,7 @@ fn exit_tip_once(st: &mut State, now: f64) {
     }
     let _ = std::fs::create_dir_all(state_dir());
     let _ = std::fs::write(&p, b"1");
-    st.toast_for("Press the Rare button in any game for the Rare menu", Tone::Info, now, 8.0);
+    st.toast_for(tr().app.rare_button_hint, Tone::Info, now, 8.0);
 }
 
 /// A scene-built Screen as a Phase 4 page (nothing painted after the scene, no hints of its own).

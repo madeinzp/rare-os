@@ -3,6 +3,7 @@
 //! launcher, so the native and web screens show the same data. When rare-trade lands these become
 //! its types (or `From` its types).
 
+use rare_i18n::tr;
 use serde::Deserialize;
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq)]
@@ -33,8 +34,16 @@ pub enum PerpSide {
 impl PerpSide {
     pub fn word(self) -> &'static str {
         match self {
-            PerpSide::Long => "Long",
-            PerpSide::Short => "Short",
+            PerpSide::Long => tr().trade.long,
+            PerpSide::Short => tr().trade.short,
+        }
+    }
+    /// The side's word in running text ("Open long"): translated, unlike `lower`, which is a
+    /// machine key.
+    pub fn word_lower(self) -> &'static str {
+        match self {
+            PerpSide::Long => tr().trade.long_lower,
+            PerpSide::Short => tr().trade.short_lower,
         }
     }
     pub fn lower(self) -> &'static str {

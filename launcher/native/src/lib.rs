@@ -12,6 +12,7 @@ pub mod banners;
 pub mod data;
 pub mod features;
 pub mod kit;
+pub mod lang;
 pub mod page;
 pub mod side;
 pub mod screens;

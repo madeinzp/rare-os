@@ -1,5 +1,6 @@
-//! "Close a paused game?" (Switcher.tsx PausedFull): leaving a game would make three paused.
+//! tr().overlay.paused_title (Switcher.tsx PausedFull): leaving a game would make three paused.
 
+use rare_i18n::{tr, trf};
 use super::model::{FreezeFull, RunItem};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
@@ -17,9 +18,9 @@ impl PausedFull {
     pub fn build(cx: &mut Cx, ask: &FreezeFull, all: &[RunItem], now: f64) -> PausedFull {
         let r = cx.r();
         let root = cx.scene.root;
-        let name = |rid: &str| all.iter().find(|x| x.rid == rid).map(|x| x.name.clone()).unwrap_or_else(|| "A game".into());
-        let sub = format!("Two games are paused. Close one and {} pauses too, or keep it running.", name(&ask.pending));
-        let sh = sheet(cx, root, "Close a paused game?", Some(&sub), true, false, now);
+        let name = |rid: &str| all.iter().find(|x| x.rid == rid).map(|x| x.name.clone()).unwrap_or_else(|| tr().overlay.a_game.into());
+        let sub = trf!(tr().overlay.paused_sub, name = name(&ask.pending));
+        let sh = sheet(cx, root, tr().overlay.paused_title, Some(&sub), true, false, now);
         let mut nav = Nav::default();
         let n = ask.frozen.len();
         for (i, rid) in ask.frozen.iter().enumerate() {
@@ -30,14 +31,14 @@ impl PausedFull {
             }
             let col = cx.scene.add(row_, s().col().grow().done(), Node::default());
             cx.scene.add_text(cx.t, col, s().done(), &name(rid), ts(r, ty::BODY.0, ty::BODY.1, 500).truncate(), tok::FG);
-            text(cx, col, ty::SMALL, 400, tok::MUTED, "Paused");
-            let label = if it.is_some_and(|x| x.app) { "Close" } else { "Quit game" };
-            let hint = if it.is_some_and(|x| x.app) { "Close app" } else { "Quit game" };
+            text(cx, col, ty::SMALL, 400, tok::MUTED, tr().overlay.paused);
+            let label = if it.is_some_and(|x| x.app) { tr().common.close } else { tr().overlay.quit_game };
+            let hint = if it.is_some_and(|x| x.app) { tr().overlay.close_app } else { tr().overlay.quit_game };
             let b = button(cx, row_, label, Variant::Secondary, Sz::Sm, false).tag(i as u32).hint(hint).group(1);
             nav.add(b);
         }
-        let keep = format!("Keep {} running", name(&ask.pending));
-        let b = button(cx, sh.footer.unwrap(), &keep, Variant::Secondary, Sz::Md, false).tag(100).hint("Keep it running").group(2);
+        let keep = trf!(tr().overlay.keep_running, name = name(&ask.pending));
+        let b = button(cx, sh.footer.unwrap(), &keep, Variant::Secondary, Sz::Md, false).tag(100).hint(tr().overlay.keep_running_hint).group(2);
         nav.add(b);
         let first = nav.items[0].id;
         nav.focus(cx.scene, first, now, false);

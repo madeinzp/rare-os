@@ -5,6 +5,7 @@
 use super::{config::Config, rows::*, SectionOut, SectionView};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
+use rare_i18n::{tr, trf, trn};
 use rare_render::theme::tok;
 use rare_render::{Id, Node};
 
@@ -30,14 +31,21 @@ pub fn pretty_path(p: &str) -> String {
     out
 }
 
-pub const STEAM_START: [(&str, &str, &str); 3] = [
-    ("boot", "After startup", "Steam starts quietly a little after the launcher. Steam games start fastest. Keeps Steam running, which costs some battery."),
-    ("focus", "When I pick a game", "Steam starts quietly when you open a Steam game, so Play starts fast. Uses nothing until then."),
-    ("demand", "On Play", "Steam starts only when you press Play. Uses nothing, and the first game takes a few seconds longer."),
-];
+/// The ids of the Steam start choices, in cycle order; `steam_start_text` gives their words.
+pub const STEAM_START: [&str; 3] = ["boot", "focus", "demand"];
+
+/// (button label, row line) of a Steam start choice.
+fn steam_start_text(idx: usize) -> (&'static str, &'static str) {
+    let t = &tr().settings_more;
+    match idx {
+        0 => (t.sto_steam_boot, t.sto_steam_boot_body),
+        1 => (t.sto_steam_focus, t.sto_steam_focus_body),
+        _ => (t.sto_steam_demand, t.sto_steam_demand_body),
+    }
+}
 
 fn steam_start_idx(c: &Config) -> usize {
-    STEAM_START.iter().position(|(k, _, _)| Some(*k) == c.steam_start.as_deref()).unwrap_or(0)
+    STEAM_START.iter().position(|k| Some(*k) == c.steam_start.as_deref()).unwrap_or(0)
 }
 
 /// "GOG" for gog, else the source capitalised.
@@ -63,17 +71,18 @@ fn cloud_summary() -> Option<String> {
 
 fn cloud_text(s: &rare_library::steam_cloud::Summary) -> String {
     if s.off {
-        return "Off".into();
+        return tr().common.off.into();
     }
+    let t = &tr().settings_more;
     let mut parts = Vec::new();
     if s.synced > 0 {
-        parts.push(format!("{} {} synced", s.synced, if s.synced == 1 { "game" } else { "games" }));
+        parts.push(trn!(t.sto_cloud_synced, s.synced));
     }
     if s.out_of_date > 0 {
-        parts.push(format!("{} not synced yet", s.out_of_date));
+        parts.push(trf!(t.sto_cloud_behind, n = s.out_of_date));
     }
     if s.conflict > 0 {
-        parts.push(format!("{} with a conflict", s.conflict));
+        parts.push(trf!(t.sto_cloud_conflict, n = s.conflict));
     }
     parts.join(", ")
 }
@@ -86,7 +95,13 @@ use std::cell::Cell;
 use std::path::PathBuf;
 
 /// How the list is sorted: biggest first, by name, by drive.
-const SORTS: [(&str, &str); 3] = [("Size", "Biggest first"), ("Name", "By name"), ("Drive", "By drive, biggest first")];
+const SORT_COUNT: usize = 3;
+
+/// (button word, row line) of each sort.
+fn sorts() -> [(&'static str, &'static str); SORT_COUNT] {
+    let t = &tr().settings_more;
+    [(t.sto_sort_size, t.sto_sort_size_body), (t.sto_sort_name, t.sto_sort_name_body), (t.sto_sort_drive, t.sto_sort_drive_body)]
+}
 /// Rows shown before "Show all".
 const FEW: usize = 12;
 
@@ -159,7 +174,7 @@ pub fn size_text(b: u64) -> String {
 
 /// "120 GB free of 256 GB".
 pub fn free_line(d: &Drive) -> String {
-    format!("{} free of {}", size_text(d.free), size_text(d.total))
+    trf!(tr().settings_more.sto_free_of, free = size_text(d.free), total = size_text(d.total))
 }
 
 struct RowRef {
@@ -205,9 +220,9 @@ fn used_frac(d: &Drive) -> Option<f32> {
 
 fn format_line(st: Option<FormatStage>) -> &'static str {
     match st {
-        None | Some(FormatStage::Testing) => "Testing the card. This takes a minute or two.",
-        Some(FormatStage::Formatting) => "Formatting",
-        Some(FormatStage::Mounting) => "Almost done",
+        None | Some(FormatStage::Testing) => tr().settings_more.sto_fmt_testing,
+        Some(FormatStage::Formatting) => tr().settings_more.sto_fmt_formatting,
+        Some(FormatStage::Mounting) => tr().settings_more.sto_fmt_almost,
     }
 }
 
@@ -278,13 +293,14 @@ impl StorageSection {
 
     pub fn build_with(cx: &mut Cx, nav: &mut Nav, parent: Id, cfg: &Config, sources: &[(&str, u32)], snap: &Snap, _now: f64) -> StorageSection {
         let r = cx.r();
+        let t = &tr().settings_more;
         let job = snap.job.clone();
         let busy = job.is_some();
         // Drives.
         let p = panel(cx, parent);
         let mut first = true;
         if !snap.read {
-            drive_row(cx, p, "This device", "Reading the drives", None, true);
+            drive_row(cx, p, t.sto_this_device, t.sto_reading, None, true);
             first = false;
         }
         for d in snap.drives.iter().filter(|d| d.kind == DriveKind::Internal) {
@@ -295,25 +311,25 @@ impl StorageSection {
             let sd_drive = snap.drives.iter().find(|d| d.kind == DriveKind::Sd);
             let job_line = match &job {
                 Some(Job::Format(st)) => Some(format_line(*st).to_string()),
-                Some(Job::SetUp) => Some("Adding it to Steam and Rare".to_string()),
+                Some(Job::SetUp) => Some(t.sto_adding.to_string()),
                 _ => None,
             };
             match (&snap.sd, sd_drive) {
                 (SdCard::Ready { .. }, Some(d)) => {
-                    let body = job_line.unwrap_or_else(|| if snap.sd_set_up { free_line(d) } else { format!("{}. Not set up for games yet.", free_line(d)) });
-                    let right = drive_row(cx, p, "SD card", &body, used_frac(d), first);
+                    let body = job_line.unwrap_or_else(|| if snap.sd_set_up { free_line(d) } else { trf!(t.sto_not_set_up, free = free_line(d)) });
+                    let right = drive_row(cx, p, t.sto_sd_card, &body, used_frac(d), first);
                     if !snap.sd_set_up {
-                        nav.add(button(cx, right, "Use for games", if busy { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).sid("sd-setup").tag(T_SETUP).hint("Add to Steam and Rare").group(10));
+                        nav.add(button(cx, right, t.sto_use_for_games, if busy { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).sid("sd-setup").tag(T_SETUP).hint(t.sto_add_hint).group(10));
                     }
-                    nav.add(button(cx, right, "Format", if busy { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).sid("sd-format").tag(T_FORMAT).hint("Erase and format").group(10));
+                    nav.add(button(cx, right, t.sto_format, if busy { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).sid("sd-format").tag(T_FORMAT).hint(t.sto_format_hint).group(10));
                 }
                 (SdCard::NotReady { .. }, _) | (SdCard::Ready { .. }, None) => {
-                    let body = job_line.unwrap_or_else(|| "This card can't hold games yet. Format it to use it.".into());
-                    let right = drive_row(cx, p, "SD card", &body, None, first);
-                    nav.add(button(cx, right, "Format", if busy { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).sid("sd-format").tag(T_FORMAT).hint("Erase and format").group(10));
+                    let body = job_line.unwrap_or_else(|| t.sto_cant_hold.into());
+                    let right = drive_row(cx, p, t.sto_sd_card, &body, None, first);
+                    nav.add(button(cx, right, t.sto_format, if busy { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).sid("sd-format").tag(T_FORMAT).hint(t.sto_format_hint).group(10));
                 }
                 (SdCard::None, _) => {
-                    drive_row(cx, p, "SD card", "No card in the slot. Put one in to get more space for games.", None, first);
+                    drive_row(cx, p, t.sto_sd_card, t.sto_no_card, None, first);
                 }
             }
             first = false;
@@ -322,17 +338,18 @@ impl StorageSection {
             }
         }
         // Games and apps by size.
-        let sort = SORT.with(|c| c.get()) % SORTS.len();
+        let sorts = sorts();
+        let sort = SORT.with(|c| c.get()) % SORT_COUNT;
         let all = ALL.with(|c| c.get());
         let p = panel(cx, parent);
         let head_body = match (&snap.items, snap.measuring) {
-            (None, _) => "Measuring".to_string(),
-            (Some(_), true) => format!("{}. Measuring again", SORTS[sort].1),
-            (Some(_), false) => SORTS[sort].1.to_string(),
+            (None, _) => t.sto_measuring.to_string(),
+            (Some(_), true) => trf!(t.sto_measuring_again, sort = sorts[sort].1),
+            (Some(_), false) => sorts[sort].1.to_string(),
         };
-        let row_ = setting_row(cx, p, "Games and apps", Some(&head_body), true);
-        nav.add(button(cx, row_.right, &format!("Sort: {}", SORTS[sort].0), Variant::Secondary, Sz::Md, false).sid("storage-sort").tag(T_SORT).hint("Sort").group(10));
-        nav.add(button(cx, row_.right, "Measure again", if snap.measuring { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).sid("storage-measure").tag(T_MEASURE).group(10));
+        let row_ = setting_row(cx, p, t.sto_games_apps, Some(&head_body), true);
+        nav.add(button(cx, row_.right, &trf!(t.sto_sort, by = sorts[sort].0), Variant::Secondary, Sz::Md, false).sid("storage-sort").tag(T_SORT).hint(t.sto_sort_hint).group(10));
+        nav.add(button(cx, row_.right, t.sto_measure_again, if snap.measuring { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).sid("storage-measure").tag(T_MEASURE).group(10));
         let mut items: Vec<Item> = snap.items.clone().unwrap_or_default();
         match sort {
             1 => items.sort_by_key(|i| i.title.to_lowercase()),
@@ -358,65 +375,65 @@ impl StorageSection {
             let sub = if here.is_empty() { it.source.clone() } else { format!("{}, {}", it.source, here) };
             cx.scene.add_text(cx.t, col, s().done(), &sub, ts(r, ty::SMALL.0, ty::SMALL.1, 400).truncate(), tok::MUTED);
             let size_line = match (&job, moving) {
-                (Some(Job::ClosingSteam { .. }), true) => "Closing Steam".to_string(),
-                (Some(Job::Move { phase: Phase::Copying, done, total, .. }), true) => format!("Copying {}%", pct(*done, *total)),
-                (Some(Job::Move { phase: Phase::Checking, done, total, .. }), true) => format!("Checking {}%", pct(*done, *total)),
-                (Some(Job::Move { phase: Phase::Finishing, .. }), true) => "Finishing".to_string(),
+                (Some(Job::ClosingSteam { .. }), true) => t.sto_closing_steam.to_string(),
+                (Some(Job::Move { phase: Phase::Copying, done, total, .. }), true) => trf!(t.sto_copying, n = pct(*done, *total)),
+                (Some(Job::Move { phase: Phase::Checking, done, total, .. }), true) => trf!(t.sto_checking, n = pct(*done, *total)),
+                (Some(Job::Move { phase: Phase::Finishing, .. }), true) => t.sto_finishing.to_string(),
                 _ => size_text(it.bytes),
             };
             let cell = cx.scene.add(row, s().w(7.0 * r).no_shrink_().done(), Node::default());
             cx.scene.add_text(cx.t, cell, s().wp(1.0).done(), &size_line, ts(r, ty::SMALL.0, ty::SMALL.1, 500).align(rare_render::text::TextAlign::Right), if moving { tok::FG } else { tok::FG.alpha(0.85) });
             // Move.
             let (label, no_move) = if moving {
-                ("Cancel".to_string(), None)
+                (tr().common.cancel.to_string(), None)
             } else if let Some(why) = &it.no_move {
-                ("Move".to_string(), Some(why.clone()))
-            } else if let Some(t) = target {
-                (format!("Move to {}", if t.kind == DriveKind::Internal { "this device".to_string() } else { t.label.clone() }), None)
+                (t.sto_move.to_string(), Some(why.clone()))
+            } else if let Some(tgt) = target {
+                (trf!(tr().settings_more.sto_move_to, name = if tgt.kind == DriveKind::Internal { tr().settings_more.sto_this_device_lc.to_string() } else { tgt.label.clone() }), None)
             } else {
-                ("Move".to_string(), Some("Put an SD card in to move games to it.".to_string()))
+                (t.sto_move.to_string(), Some(t.sto_put_card.to_string()))
             };
             let v = if moving { Variant::Secondary } else if no_move.is_some() || busy { Variant::Dimmed } else { Variant::Secondary };
             let bx = cx.scene.add(row, s().w(11.5 * r).no_shrink_().done(), Node::default());
-            nav.add(button(cx, bx, &label, v, Sz::Sm, true).sid(&format!("{}:move", it.key)).tag(ITEMS + 4 * i as u32).hint(if moving { "Cancel the move" } else { "Move" }).group(10));
+            nav.add(button(cx, bx, &label, v, Sz::Sm, true).sid(&format!("{}:move", it.key)).tag(ITEMS + 4 * i as u32).hint(if moving { t.sto_cancel_move } else { t.sto_move }).group(10));
             // Uninstall (Clear for a cache).
             let (ulabel, can) = match it.kind {
-                ItemKind::Cache => ("Clear", true),
-                ItemKind::Prefix if it.key.starts_with("orphan:") => ("Delete", true),
-                _ => ("Uninstall", it.game_id.is_some()),
+                ItemKind::Cache => (t.sto_clear, true),
+                ItemKind::Prefix if it.key.starts_with("orphan:") => (tr().common.delete, true),
+                _ => (tr().common.uninstall, it.game_id.is_some()),
             };
             let bx = cx.scene.add(row, s().w(7.0 * r).no_shrink_().done(), Node::default());
             nav.add(button(cx, bx, ulabel, if can && !moving { Variant::Secondary } else { Variant::Dimmed }, Sz::Sm, true).sid(&format!("{}:uninstall", it.key)).tag(ITEMS + 4 * i as u32 + 1).hint(ulabel).group(10));
             rows.push(RowRef { key: it.key.clone(), game_id: it.game_id.clone(), kind: it.kind, no_move, moving });
         }
         if total == 0 && snap.items.is_some() {
-            setting_row(cx, p, "Nothing installed yet", Some("Games and apps you install show up here with their size."), false);
+            setting_row(cx, p, t.sto_nothing, Some(t.sto_nothing_body), false);
         }
         if total > FEW {
-            let row_ = setting_row(cx, p, if all { "Showing everything" } else { "Showing the biggest" }, Some(&format!("{shown} of {total}")), false);
-            nav.add(button(cx, row_.right, if all { "Show fewer" } else { "Show all" }, Variant::Secondary, Sz::Md, false).sid("storage-all").tag(T_ALL).group(10));
+            let row_ = setting_row(cx, p, if all { t.sto_showing_all } else { t.sto_showing_biggest }, Some(&trf!(t.sto_x_of_y, shown = shown, total = total)), false);
+            nav.add(button(cx, row_.right, if all { t.sto_show_fewer } else { t.sto_show_all }, Variant::Secondary, Sz::Md, false).sid("storage-all").tag(T_ALL).group(10));
         }
         // Sources and the library settings.
         let p0 = cx.scene.add(parent, s().col().wp(1.0).px(1.4 * r).py(1.2 * r).done(), Node::bg(tok::L1).radius(1.0 * r));
         let h = cx.scene.add(p0, s().mb(0.9 * r).done(), Node::default());
-        text(cx, h, ty::BODY, 600, tok::FG, "Sources");
+        text(cx, h, ty::BODY, 600, tok::FG, t.sto_sources);
         let labels: Vec<(String, String)> = sources.iter().map(|(k, n)| (source_label(k), n.to_string())).collect();
         let items: Vec<(&str, &str)> = labels.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
         if !items.is_empty() {
             stat_line_sized(cx, p0, &items, true);
         }
         let p = panel(cx, parent);
-        let row_ = setting_row(cx, p, "Scan for games", Some("Steam, Epic, GOG, itch.io and your Games folders."), true);
-        nav.add(button(cx, row_.right, "Scan again", Variant::Secondary, Sz::Md, false).sid("scan").tag(1).group(10));
-        let row_ = setting_row(cx, p, "Games folder", Some("A folder with one game per subfolder, on this device or an SD card."), false);
-        nav.add(button(cx, row_.right, "Add folder", Variant::Secondary, Sz::Md, false).sid("games-folder").tag(2).group(10));
+        let row_ = setting_row(cx, p, t.sto_scan, Some(t.sto_scan_body), true);
+        nav.add(button(cx, row_.right, t.net_scan_again, Variant::Secondary, Sz::Md, false).sid("scan").tag(1).group(10));
+        let row_ = setting_row(cx, p, t.sto_folder, Some(t.sto_folder_body), false);
+        nav.add(button(cx, row_.right, t.sto_add_folder, Variant::Secondary, Sz::Md, false).sid("games-folder").tag(2).group(10));
         for (i, f) in cfg.game_folders.iter().enumerate() {
-            let row_ = setting_row(cx, p, &pretty_path(f), Some("Scanned for games."), false);
-            nav.add(button(cx, row_.right, "Remove", Variant::Secondary, Sz::Md, false).tag(100 + i as u32).group(10));
+            let row_ = setting_row(cx, p, &pretty_path(f), Some(t.sto_scanned), false);
+            nav.add(button(cx, row_.right, tr().common.remove, Variant::Secondary, Sz::Md, false).tag(100 + i as u32).group(10));
         }
         let idx = steam_start_idx(cfg);
-        let row_ = setting_row(cx, p, "When Steam starts", Some(STEAM_START[idx].2), false);
-        let b = button(cx, row_.right, STEAM_START[idx].1, Variant::Secondary, Sz::Md, false).sid("steam-start").tag(3);
+        let row_ = setting_row(cx, p, t.sto_steam_start, Some(steam_start_text(idx).1), false);
+        let b = button(cx, row_.right, steam_start_text(idx).0, Variant::Secondary, Sz::Md, false).sid("steam-start").tag(3);
         let steam_label = match b.kind {
             Kind::Btn { text, .. } => text,
             _ => unreachable!(),
@@ -424,19 +441,19 @@ impl StorageSection {
         nav.add(b.group(10));
         let steam_body = row_.body.unwrap();
         if let Some(text) = cloud_summary() {
-            setting_row(cx, p, "Steam Cloud", Some(&text), false);
+            setting_row(cx, p, t.sto_steam_cloud, Some(&text), false);
         }
         let has_key = cfg.steamgriddb_key.as_deref().is_some_and(|k| !k.is_empty());
-        let row_ = setting_row(cx, p, "SteamGridDB cover art", Some(if has_key { "API key added" } else { "Optional. A free API key adds covers for games outside Steam." }), false);
-        let b = button(cx, row_.right, if has_key { "Change key" } else { "Add key" }, Variant::Secondary, Sz::Md, false).sid("steamgriddb").tag(4);
+        let row_ = setting_row(cx, p, t.sto_grid, Some(if has_key { t.sto_grid_added } else { t.sto_grid_body }), false);
+        let b = button(cx, row_.right, if has_key { t.sto_change_key } else { t.sto_add_key }, Variant::Secondary, Sz::Md, false).sid("steamgriddb").tag(4);
         let key_btn_label = match b.kind {
             Kind::Btn { text, .. } => text,
             _ => unreachable!(),
         };
         nav.add(b.group(10));
         let key_body = row_.body.unwrap();
-        let row_ = setting_row(cx, p, "Screenshots and clips", Some("Take a screenshot or keep the last 30 seconds, and share them as a link on rare.market."), false);
-        nav.add(button(cx, row_.right, "Open Share", Variant::Secondary, Sz::Md, false).sid("share").tag(5).group(10));
+        let row_ = setting_row(cx, p, t.sto_shots, Some(t.sto_shots_body), false);
+        nav.add(button(cx, row_.right, t.sto_open_share, Variant::Secondary, Sz::Md, false).sid("share").tag(5).group(10));
         StorageSection { folders: cfg.game_folders.clone(), steam_label, steam_body, key_btn_label, key_body, rows, busy }
     }
 }
@@ -454,13 +471,13 @@ impl SectionView for StorageSection {
         match nav.current().map(|f| f.tag) {
             Some(1) => SectionOut::Act("storage:scan".into()),
             Some(2) => SectionOut::Act("storage:add-folder".into()),
-            Some(T_FORMAT) if self.busy => SectionOut::Act("storage:say:Wait for the SD card to finish.".into()),
+            Some(T_FORMAT) if self.busy => SectionOut::Act(format!("storage:say:{}", tr().settings_more.sto_wait_card)),
             Some(T_FORMAT) => SectionOut::Act("storage:format-ask".into()),
-            Some(T_SETUP) if self.busy => SectionOut::Act("storage:say:Wait for the SD card to finish.".into()),
+            Some(T_SETUP) if self.busy => SectionOut::Act(format!("storage:say:{}", tr().settings_more.sto_wait_card)),
             Some(T_SETUP) => SectionOut::Act("storage:setup".into()),
             Some(T_MEASURE) => SectionOut::Act("storage:measure".into()),
             Some(T_SORT) => {
-                SORT.with(|c| c.set((c.get() + 1) % SORTS.len()));
+                SORT.with(|c| c.set((c.get() + 1) % SORT_COUNT));
                 SectionOut::Act("storage:redraw".into())
             }
             Some(T_ALL) => {
@@ -477,15 +494,15 @@ impl SectionView for StorageSection {
                         return SectionOut::Act(format!("storage:say:{why}"));
                     }
                     if self.busy {
-                        return SectionOut::Act("storage:say:Wait for the current move to finish.".into());
+                        return SectionOut::Act(format!("storage:say:{}", tr().settings_more.sto_wait_move_current));
                     }
                     SectionOut::Act(format!("storage:move:{}", row.key))
                 } else {
                     if row.moving {
-                        return SectionOut::Act("storage:say:Wait for the move to finish.".into());
+                        return SectionOut::Act(format!("storage:say:{}", tr().settings_more.sto_wait_move));
                     }
                     if row.key == "android:system" {
-                        return SectionOut::Act("storage:say:Android's system and data. Uninstall Android apps one by one to free space.".into());
+                        return SectionOut::Act(format!("storage:say:{}", tr().settings_more.sto_android));
                     }
                     if let Some(p) = row.key.strip_prefix("orphan:") {
                         return SectionOut::Act(format!("storage:delete-ask:{p}"));
@@ -493,9 +510,9 @@ impl SectionView for StorageSection {
                     match (row.kind, &row.game_id) {
                         (ItemKind::Cache, _) => SectionOut::Act(format!("storage:clear:{}", row.key.trim_start_matches("cache:"))),
                         (_, Some(id)) => SectionOut::Act(format!("storage:uninstall:{id}")),
-                        (ItemKind::Prefix, None) => SectionOut::Act("storage:say:Saves live here. They go when you uninstall the game.".into()),
-                        (ItemKind::Roms, None) => SectionOut::Act("storage:say:Delete ROMs from the game page of a recent game, or in Desktop mode.".into()),
-                        _ => SectionOut::Act("storage:say:Uninstall this in Desktop mode.".into()),
+                        (ItemKind::Prefix, None) => SectionOut::Act(format!("storage:say:{}", tr().settings_more.sto_saves)),
+                        (ItemKind::Roms, None) => SectionOut::Act(format!("storage:say:{}", tr().settings_more.sto_roms)),
+                        _ => SectionOut::Act(format!("storage:say:{}", tr().settings_more.sto_uninstall_desktop)),
                     }
                 }
             }
@@ -511,9 +528,9 @@ impl SectionView for StorageSection {
             }
             Some(3) => {
                 let next = (steam_start_idx(cfg) + 1) % STEAM_START.len();
-                cfg.steam_start = Some(STEAM_START[next].0.into());
-                cx.scene.set_text(cx.t, self.steam_label, STEAM_START[next].1);
-                cx.scene.set_text(cx.t, self.steam_body, STEAM_START[next].2);
+                cfg.steam_start = Some(STEAM_START[next].into());
+                cx.scene.set_text(cx.t, self.steam_label, steam_start_text(next).0);
+                cx.scene.set_text(cx.t, self.steam_body, steam_start_text(next).1);
                 SectionOut::Changed
             }
             Some(4) => {

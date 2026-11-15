@@ -1,5 +1,7 @@
 //! The sections of Settings, in the order of the left list (screens/settings/sections.ts).
 
+use rare_i18n::tr;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum SectionId {
     System,
@@ -21,29 +23,48 @@ pub enum SectionId {
     Ask,
 }
 
-pub const SECTIONS: [(SectionId, &str); 17] = [
-    (SectionId::System, "System"),
-    (SectionId::Display, "Display"),
-    (SectionId::Sound, "Sound"),
-    (SectionId::Controls, "Controls"),
-    (SectionId::Power, "Power"),
-    (SectionId::Network, "Network"),
-    (SectionId::Accounts, "Accounts"),
-    (SectionId::Devices, "Devices"),
-    (SectionId::Parental, "Parental controls"),
-    (SectionId::Storage, "Storage"),
-    (SectionId::Capture, "Capture and streaming"),
-    (SectionId::Notifications, "Notifications"),
-    (SectionId::Ask, "Ask Rare"),
-    (SectionId::Emulators, "Emulators"),
-    (SectionId::Developer, "Developer"),
-    (SectionId::About, "About"),
-    (SectionId::Licences, "Credits and licences"),
+pub const SECTIONS: [SectionId; 17] = [
+    SectionId::System,
+    SectionId::Display,
+    SectionId::Sound,
+    SectionId::Controls,
+    SectionId::Power,
+    SectionId::Network,
+    SectionId::Accounts,
+    SectionId::Devices,
+    SectionId::Parental,
+    SectionId::Storage,
+    SectionId::Capture,
+    SectionId::Notifications,
+    SectionId::Ask,
+    SectionId::Emulators,
+    SectionId::Developer,
+    SectionId::About,
+    SectionId::Licences,
 ];
 
 impl SectionId {
     pub fn label(self) -> &'static str {
-        SECTIONS.iter().find(|(id, _)| *id == self).map(|(_, l)| *l).unwrap_or("")
+        let t = &tr().settings;
+        match self {
+            SectionId::System => t.sec_system,
+            SectionId::Display => t.sec_display,
+            SectionId::Sound => t.sec_sound,
+            SectionId::Controls => t.sec_controls,
+            SectionId::Power => t.sec_power,
+            SectionId::Network => t.sec_network,
+            SectionId::Accounts => t.sec_accounts,
+            SectionId::Devices => t.sec_devices,
+            SectionId::Parental => t.sec_parental,
+            SectionId::Storage => t.sec_storage,
+            SectionId::Capture => t.sec_capture,
+            SectionId::About => t.sec_about,
+            SectionId::Emulators => t.sec_emulators,
+            SectionId::Notifications => t.sec_notifications,
+            SectionId::Licences => t.sec_licences,
+            SectionId::Developer => t.sec_developer,
+            SectionId::Ask => t.sec_ask,
+        }
     }
 
     /// The id the web launcher uses in `data-section` and the jump store.
@@ -70,15 +91,15 @@ impl SectionId {
     }
 
     pub fn from_key(k: &str) -> Option<SectionId> {
-        SECTIONS.iter().map(|(id, _)| *id).find(|id| id.key() == k)
+        SECTIONS.iter().copied().find(|id| id.key() == k)
     }
 }
 
 /// LT / RT: the section `step` places away (wraps).
 pub fn step(from: SectionId, forward: bool) -> SectionId {
-    let i = SECTIONS.iter().position(|(id, _)| *id == from).unwrap_or(0);
+    let i = SECTIONS.iter().position(|id| *id == from).unwrap_or(0);
     let n = SECTIONS.len();
-    SECTIONS[(i + if forward { 1 } else { n - 1 }) % n].0
+    SECTIONS[(i + if forward { 1 } else { n - 1 }) % n]
 }
 
 #[cfg(test)]
@@ -94,7 +115,7 @@ mod tests {
 
     #[test]
     fn keys_round_trip() {
-        for (id, _) in SECTIONS {
+        for id in SECTIONS {
             assert_eq!(SectionId::from_key(id.key()), Some(id));
         }
     }

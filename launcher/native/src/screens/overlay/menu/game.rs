@@ -2,6 +2,7 @@
 //! Save clip with their chords, Performance, the Steam row, Steam pages, emulator rows, Game
 //! details, and Quit game with its armed second press.
 
+use rare_i18n::{tr, trf};
 use super::model::{game_kind, items_line, playing_for, GameKind};
 use super::{EmuAction, MenuData};
 use crate::screens::overlay::common::*;
@@ -12,7 +13,12 @@ use rare_render::{Fit, Id, ImgReq, Node};
 /// Steam's own UI as an app (apps/mod.rs STEAM_RUN).
 pub const STEAM_UI: &str = "app:steam";
 
-pub const STEAM_PAGES: [(&str, &str); 4] = [("library", "Library"), ("store", "Store"), ("downloads", "Downloads"), ("settings", "Steam settings")];
+pub const STEAM_PAGES: [&str; 4] = ["library", "store", "downloads", "settings"];
+
+fn steam_page_title(i: usize) -> &'static str {
+    let o = &tr().overlay;
+    [o.steam_library, o.steam_store, o.steam_downloads, o.steam_settings][i]
+}
 
 // Focus groups (data-nav-group).
 const G_RESUME: u32 = 1;
@@ -44,11 +50,11 @@ pub struct GameRefs {
 
 fn profile_name(p: &str) -> &'static str {
     match p {
-        "quiet" => "Quiet",
-        "balanced" => "Balanced",
-        "performance" => "Performance",
-        "custom" => "Custom",
-        _ => "Balanced",
+        "quiet" => tr().overlay.profile_quiet,
+        "balanced" => tr().overlay.profile_balanced,
+        "performance" => tr().overlay.profile_performance,
+        "custom" => tr().overlay.profile_custom,
+        _ => tr().overlay.profile_balanced,
     }
 }
 
@@ -60,7 +66,7 @@ pub fn perf_sub(d: &MenuData) -> Option<String> {
         parts.push(format!("{}{}", profile_name(&p.profile), tdp));
     }
     if d.power_saved {
-        parts.push(format!("Used for {}", d.game.title));
+        parts.push(trf!(tr().overlay.perf_used_for, game = d.game.title));
     }
     if parts.is_empty() {
         None
@@ -71,18 +77,18 @@ pub fn perf_sub(d: &MenuData) -> Option<String> {
 
 pub fn quit_texts(rid: &str, title: &str, kind: Option<GameKind>) -> (String, String) {
     let label = if rid == STEAM_UI {
-        "Close Steam"
+        tr().overlay.close_steam
     } else if kind == Some(GameKind::App) {
-        "Close app"
+        tr().overlay.close_app
     } else {
-        "Quit game"
+        tr().overlay.quit_game
     };
     let what = if rid == STEAM_UI {
-        "Steam closes, with any game it runs, and Rare has the screen.".to_string()
+        tr().overlay.quit_steam_what.to_string()
     } else if kind == Some(GameKind::Stream) {
-        format!("Ends {title} on your PC and goes back to Rare.")
+        trf!(tr().overlay.quit_stream_what, title = title)
     } else {
-        format!("Ends {title} and goes back to Rare.")
+        trf!(tr().overlay.quit_what, title = title)
     };
     (label.to_string(), what)
 }
@@ -138,7 +144,7 @@ pub fn build(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &MenuData, now: f64) -> 
 
     // Resume, primary and focused first.
     let rw = cx.scene.add(col, s().col().px(0.65 * r).done(), Node::default());
-    let b = button(cx, rw, "Resume", Variant::Primary, Sz::Md, true).tag(T_RESUME).group(G_RESUME).hint("Resume");
+    let b = button(cx, rw, tr().common.resume, Variant::Primary, Sz::Md, true).tag(T_RESUME).group(G_RESUME).hint(tr().common.resume);
     let first = nav.add(b);
     // Music or video playing anywhere: its controls right under Resume.
     super::media::build(cx, nav, col);
@@ -146,23 +152,23 @@ pub fn build(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &MenuData, now: f64) -> 
     // Menu rows.
     let grp = cx.scene.add(col, s().col().done(), Node::default());
     if let Some(items) = d.items.as_ref().filter(|i| !i.is_empty()) {
-        line(cx, nav, grp, "Your items", Some(&items_line(items)), T_ITEMS, G_GAME, "Open", None);
+        line(cx, nav, grp, tr().overlay.your_items, Some(&items_line(items)), T_ITEMS, G_GAME, tr().common.open, None);
     }
-    let shot = if d.taking == Some("screenshot") { "Saving..." } else { "Screenshot" };
-    line(cx, nav, grp, shot, None, T_SCREENSHOT, G_GAME, "Take a screenshot", Some(G::Y));
-    let clip = if d.taking == Some("clip") { "Saving...".to_string() } else { d.replay.map(crate::features::capture::save_label).unwrap_or_else(|| "Save clip".into()) };
+    let shot = if d.taking == Some("screenshot") { tr().overlay.saving } else { tr().overlay.screenshot };
+    line(cx, nav, grp, shot, None, T_SCREENSHOT, G_GAME, tr().overlay.screenshot_hint, Some(G::Y));
+    let clip = if d.taking == Some("clip") { tr().overlay.saving.to_string() } else { d.replay.map(crate::features::capture::save_label).unwrap_or_else(|| tr().overlay.save_clip.into()) };
     let clip_sub = match d.replay {
         Some(_) => None,
-        None => Some("Instant replay is off. Turn it on in Quick settings."),
+        None => Some(tr().overlay.replay_off),
     };
-    line(cx, nav, grp, &clip, clip_sub, T_CLIP, G_GAME, "Save the clip", Some(G::Select));
+    line(cx, nav, grp, &clip, clip_sub, T_CLIP, G_GAME, tr().overlay.save_clip_hint, Some(G::Select));
     let ps = perf_sub(d);
-    line(cx, nav, grp, "Performance", ps.as_deref(), T_PERF, G_GAME, "Change", None);
+    line(cx, nav, grp, tr().overlay.profile_performance, ps.as_deref(), T_PERF, G_GAME, tr().common.change, None);
     // Discord's voice, while it is open: mute and deafen without leaving the game.
     if let Some((muted, deafened)) = d.discord {
         let rows = [
-            (if muted { "Unmute Discord" } else { "Mute Discord" }, if muted { "Your microphone is muted" } else { "Your microphone is on" }, T_DISCORD_MUTE, if muted { "Unmute" } else { "Mute" }, "discord-mute"),
-            (if deafened { "Undeafen Discord" } else { "Deafen Discord" }, if deafened { "You hear nothing from Discord" } else { "You hear Discord" }, T_DISCORD_DEAFEN, if deafened { "Undeafen" } else { "Deafen" }, "discord-deafen"),
+            (if muted { tr().overlay.discord_unmute } else { tr().overlay.discord_mute }, if muted { tr().overlay.discord_mic_muted } else { tr().overlay.discord_mic_on }, T_DISCORD_MUTE, if muted { tr().overlay.unmute } else { tr().overlay.mute }, "discord-mute"),
+            (if deafened { tr().overlay.discord_undeafen } else { tr().overlay.discord_deafen }, if deafened { tr().overlay.discord_hear_nothing } else { tr().overlay.discord_hear }, T_DISCORD_DEAFEN, if deafened { tr().overlay.undeafen } else { tr().overlay.deafen }, "discord-deafen"),
         ];
         for (title, sub, tag, hint, sid) in rows {
             let mut p = row(cx, grp, title, Some(sub));
@@ -171,15 +177,15 @@ pub fn build(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &MenuData, now: f64) -> 
         }
     }
     if kind == Some(GameKind::Steam) || rid.starts_with("shortcut:") {
-        line(cx, nav, grp, "Steam", Some("Steam's overlay: friends, guides, controller layout"), T_STEAM, G_GAME, "Open Steam's overlay", None);
+        line(cx, nav, grp, "Steam", Some(tr().overlay.steam_overlay_sub), T_STEAM, G_GAME, tr().overlay.steam_overlay_hint, None);
     }
     // Steam's own UI, from any game (X does the same).
     if rid != STEAM_UI {
-        line(cx, nav, grp, "Open Steam", None, T_OPEN_STEAM, G_GAME, "Open Steam", Some(G::X));
+        line(cx, nav, grp, tr().overlay.open_steam, None, T_OPEN_STEAM, G_GAME, tr().overlay.open_steam, Some(G::X));
     }
     if rid == STEAM_UI {
-        for (i, (_, title)) in STEAM_PAGES.iter().enumerate() {
-            line(cx, nav, grp, title, None, T_STEAM_PAGE + i as u32, G_GAME, "Open in Steam", None);
+        for i in 0..STEAM_PAGES.len() {
+            line(cx, nav, grp, steam_page_title(i), None, T_STEAM_PAGE + i as u32, G_GAME, tr().overlay.open_in_steam, None);
         }
     }
     // State slots (RetroArch ROMs) sit under Save state as pictures: A loads one.
@@ -192,7 +198,7 @@ pub fn build(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &MenuData, now: f64) -> 
             continue;
         }
         if a.ready {
-            let sub = if a.id.starts_with("save:") && first_slot.is_none() { Some("No saved states yet") } else { None };
+            let sub = if a.id.starts_with("save:") && first_slot.is_none() { Some(tr().overlay.no_saved_states) } else { None };
             line(cx, nav, grp, &a.label, sub, T_EMU + i as u32, G_GAME, &a.label, None);
         } else {
             // Not set up in the emulator yet: why, as a line focus skips (A would do nothing).
@@ -200,7 +206,7 @@ pub fn build(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &MenuData, now: f64) -> 
         }
     }
     if d.in_library || d.is_app {
-        line(cx, nav, grp, if d.is_app { "App details" } else { "Game details" }, None, T_DETAILS, G_GAME, "Open", None);
+        line(cx, nav, grp, if d.is_app { tr().overlay.app_details } else { tr().overlay.game_details }, None, T_DETAILS, G_GAME, tr().common.open, None);
     }
 
     // Quit game, which asks once more.
@@ -240,7 +246,7 @@ fn slots(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &MenuData, from: usize) {
                 cx.scene.add(pic, s().fill().done(), Node::default().image(k));
             }
             None => {
-                text(cx, pic, ty::LABEL, 500, tok::MUTED, "No picture");
+                text(cx, pic, ty::LABEL, 500, tok::MUTED, tr().overlay.no_picture);
             }
         }
         let names = cx.scene.add(card, s().row().items_center().gap(0.4 * r).done(), Node::default());
@@ -248,6 +254,6 @@ fn slots(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &MenuData, from: usize) {
         if let Some(sub) = &a.sub {
             text_tr(cx, names, ty::LABEL, 400, tok::MUTED, sub);
         }
-        nav.add(Focusable { id: card, kind: Kind::Tile { scale: 1.05 }, group: G_SLOTS, hint: "Load".into(), tag: T_EMU + i as u32, sid: String::new() });
+        nav.add(Focusable { id: card, kind: Kind::Tile { scale: 1.05 }, group: G_SLOTS, hint: tr().overlay.load.into(), tag: T_EMU + i as u32, sid: String::new() });
     }
 }

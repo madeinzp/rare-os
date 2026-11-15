@@ -4,6 +4,7 @@
 //! picker (A on a collectible sets it, X goes back to the default).
 
 use super::catalog::SuiGame;
+use rare_i18n::{tr, trf, trn};
 use super::tab::{Owned, RARE};
 use crate::data::model::{source_label, Game};
 use crate::kit::format::{NumKind, NumOptions};
@@ -74,18 +75,18 @@ pub fn profile_avatar<M>(p: &Profile, size: &str, class: &str) -> Option<El<M>> 
 
 fn hours(min: i64) -> String {
     if min < 60 {
-        format!("{min} min")
+        trf!(tr().sui.minutes_short, n = min)
     } else {
-        format!("{} h", num_locale((min as f64 / 60.0).round(), 0, 0))
+        trf!(tr().sui.hours_short, n = num_locale((min as f64 / 60.0).round(), 0, 0))
     }
 }
 
 /// `sinceLabel`: "24h" after 20 hours, else "Since 3:07 PM".
 pub fn since_label(t: i64, now: i64, tz_min: i32) -> String {
     if (now - t) as f64 / 3_600_000.0 >= 20.0 {
-        "24h".into()
+        tr().sui.h24.into()
     } else {
-        format!("Since {}", time_hm(t, tz_min))
+        trf!(tr().sui.since_time, time = time_hm(t, tz_min))
     }
 }
 
@@ -139,7 +140,7 @@ pub struct Props<'a> {
 /// `GameTile` (components/ui.tsx), md: the 2:3 cover with title and store under it.
 pub fn game_tile(g: &Game, running: bool, on: Msg) -> El<Msg> {
     let app = g.source == "apps";
-    let mut b = button("tile relative block aspect-[2/3] w-full overflow-hidden rounded-card bg-l3 text-left", Some(on)).attr("data-title", g.title.clone()).attr("data-game", g.id.clone()).hint_a("Details");
+    let mut b = button("tile relative block aspect-[2/3] w-full overflow-hidden rounded-card bg-l3 text-left", Some(on)).attr("data-title", g.title.clone()).attr("data-game", g.id.clone()).hint_a(tr().common.details);
     if app && g.art.cover.is_empty() {
         let mut inner = span("flex h-[4.5rem] w-[4.5rem] items-center justify-center");
         inner = match g.art.icon.first() {
@@ -160,20 +161,20 @@ pub fn game_tile(g: &Game, running: bool, on: Msg) -> El<Msg> {
         .key(&g.id)
         .kid(b)
         .kid(div("focus-text mt-[0.85rem] truncate px-[0.1rem] text-meta font-medium text-fg/85").text(&g.title))
-        .kid(div("truncate px-[0.1rem] text-label text-muted").text(if running { "Playing" } else { source_label(&g.source) }))
+        .kid(div("truncate px-[0.1rem] text-label text-muted").text(if running { tr().common.playing } else { source_label(&g.source) }))
 }
 
 fn owned_game_card(g: &SuiGame, own: &Owned, art: Option<&str>) -> El<Msg> {
     let art = art.map(str::to_string).or_else(|| (!g.logo_url.is_empty()).then(|| g.logo_url.clone()));
     button("tile relative aspect-square w-[12rem] shrink-0 overflow-hidden rounded-card border border-hair bg-l1 text-left", Some(Msg::OpenGame(g.slug.clone())))
-        .hint_a("Game page")
+        .hint_a(tr().sui.game_page)
         .key(&g.slug)
         .kid(mimg(art.as_deref(), &g.name, 320, "absolute inset-0 h-full w-full"))
         .kid(span("absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/95 via-black/50 to-transparent"))
         .kid(
             span("absolute inset-x-[1rem] bottom-[0.9rem]")
                 .kid(span("block truncate text-body font-bold text-white").text(&g.name))
-                .kid(span("block truncate text-meta text-white/60").text(format!("{} {}", num_locale(own.count as f64, 0, 0), if own.count == 1 { "item" } else { "items" }))),
+                .kid(span("block truncate text-meta text-white/60").text(trn!(tr().common.items_n, own.count, n = num_locale(own.count as f64, 0, 0)))),
         )
 }
 
@@ -187,7 +188,7 @@ pub fn item_tile<M>(item: &ItemCard, hint: &str, chosen: bool, def: bool, class:
         .kid(span("absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/95 via-black/50 to-transparent"))
         .kid(span("absolute inset-x-[0.6rem] bottom-[0.5rem] block truncate text-label font-semibold text-white").text(&item.name));
     if chosen {
-        b = b.kid(span("absolute right-[0.5rem] top-[0.5rem] h-[0.6rem] w-[0.6rem] rounded-full bg-fg").label("Current picture"));
+        b = b.kid(span("absolute right-[0.5rem] top-[0.5rem] h-[0.6rem] w-[0.6rem] rounded-full bg-fg").label(tr().sui.current_picture));
     }
     b
 }
@@ -196,11 +197,11 @@ pub fn view(pr: &Props) -> El<Msg> {
     let prof = pr.prof;
     let Some(address) = &prof.address else {
         return div("rise fixed inset-0 z-30 flex items-center bg-bg px-[3rem]").attr("data-nav-scope", "").kid(empty(
-            "Add your Sui account",
-            Some(text("Your SuiNS name, picture, Sui games and collectibles show up here once Rare Wallet has an account.")),
+            tr().sui.add_account_title,
+            Some(text(tr().sui.add_account_body)),
             vec![
-                button_el(ButtonSpec::new("Open Rare Wallet").v(BVariant::Primary).def(true).icon("wallet", ""), Some(Msg::Wallet)),
-                button_el(ButtonSpec::new("Settings"), Some(Msg::Settings)),
+                button_el(ButtonSpec::new(tr().sui.open_rare_wallet).v(BVariant::Primary).def(true).icon("wallet", ""), Some(Msg::Wallet)),
+                button_el(ButtonSpec::new(tr().common.settings), Some(Msg::Settings)),
             ],
             "",
         ));
@@ -211,7 +212,7 @@ pub fn view(pr: &Props) -> El<Msg> {
     let owned_games: Vec<(&SuiGame, &Owned, Option<&str>)> = pr.games.iter().filter_map(|g| pr.owned.iter().find(|(s, _, _)| *s == g.slug).map(|(_, o, art)| (g, o, art.as_deref()))).collect();
     let usd = total_usd(prof.sui_mist, prof.nft_mist, pr.live_sui_usd.or(prof.sui_usd), pr.coins_usd);
 
-    let mut names = div("min-w-0 flex-1").kid(div("text-label text-secondary").text("Profile")).kid(div("flex items-baseline gap-[1rem]").kid(h1("truncate text-title font-semibold tracking-[-0.02em]").text(display_name(prof))).kid_opt(pr.rareling_badge.clone()));
+    let mut names = div("min-w-0 flex-1").kid(div("text-label text-secondary").text(tr().sui.profile)).kid(div("flex items-baseline gap-[1rem]").kid(h1("truncate text-title font-semibold tracking-[-0.02em]").text(display_name(prof))).kid_opt(pr.rareling_badge.clone()));
     if let (Some(_), Some(n)) = (&prof.username, &prof.name) {
         names = names.kid(div("truncate text-body text-muted").text(n));
     }
@@ -219,12 +220,12 @@ pub fn view(pr: &Props) -> El<Msg> {
     let actions = div("flex gap-[0.75rem]")
         .attr("data-nav-group", "profile-actions")
         .attr("data-nav-remember", "")
-        .kid(button_el(ButtonSpec::new("Change picture").def(true).icon("image", "").hint("Pick a picture"), Some(Msg::Pick)))
-        .kid(button_el(ButtonSpec::new(if prof.username.is_some() { "Change username" } else { "Pick a username" }), Some(Msg::Username)))
-        .kid(button_el(ButtonSpec::new("Cloud saves").icon("cloud", ""), Some(Msg::Saves)))
-        .kid(button_el(ButtonSpec::new("Wallet").icon("wallet", ""), Some(Msg::Wallet)))
-        .kid(button_el(ButtonSpec::new("Friends"), Some(Msg::Friends)))
-        .kid(button_el(ButtonSpec::new("Settings"), Some(Msg::Settings)));
+        .kid(button_el(ButtonSpec::new(tr().sui.change_picture).def(true).icon("image", "").hint(tr().sui.pick_picture_hint), Some(Msg::Pick)))
+        .kid(button_el(ButtonSpec::new(if prof.username.is_some() { tr().sui.change_username } else { tr().sui.pick_username }), Some(Msg::Username)))
+        .kid(button_el(ButtonSpec::new(tr().sui.cloud_saves).icon("cloud", ""), Some(Msg::Saves)))
+        .kid(button_el(ButtonSpec::new(tr().common.wallet).icon("wallet", ""), Some(Msg::Wallet)))
+        .kid(button_el(ButtonSpec::new(tr().common.friends), Some(Msg::Friends)))
+        .kid(button_el(ButtonSpec::new(tr().common.settings), Some(Msg::Settings)));
     // The banner (rare.market's, its pick else its default) holds its height while it loads; the
     // picture overlaps its lower edge as on the site.
     let mut banner = div("absolute inset-x-0 top-0 h-[13rem] overflow-hidden bg-l2").attr("data-tag", "banner");
@@ -237,21 +238,21 @@ pub fn view(pr: &Props) -> El<Msg> {
 
     let stats = stat_line(
         vec![
-            ("Total value".into(), usd.and_then(|u| num(NumKind::Money, Some(u), NumOptions::default(), "", false, true))),
+            (tr().sui.total_value.into(), usd.and_then(|u| num(NumKind::Money, Some(u), NumOptions::default(), "", false, true))),
             (
-                pr.change.map(|c| since_label(c.since, pr.now, pr.tz_min)).unwrap_or_else(|| "Today".into()),
+                pr.change.map(|c| since_label(c.since, pr.now, pr.tz_min)).unwrap_or_else(|| tr().sui.today.into()),
                 pr.change.and_then(|c| num(NumKind::Pnl, Some(c.usd), NumOptions::default(), "", false, true)),
             ),
             (
-                if pr.coins_usd.is_some() { "Coins" } else { "SUI" }.into(),
+                if pr.coins_usd.is_some() { tr().sui.coins } else { "SUI" }.into(),
                 match pr.coins_usd {
                     Some(c) => num(NumKind::Money, Some(c), NumOptions::default(), "", false, true),
                     None => prof.sui_mist.map(|m| sui(Some(m), 2, false, true, "")),
                 },
             ),
-            ("Collectibles".into(), prof.nft_mist.map(|m| sui(Some(m), 2, false, true, ""))),
-            ("Games played".into(), (!played.is_empty()).then(|| text(num_locale(played.len() as f64, 0, 0)))),
-            ("Time played".into(), (minutes > 0).then(|| text(hours(minutes)))),
+            (tr().sui.collectibles.into(), prof.nft_mist.map(|m| sui(Some(m), 2, false, true, ""))),
+            (tr().sui.games_played.into(), (!played.is_empty()).then(|| text(num_locale(played.len() as f64, 0, 0)))),
+            (tr().sui.time_played.into(), (minutes > 0).then(|| text(hours(minutes)))),
         ],
         true,
         true,
@@ -262,16 +263,16 @@ pub fn view(pr: &Props) -> El<Msg> {
     // Owned sections show only when there is something in them (no empty shelves).
     if !owned_games.is_empty() {
         let sui_games: Vec<El<Msg>> = owned_games.iter().map(|(g, o, art)| owned_game_card(g, o, *art)).collect();
-        sections = sections.kid(rail("profile-sui-games", Some(text("Your Sui games")), Some(text(format!("{} owned on Sui", owned_games.len()))), None, "", sui_games));
+        sections = sections.kid(rail("profile-sui-games", Some(text(tr().sui.your_sui_games)), Some(text(trf!(tr().sui.owned_on_sui, n = owned_games.len()))), None, "", sui_games));
     }
     if !played.is_empty() {
-        sections = sections.kid(rail("profile-played", Some(text("Games you played")), Some(text("on this device")), None, "", played.iter().take(16).map(|g| game_tile(g, false, Msg::OpenGameTile(g.id.clone()))).collect()));
+        sections = sections.kid(rail("profile-played", Some(text(tr().sui.games_you_played)), Some(text(tr().sui.on_this_device)), None, "", played.iter().take(16).map(|g| game_tile(g, false, Msg::OpenGameTile(g.id.clone()))).collect()));
     }
     let items = pr.items;
     if let Some(i) = items.filter(|i| !i.is_empty()) {
         let note = text(format!("{}{}", i.len(), if i.len() >= 60 { "+" } else { "" }));
-        let coll: Vec<El<Msg>> = i.iter().take(24).map(|it| item_tile(it, "View", false, false, "", Msg::ViewItem(it.id.clone()))).collect();
-        sections = sections.kid(rail("profile-collectibles", Some(text("Collectibles")), Some(note), None, "", coll));
+        let coll: Vec<El<Msg>> = i.iter().take(24).map(|it| item_tile(it, tr().common.view, false, false, "", Msg::ViewItem(it.id.clone()))).collect();
+        sections = sections.kid(rail("profile-collectibles", Some(text(tr().sui.collectibles)), Some(note), None, "", coll));
     }
 
     let _ = RARE;
@@ -281,13 +282,13 @@ pub fn view(pr: &Props) -> El<Msg> {
 /// A Rare default picture as a round tile; `chosen` marks the current picture.
 pub fn default_tile<M>(id: &str, name: &str, chosen: bool, def: bool, on: M) -> El<M> {
     let mut b = button("tile relative aspect-square w-full shrink-0 overflow-hidden rounded-full bg-l3", Some(on))
-        .hint_a("Use this")
+        .hint_a(tr().sui.use_this)
         .def(def)
         .key(id)
         .label(name)
         .kid(img(Some(&crate::avatars::url(id)), name, "absolute inset-0 h-full w-full").attr("data-width", "256"));
     if chosen {
-        b = b.kid(span("absolute right-[20%] top-[20%] h-[0.6rem] w-[0.6rem] rounded-full bg-fg").label("Current picture"));
+        b = b.kid(span("absolute right-[20%] top-[20%] h-[0.6rem] w-[0.6rem] rounded-full bg-fg").label(tr().sui.current_picture));
     }
     b
 }
@@ -303,19 +304,19 @@ pub fn avatar_picker_with<M: Clone>(items: Option<&[ItemCard]>, current: &str, o
     }));
     let with_art: Vec<&ItemCard> = items.unwrap_or(&[]).iter().filter(|i| i.image_url.is_some()).collect();
     let nfts = match items {
-        None => div("py-[1.5rem] text-body text-muted").text("Loading your NFTs"),
-        Some(_) if with_art.is_empty() => div("py-[1.5rem] text-body text-muted").text("Any NFT you hold can be your picture. Buy one in Rare Marketplace and it shows up here."),
-        Some(_) => div("grid grid-cols-7 gap-[1rem]").attr("data-nav-group", "avatar-grid").kids(with_art.iter().map(|it| item_tile(it, "Use this", current == it.id, current == it.id, "w-full", on(Some(it.id.clone()))))),
+        None => div("py-[1.5rem] text-body text-muted").text(tr().sui.loading_nfts),
+        Some(_) if with_art.is_empty() => div("py-[1.5rem] text-body text-muted").text(tr().sui.no_nft_pictures),
+        Some(_) => div("grid grid-cols-7 gap-[1rem]").attr("data-nav-group", "avatar-grid").kids(with_art.iter().map(|it| item_tile(it, tr().sui.use_this, current == it.id, current == it.id, "w-full", on(Some(it.id.clone()))))),
     };
     div("pop fixed inset-x-0 bottom-0 top-[4.25rem] z-40 overflow-y-auto rounded-t-sheet border-t border-hair bg-l1 px-[2.5rem] pb-[2rem] pt-[1.5rem]")
         .attr("data-nav-scope", "")
         .attr("data-scroll", "")
         .on_pad("b", close)
         .on_pad("x", on(None))
-        .kid(div("mb-[1.25rem] text-row font-semibold").text("Pick your picture"))
-        .kid(div("mb-[0.75rem] text-label text-muted").text("Default"))
+        .kid(div("mb-[1.25rem] text-row font-semibold").text(tr().sui.pick_your_picture))
+        .kid(div("mb-[0.75rem] text-label text-muted").text(tr().sui.default_pictures))
         .kid(defaults)
-        .kid(div("mb-[0.75rem] mt-[2rem] text-label text-muted").text("Your NFTs"))
+        .kid(div("mb-[0.75rem] mt-[2rem] text-label text-muted").text(tr().sui.your_nfts))
         .kid(nfts)
 }
 

@@ -13,6 +13,7 @@ use crate::screens::wallet::service;
 use rare_market::inventory::trade::Executor;
 use rare_sui::ptb::Tx;
 use rare_trade::wallet::{SignOutcome, SignRequest};
+use rare_i18n::tr;
 use std::sync::Arc;
 
 /// The account the market screens act for: the wallet's signing account when there is one, else
@@ -31,23 +32,27 @@ pub fn account() -> Option<Account> {
     let (list, selected) = crate::screens::wallet::page::load_accounts();
     let pick = |addr: &str| list.iter().find(|a| a.address.eq_ignore_ascii_case(addr));
     if let Some(s) = service::tx_signer() {
-        let label = pick(&s.account).map(|a| a.label.clone()).unwrap_or_else(|| "Wallet".into());
+        let label = pick(&s.account).map(|a| a.label.clone()).unwrap_or_else(|| tr().common.wallet.into());
         return Some(Account { address: s.account, label, signer: true });
     }
     let cur = selected.as_deref().and_then(pick).or(list.first())?;
     Some(Account { address: cur.address.clone(), label: cur.label.clone(), signer: false })
 }
 
-pub const NO_SIGNER: &str = "Add a passkey or an account in Rare Wallet to do this here.";
+
+/// "Add a passkey or an account in Rare Wallet to do this here." in the current language.
+pub fn no_signer() -> &'static str {
+    tr().app.no_signer
+}
 
 /// Builds, reviews, signs and executes a marketplace transaction for `account`. Blocks. Ok(digest);
 /// Err(SIGN_REJECTED) when the person declined.
 pub fn sign_and_execute(tx: Tx, account: &str, title: &str) -> Result<String, String> {
     use rare_wallet::sign::{OriginKind, SignError, SignOptions, SignOrigin};
-    let w = service::wallet().ok_or_else(|| "Rare Wallet is not available".to_string())?;
+    let w = service::wallet().ok_or_else(|| tr().app.wallet_unavailable.to_string())?;
     let o = SignOptions { account: Some(account.to_string()), origin: Some(SignOrigin::new("Rare Marketplace", OriginKind::Market)), title: Some(title.to_string()), ..Default::default() };
     match w.signing.sign_and_execute_with_cover(tx, rare_wallet::sponsor::Category::Trade, o).and_then(|t| t.wait()) {
-        Ok(r) if r.status.as_deref() == Some("failure") => Err("The network rejected this transaction.".into()),
+        Ok(r) if r.status.as_deref() == Some("failure") => Err(tr().app.network_rejected_tx.into()),
         Ok(r) => {
             crate::data::keep::nudge();
             Ok(r.digest.unwrap_or_default())
@@ -64,13 +69,13 @@ pub fn sign_and_execute(tx: Tx, account: &str, title: &str) -> Result<String, St
 pub fn sign_for_game(tx: Tx, account: &str, slug: Option<&str>, game_name: &str, title: &str, trophy_cover: bool) -> Result<String, String> {
     use rare_wallet::sign::{OriginKind, SignError, SignOptions, SignOrigin, TxInput};
     use rare_wallet::sponsor::Category;
-    let w = service::wallet().ok_or_else(|| "Rare Wallet is not available".to_string())?;
+    let w = service::wallet().ok_or_else(|| tr().app.wallet_unavailable.to_string())?;
     let o = SignOptions { account: Some(account.to_string()), origin: Some(SignOrigin::new(game_name, OriginKind::Game)), title: Some(title.to_string()), ..Default::default() };
     let cover = tx.clone();
     let fallback = |o: SignOptions| w.signing.sign_and_execute_with_cover(cover.clone(), Category::Trophy, o);
     let fb: Option<&dyn Fn(SignOptions) -> Result<rare_wallet::sign::Ticket, SignError>> = if trophy_cover { Some(&fallback) } else { None };
     match w.signing.sign_and_execute_for_game(TxInput::Ptb(tx), slug, game_name, o, fb).and_then(|t| t.wait()) {
-        Ok(r) if r.status.as_deref() == Some("failure") => Err("The network rejected the claim".into()),
+        Ok(r) if r.status.as_deref() == Some("failure") => Err(tr().app.network_rejected_game_claim.into()),
         Ok(r) => {
             crate::data::keep::nudge();
             Ok(r.digest.unwrap_or_default())
@@ -85,10 +90,10 @@ pub fn sign_for_game(tx: Tx, account: &str, slug: Option<&str>, game_name: &str,
 /// Err(SIGN_REJECTED) when the person declined.
 pub fn sign_device_pass(tx: Tx, account: &str, title: &str) -> Result<String, String> {
     use rare_wallet::sign::{OriginKind, SignError, SignOptions, SignOrigin};
-    let w = service::wallet().ok_or_else(|| "Rare Wallet is not available".to_string())?;
+    let w = service::wallet().ok_or_else(|| tr().app.wallet_unavailable.to_string())?;
     let o = SignOptions { account: Some(account.to_string()), origin: Some(SignOrigin::new("Rare", OriginKind::Wallet)), title: Some(title.to_string()), ..Default::default() };
     match w.signing.sign_and_execute_with_cover(tx, rare_wallet::sponsor::Category::Device, o).and_then(|t| t.wait()) {
-        Ok(r) if r.status.as_deref() == Some("failure") => Err("The network rejected this claim.".into()),
+        Ok(r) if r.status.as_deref() == Some("failure") => Err(tr().app.network_rejected_claim.into()),
         Ok(r) => Ok(r.digest.unwrap_or_default()),
         Err(SignError::Rejected(_)) => Err(rare_market::inventory::notice::SIGN_REJECTED.into()),
         Err(e) => Err(e.to_string()),

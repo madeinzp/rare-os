@@ -4,6 +4,7 @@
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
 use rare_render::theme::tok;
+use rare_i18n::tr;
 use rare_render::{Id, Node};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -29,15 +30,26 @@ impl Default for Upscale {
     }
 }
 
-pub const MODES: [(Mode, &str); 3] = [(Mode::Off, "Off"), (Mode::Fsr, "FSR"), (Mode::Nis, "NIS")];
+pub const MODES: [Mode; 3] = [Mode::Off, Mode::Fsr, Mode::Nis];
+
+fn mode_label(m: Mode) -> &'static str {
+    match m {
+        Mode::Off => tr().common.off,
+        Mode::Fsr => "FSR",
+        Mode::Nis => "NIS",
+    }
+}
 pub const SIZES: [(u32, u32, &str); 3] = [(0, 0, "1200p"), (1280, 800, "800p"), (960, 600, "600p")];
 pub const SHARP: [u32; 3] = [4, 10, 16];
-pub const SHARP_LABELS: [&str; 3] = ["Soft", "Medium", "Sharp"];
+fn sharp_labels() -> [&'static str; 3] {
+    let t = &tr().settings_more;
+    [t.up_soft, t.up_medium, t.up_sharp]
+}
 
 /// A press on a chip, applied to the value.
 pub fn apply(u: Upscale, group: &str, idx: usize) -> Upscale {
     match group {
-        "mode" => Upscale { mode: MODES[idx].0, ..u },
+        "mode" => Upscale { mode: MODES[idx], ..u },
         "sharp" => Upscale { sharpness: SHARP[idx], ..u },
         _ => Upscale { width: SIZES[idx].0, height: SIZES[idx].1, ..u },
     }
@@ -64,13 +76,14 @@ fn chip_row(cx: &mut Cx, nav: &mut Nav, parent: Id, label: &str, labels: &[&str]
 impl UpscaleRows {
     /// Builds the rows into `parent` (a column). Focus groups: 20 mode, 21 sharpness, 22 render size.
     pub fn build(cx: &mut Cx, nav: &mut Nav, parent: Id, u: Upscale) -> UpscaleRows {
-        let modes: Vec<&str> = MODES.iter().map(|(_, l)| *l).collect();
-        chip_row(cx, nav, parent, "Upscaling", &modes, MODES.iter().position(|(m, _)| *m == u.mode), "mode", 20);
+        let t = &tr().settings_more;
+        let modes: Vec<&str> = MODES.iter().map(|m| mode_label(*m)).collect();
+        chip_row(cx, nav, parent, t.up_upscaling, &modes, MODES.iter().position(|m| *m == u.mode), "mode", 20);
         if u.mode != Mode::Off {
-            chip_row(cx, nav, parent, "Sharpness", &SHARP_LABELS, SHARP.iter().position(|s| *s == u.sharpness), "sharp", 21);
+            chip_row(cx, nav, parent, t.up_sharpness, &sharp_labels(), SHARP.iter().position(|s| *s == u.sharpness), "sharp", 21);
         }
         let sizes: Vec<&str> = SIZES.iter().map(|(_, _, l)| *l).collect();
-        chip_row(cx, nav, parent, "Render size", &sizes, SIZES.iter().position(|(w, h, _)| *w == u.width && *h == u.height), "size", 22);
+        chip_row(cx, nav, parent, t.up_render_size, &sizes, SIZES.iter().position(|(w, h, _)| *w == u.width && *h == u.height), "size", 22);
         UpscaleRows { value: u }
     }
 

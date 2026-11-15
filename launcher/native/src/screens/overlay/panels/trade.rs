@@ -2,6 +2,8 @@
 //! into, what the seller receives, and the checks that come before a transaction is built. The
 //! transaction builders need the Sui SDK and stay behind `TradeBackend`.
 
+use rare_i18n::{tr, trf};
+
 /// Bid sources the venue builders can fill (rare.market web/lib/sell/best-bid.ts SELLABLE).
 const SELLABLE: [&str; 4] = ["tradeport/bids", "tradeport/escrow-bids", "tradeport/kiosk-bids", "drip/v2-bids"];
 /// These take wallet-held items only (no kiosk).
@@ -179,7 +181,7 @@ fn venue_label(v: &str) -> String {
 /// needOffVenue: a listing on Tradeport or Drip holds the item, so it comes off there first.
 pub fn need_off_venue(l: Option<&Listed>) -> Result<(), String> {
     match l {
-        Some(l) if l.venue != "kiosk" => Err(format!("Delist it on {} first.", venue_label(&l.venue))),
+        Some(l) if l.venue != "kiosk" => Err(trf!(tr().overlay.delist_first, venue = venue_label(&l.venue))),
         _ => Ok(()),
     }
 }
@@ -187,10 +189,10 @@ pub fn need_off_venue(l: Option<&Listed>) -> Result<(), String> {
 /// What buildListTransaction checks before it builds anything.
 pub fn list_check(item: &ItemRef, price_mist: i128, listing: Option<&Listed>) -> Result<(), String> {
     if price_mist <= 0 {
-        return Err("Price must be above zero.".into());
+        return Err(tr().overlay.err_price_zero.into());
     }
     if item.nft_type.is_none() {
-        return Err("This item is still being indexed. Try again in a minute.".into());
+        return Err(tr().overlay.err_indexing.into());
     }
     need_off_venue(listing)
 }
@@ -198,21 +200,21 @@ pub fn list_check(item: &ItemRef, price_mist: i128, listing: Option<&Listed>) ->
 /// What buildAcceptOfferTransaction checks before it builds anything.
 pub fn accept_check(item: &ItemRef, o: &Offer, sender: &str, listing: Option<&Listed>) -> Result<(), String> {
     if item.nft_type.is_none() {
-        return Err("This item is still being indexed. Try again in a minute.".into());
+        return Err(tr().overlay.err_indexing.into());
     }
     if !o.open || !o.fillable {
-        return Err("This offer can't be filled any more.".into());
+        return Err(tr().overlay.err_offer_gone.into());
     }
     if let (Some(a), Some(b)) = (&o.nft_type, &item.nft_type) {
         if norm_type(a) != norm_type(b) {
-            return Err("This offer is for another collection.".into());
+            return Err(tr().overlay.err_offer_collection.into());
         }
     }
     if o.kind == OfferKind::Item && o.item_id.is_some() && !same_id(o.item_id.as_deref(), Some(&item.id)) {
-        return Err("This offer is for another item.".into());
+        return Err(tr().overlay.err_offer_item.into());
     }
     if same_id(Some(&o.bidder), Some(sender)) {
-        return Err("You can't accept your own offer.".into());
+        return Err(tr().overlay.err_own_offer.into());
     }
     need_off_venue(listing)
 }
@@ -222,10 +224,10 @@ pub fn plain_error(m: &str) -> String {
     let l = m.to_ascii_lowercase();
     let rare_status = l.strip_prefix("rare.market ").is_some_and(|r| r.starts_with(|c: char| c.is_ascii_digit()));
     if rare_status || l.contains("failed to fetch") || l.contains("networkerror") || l.contains("load failed") {
-        return "Couldn't reach rare.market. Check the connection and try again.".into();
+        return tr().overlay.err_unreachable.into();
     }
     if m.is_empty() {
-        "Something went wrong. Try again.".into()
+        tr().overlay.err_generic.into()
     } else {
         m.to_string()
     }
@@ -351,18 +353,18 @@ mod tests {
         let tp = Listed { venue: "tradeport".into() };
         assert_eq!(list_check(&item(true), 1, Some(&tp)), Err("Delist it on Tradeport first.".into()));
         assert_eq!(list_check(&item(true), 1, Some(&Listed { venue: "drip".into() })), Err("Delist it on Drip first.".into()));
-        assert_eq!(list_check(&item(false), 0, None), Err("Price must be above zero.".into()));
+        assert_eq!(list_check(&item(false), 0, None), Err(tr().overlay.err_price_zero.into()));
         assert_eq!(list_check(&item(false), 5, Some(&Listed { venue: "kiosk".into() })), Ok(()));
     }
 
     #[test]
     fn accepting_refuses_own_other_closed_and_elsewhere() {
         let i = item(false);
-        assert_eq!(accept_check(&i, &Offer { bidder: SELLER.into(), ..offer() }, SELLER, None), Err("You can't accept your own offer.".into()));
+        assert_eq!(accept_check(&i, &Offer { bidder: SELLER.into(), ..offer() }, SELLER, None), Err(tr().overlay.err_own_offer.into()));
         let other = Offer { kind: OfferKind::Item, item_id: Some(format!("0x{}", "99".repeat(32))), ..offer() };
-        assert_eq!(accept_check(&i, &other, SELLER, None), Err("This offer is for another item.".into()));
-        assert_eq!(accept_check(&i, &Offer { open: false, ..offer() }, SELLER, None), Err("This offer can't be filled any more.".into()));
-        assert_eq!(accept_check(&i, &Offer { nft_type: Some("0x2::other::Nft".into()), ..offer() }, SELLER, None), Err("This offer is for another collection.".into()));
+        assert_eq!(accept_check(&i, &other, SELLER, None), Err(tr().overlay.err_offer_item.into()));
+        assert_eq!(accept_check(&i, &Offer { open: false, ..offer() }, SELLER, None), Err(tr().overlay.err_offer_gone.into()));
+        assert_eq!(accept_check(&i, &Offer { nft_type: Some("0x2::other::Nft".into()), ..offer() }, SELLER, None), Err(tr().overlay.err_offer_collection.into()));
         assert_eq!(accept_check(&i, &offer(), SELLER, Some(&Listed { venue: "tradeport".into() })), Err("Delist it on Tradeport first.".into()));
         assert_eq!(accept_check(&i, &offer(), SELLER, None), Ok(()));
     }

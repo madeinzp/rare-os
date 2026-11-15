@@ -2,6 +2,7 @@
 //! the device, read its accounts (address and SUI balance), verify an address on the Ledger,
 //! pick one or several, name them, add.
 
+use rare_i18n::tr;
 use super::ceremony::{bluetooth_view, BtMsg};
 use super::flow::h;
 use super::hw_parts::{self, hw_error, ErrMsg, HwRow, Pick, Verify};
@@ -108,11 +109,11 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
     let ledger = pr.kind == Kind::Ledger;
     let accounts = st.phase == Phase::Accounts;
     let (title, sub) = if ledger {
-        (if accounts { "Pick Ledger accounts" } else { "Connect your Ledger" }, if accounts { (!st.model.is_empty()).then(|| st.model.clone()) } else { Some("Unlock your Ledger and open the Sui app.".to_string()) })
+        (if accounts { tr().wallet_setup.pick_ledger } else { tr().wallet_setup.connect_ledger }, if accounts { (!st.model.is_empty()).then(|| st.model.clone()) } else { Some(tr().wallet_setup.unlock_ledger.to_string()) })
     } else {
         (
-            if accounts { "Pick Keystone accounts" } else { "Connect your Keystone" },
-            if accounts { (!st.model.is_empty()).then(|| st.model.clone()) } else { Some("Connect your Keystone 3 Pro with a USB-C cable. On the Keystone: Settings > Connection > USB.".to_string()) },
+            if accounts { tr().wallet_setup.pick_keystone } else { tr().wallet_setup.connect_keystone },
+            if accounts { (!st.model.is_empty()).then(|| st.model.clone()) } else { Some(tr().wallet_setup.keystone_connect_note.to_string()) },
         )
     };
     let mut kids = Vec::new();
@@ -124,28 +125,28 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
         if ledger {
             d = d.kid(
                 div("")
-                    .kid(div("mb-1.5 text-sm text-secondary").text("How is it connected"))
-                    .kid(segmented(&[("usb", "USB cable"), ("ble", "Bluetooth")], if st.ble { "ble" } else { "usb" }, |v| Msg::Transport(v == "ble"), ""))
-                    .kid(p("mt-2 text-sm text-secondary").text(if st.ble { "Nano X, Stax and Flex. Turn Bluetooth on from the Ledger's settings." } else { "Plug it in with a USB-C or USB cable." })),
+                    .kid(div("mb-1.5 text-sm text-secondary").text(tr().wallet_setup.how_connected))
+                    .kid(segmented(&[("usb", tr().wallet_setup.usb_cable), ("ble", tr().wallet_setup.bluetooth)], if st.ble { "ble" } else { "usb" }, |v| Msg::Transport(v == "ble"), ""))
+                    .kid(p("mt-2 text-sm text-secondary").text(if st.ble { tr().wallet_setup.ledger_ble_note } else { tr().wallet_setup.ledger_usb_note })),
             );
             if let Some(c) = st.code.as_ref().filter(|_| st.phase == Phase::Connecting || st.searching) {
                 d = d.kid(panel(
                     None,
                     None,
                     "px-5 py-4 text-center",
-                    vec![div("text-sm text-secondary").text("Pairing code"), div("my-1 font-mono text-3xl tracking-widest").text(c), div("text-sm text-secondary").text("Check it matches your Ledger and confirm there.")],
+                    vec![div("text-sm text-secondary").text(tr().wallet_setup.pairing_code), div("my-1 font-mono text-3xl tracking-widest").text(c), div("text-sm text-secondary").text(tr().wallet_setup.pairing_check)],
                 ));
             }
         }
         let body = if st.phase == Phase::Connecting {
             Some(if ledger {
-                empty(pr.prompt.filter(|m| !m.is_empty()).unwrap_or("Connecting to your Ledger"), Some(text("Keep it unlocked with the Sui app open.")), None, true)
+                empty(pr.prompt.filter(|m| !m.is_empty()).unwrap_or(tr().wallet_setup.connecting_ledger), Some(text(tr().wallet_setup.keep_ledger_unlocked)), None, true)
             } else {
-                empty("Reading your Keystone", Some(text("Keep it unlocked and on the USB screen.")), None, true)
+                empty(tr().wallet_setup.reading_keystone, Some(text(tr().wallet_setup.keep_keystone_unlocked)), None, true)
             })
         } else if let Some(e) = st.err.as_ref().filter(|e| ledger && st.ble && e.code.as_deref() == Some("ble-off")) {
             let _ = e;
-            Some(bluetooth_view(Some("Turn Bluetooth on to connect your Ledger over Bluetooth."), pr.bt_busy, pr.bt_error, false).map(&Msg::Bt))
+            Some(bluetooth_view(Some(tr().wallet_setup.ledger_ble_off), pr.bt_busy, pr.bt_error, false).map(&Msg::Bt))
         } else if let Some(e) = &st.err {
             let fix = if ledger { e.fix.as_deref().filter(|_| e.code.as_deref() == Some("udev")) } else { e.fix.as_deref() };
             Some(hw_error(&e.message, fix, st.copied, true).map(&Msg::Err))
@@ -158,25 +159,25 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
                     .enumerate()
                     .map(|(i, d)| {
                         let (t, b) = if ledger {
-                            (if d.name.is_empty() { model_name(&d.model).to_string() } else { d.name.clone() }, if d.transport == "ble" { if d.paired { "Bluetooth, paired" } else { "Bluetooth" } } else { "USB" })
+                            (if d.name.is_empty() { model_name(&d.model).to_string() } else { d.name.clone() }, if d.transport == "ble" { if d.paired { tr().wallet_setup.bluetooth_paired } else { tr().wallet_setup.bluetooth } } else { "USB" })
                         } else {
                             (d.name.clone(), "USB")
                         };
-                        list_button(None, &t, Some(text(b)), Some(text("Connect")), Msg::Connect(d.id.clone()), i == 0, "").key(&d.id)
+                        list_button(None, &t, Some(text(b)), Some(text(tr().common.connect)), Msg::Connect(d.id.clone()), i == 0, "").key(&d.id)
                     })
                     .collect(),
             ))
         } else if st.devices.is_some() && !st.searching {
             Some(empty(
-                if ledger { "No Ledger found" } else { "No Keystone found" },
+                if ledger { tr().wallet_setup.no_ledger } else { tr().wallet_setup.no_keystone },
                 Some(text(if !ledger {
-                    "Plug it in, unlock it and turn on USB in its connection settings."
+                    tr().wallet_setup.keystone_not_found_hint
                 } else if st.ble {
-                    "Turn on Bluetooth on your Ledger, unlock it and open the Sui app."
+                    tr().wallet_setup.ledger_ble_not_found_hint
                 } else {
-                    "Plug it in, unlock it and open the Sui app."
+                    tr().wallet_setup.ledger_usb_not_found_hint
                 })),
-                Some(btn("Search again", Variant::Secondary, "", Some(Msg::Search)).def(true)),
+                Some(btn(tr().wallet_setup.search_again, Variant::Secondary, "", Some(Msg::Search)).def(true)),
                 true,
             ))
         } else {
@@ -184,7 +185,7 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
         };
         d = d.kid_opt(body);
         if !ledger {
-            d = d.kid(p("text-sm text-secondary").text("The Keystone signs a transaction hash over USB. Rare shows you the decoded transaction first, so check it before you approve on the device."));
+            d = d.kid(p("text-sm text-secondary").text(tr().wallet_setup.keystone_hash_note));
         }
         kids.push(d);
     } else {

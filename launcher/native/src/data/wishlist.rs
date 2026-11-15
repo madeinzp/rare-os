@@ -4,6 +4,7 @@
 //! rare.market (CheapShark). A price that drops 5 % or more below the last one seen raises a
 //! notice. Kept in ~/.local/state/rare-native/wishlist.json; refreshed every 6 hours in front.
 
+use rare_i18n::{tr, trf};
 use super::knowledge::{self, Price};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -208,8 +209,8 @@ fn refresh() {
         }
     });
     for (title, p, old) in drops {
-        let mut n = rare_notify::LocalNotice::new(rare_notify::NoticeKind::Other("price_drop".into()), format!("Price drop: {title}"), rare_notify::types::NoticeAction::Unknown);
-        n = n.body(format!("{} at {}, was {}", money(p.price.unwrap_or(0.0)), p.store.clone().unwrap_or_else(|| "a store".into()), money(old)));
+        let mut n = rare_notify::LocalNotice::new(rare_notify::NoticeKind::Other("price_drop".into()), trf!(tr().data.price_drop, title = title), rare_notify::types::NoticeAction::Unknown);
+        n = n.body(trf!(tr().data.price_drop_body, price = money(p.price.unwrap_or(0.0)), store = p.store.clone().unwrap_or_else(|| tr().data.a_store.into()), old = money(old)));
         n.image_url = p.steam_app_id.map(|a| format!("https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{a}/header.jpg")).or(p.thumb.clone());
         crate::features::services::post(n);
     }
@@ -218,7 +219,7 @@ fn refresh() {
 /// "$4.99", "Free".
 pub fn money(v: f64) -> String {
     if v <= 0.0 {
-        "Free".into()
+        tr().data.free.into()
     } else {
         format!("${v:.2}")
     }

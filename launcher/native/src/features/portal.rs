@@ -10,6 +10,7 @@
 use rare_system::portal::Connectivity;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Duration;
+use rare_i18n::tr;
 
 /// How often to check while the network wants a sign-in or has no internet.
 const CLOSE_SECS: u64 = 30;
@@ -102,7 +103,7 @@ pub fn open() -> Result<(), String> {
 }
 
 fn name(ssid: &Option<String>) -> String {
-    ssid.clone().unwrap_or_else(|| "this network".into())
+    ssid.clone().unwrap_or_else(|| tr().features_more.portal_this_network.into())
 }
 
 fn run(waker: Arc<dyn Fn() + Send + Sync>) {
@@ -151,7 +152,7 @@ fn apply(s: &mut St, c: Connectivity, ssid: Option<String>, window: bool) -> (bo
     }
     let close = c == Connectivity::Full && window;
     if close {
-        s.connected = Some(ssid.clone().unwrap_or_else(|| "the internet".into()));
+        s.connected = Some(ssid.clone().unwrap_or_else(|| tr().features_more.portal_the_internet.into()));
     }
     s.conn = c;
     s.ssid = ssid;

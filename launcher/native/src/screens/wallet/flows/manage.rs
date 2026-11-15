@@ -4,6 +4,7 @@
 //! Blocking keystore work runs on a wallet worker (`service::work`) and the answer comes back in
 //! `manage_tick`. Secrets (the typed PIN, a revealed phrase or key) are never logged.
 
+use rare_i18n::tr;
 use crate::screens::wallet::home::lib::{secret_error, SecretFail};
 use crate::screens::wallet::home::sheets::{self, ChangeMsg, ChangeOut, EntryMsg, EntryOut, LedgerCheck, RemoveAllMsg, RemoveMsg, RevealMsg, RevealWhat};
 use crate::screens::wallet::home::stack::WalletView;
@@ -181,9 +182,9 @@ impl WalletTab {
 
     fn noun(&self) -> &'static str {
         if self.manage_kind() == SecretKind::Passphrase {
-            "passphrase"
+            tr().wallet_setup.noun_passphrase
         } else {
-            "PIN"
+            tr().wallet_setup.noun_pin
         }
     }
 
@@ -247,18 +248,18 @@ impl WalletTab {
             Some(accounts::Effect::Rename(a)) => {
                 let label = self.accounts.iter().find(|x| x.address == a).map(|x| x.label.clone()).unwrap_or_default();
                 self.flows.manage.renaming = Some(a);
-                st.ask_text(ASK_NAME, "Account name", label, Some("Account name"));
+                st.ask_text(ASK_NAME, tr().wallet_setup.account_name, label, Some(tr().wallet_setup.account_name));
             }
             Some(accounts::Effect::Copy(a)) => {
                 copy_text(&a);
-                self.toast(st, "Address copied", Tone::Info);
+                self.toast(st, tr().wallet_setup.toast_address_copied, Tone::Info);
             }
             Some(accounts::Effect::AddFromPhrase) => match cur.and_then(|c| c.hd) {
                 Some(hd) => {
                     if self.fixture {
                         self.accts.busy = false;
                     } else {
-                        self.unlock_then(Then::AddPhrase(hd.phrase_id), "Enter your PIN to add an account");
+                        self.unlock_then(Then::AddPhrase(hd.phrase_id), tr().wallet_setup.gate_add_account);
                     }
                 }
                 None => self.accts.busy = false,
@@ -275,7 +276,7 @@ impl WalletTab {
     fn remove_account(&mut self, addr: String, settings: bool) {
         let kind = self.accounts.iter().find(|a| a.address == addr).map(|a| a.kind.clone()).unwrap_or_default();
         if needs_vault(&kind) {
-            self.unlock_then(Then::Remove { addr, settings }, "Enter your PIN to remove this account");
+            self.unlock_then(Then::Remove { addr, settings }, tr().wallet_setup.gate_remove_account);
         } else {
             self.start_remove(addr, settings);
         }
@@ -305,7 +306,7 @@ impl WalletTab {
                 }
                 if self.fixture {
                     self.accts.removing = None;
-                    self.toast(st, "Account removed", Tone::Info);
+                    self.toast(st, tr().wallet_setup.toast_account_removed, Tone::Info);
                     return;
                 }
                 self.flows.manage.rm = sheets::Remove { busy: true, error: None, sign_out: false };
@@ -335,7 +336,7 @@ impl WalletTab {
                     w.keystore.lock();
                     w.bump();
                 }
-                self.toast(st, "Wallet locked", Tone::Info);
+                self.toast(st, tr().wallet_setup.toast_wallet_locked, Tone::Info);
             }
             Some(settings::Effect::SetAutoLock(min)) => {
                 if !self.fixture {
@@ -371,7 +372,7 @@ impl WalletTab {
             S::Pin(ChangeMsg::Entry(em)) => {
                 let Some(Open::Pin(s)) = self.settings.open.as_mut() else { return };
                 match sheets::change_update(kind, s, ChangeMsg::Entry(em)) {
-                    Some(ChangeOut::AskPassphrase) => ask_secret(st, ASK_PASS, "Passphrase"),
+                    Some(ChangeOut::AskPassphrase) => ask_secret(st, ASK_PASS, tr().wallet_setup.passphrase),
                     Some(ChangeOut::Change { cur, next }) => {
                         let k = if kind == SecretKind::Passphrase { "passphrase" } else { "pin" };
                         if self.fixture {
@@ -389,7 +390,7 @@ impl WalletTab {
                 };
                 let Some(Open::Reveal(_, s)) = self.settings.open.as_mut() else { return };
                 match sheets::entry_update(kind, &mut s.entry, em) {
-                    Some(EntryOut::AskPassphrase) => ask_secret(st, ASK_PASS, "Passphrase"),
+                    Some(EntryOut::AskPassphrase) => ask_secret(st, ASK_PASS, tr().wallet_setup.passphrase),
                     Some(EntryOut::Submit(secret)) => {
                         let Some(a) = account else { return };
                         if self.fixture {
@@ -429,14 +430,14 @@ impl WalletTab {
                 }
                 self.settings.open = Some(Open::Hw(Some(LedgerCheck::Busy), false));
                 if self.fixture {
-                    self.settings.open = Some(Open::Hw(Some(LedgerCheck::Error { message: "No Ledger found. Plug it in and unlock it.".into(), fix: None }), false));
+                    self.settings.open = Some(Open::Hw(Some(LedgerCheck::Error { message: tr().wallet_setup.ledger_not_found.into(), fix: None }), false));
                     return;
                 }
                 self.job(|w| {
                     let r = w.rt.block_on(rare_wallet::ledger::LedgerState::list(false, 0));
                     Done::Ledger(match r {
                         Ok(d) if !d.is_empty() => LedgerCheck::Ok { found: d[0].name.clone() },
-                        Ok(_) => LedgerCheck::Error { message: "No Ledger found. Plug it in and unlock it.".into(), fix: None },
+                        Ok(_) => LedgerCheck::Error { message: tr().wallet_setup.ledger_not_found.into(), fix: None },
                         Err(e) => {
                             let we = rare_wallet::WalletError::parse(&e);
                             let fix = we.data.as_ref().and_then(|d| d.get("fix")).and_then(|f| f.as_str()).map(str::to_string);
@@ -460,7 +461,7 @@ impl WalletTab {
                 *s = sheets::Remove { busy: true, error: None, sign_out: s.sign_out };
                 if self.fixture {
                     self.settings.open = None;
-                    self.toast(st, "Account removed", Tone::Info);
+                    self.toast(st, tr().wallet_setup.toast_account_removed, Tone::Info);
                     return;
                 }
                 self.remove_account(a.address, true);
@@ -470,7 +471,7 @@ impl WalletTab {
                     Some(Open::RemoveAll(s)) => s.typed.clone(),
                     _ => return,
                 };
-                st.ask_text(ASK_REMOVE, "Type REMOVE to confirm", typed, Some("REMOVE"));
+                st.ask_text(ASK_REMOVE, tr().wallet_setup.type_remove, typed, Some("REMOVE"));
             }
             S::RemoveAll(RemoveAllMsg::Typed(v)) => {
                 if let Some(Open::RemoveAll(s)) = self.settings.open.as_mut() {
@@ -630,18 +631,18 @@ impl WalletTab {
             }
             Done::Renamed(Err(e)) => {
                 log::warn!("wallet rename: {e}");
-                self.toast(st, "Couldn't rename the account.", Tone::Error);
+                self.toast(st, tr().wallet_setup.toast_rename_failed, Tone::Error);
             }
             Done::Added(Ok(addr)) => {
                 self.accts.busy = false;
                 self.selected = Some(addr);
                 self.changed();
-                self.toast(st, "Account added", Tone::Info);
+                self.toast(st, tr().wallet_setup.toast_account_added, Tone::Info);
             }
             Done::Added(Err(e)) => {
                 self.accts.busy = false;
                 log::warn!("wallet add account: {e}");
-                self.toast(st, "Couldn't add the account.", Tone::Error);
+                self.toast(st, tr().wallet_setup.toast_add_failed, Tone::Error);
             }
             Done::Removed { addr, res: Ok(()), settings } => {
                 let _ = addr;
@@ -651,7 +652,7 @@ impl WalletTab {
                 if settings {
                     self.settings.open = None;
                 }
-                self.toast(st, if signed_out { "Signed out" } else { "Account removed" }, Tone::Info);
+                self.toast(st, if signed_out { tr().wallet_setup.toast_signed_out } else { tr().wallet_setup.toast_account_removed }, Tone::Info);
                 self.loaded_for = None;
                 self.changed();
                 // re-read now so an empty wallet goes back to the welcome page
@@ -662,7 +663,7 @@ impl WalletTab {
                 }
             }
             Done::Removed { res: Err(e), settings, .. } => {
-                let msg = if e.len() < 140 { e } else { "Could not remove it".into() };
+                let msg = if e.len() < 140 { e } else { tr().wallet_setup.remove_failed.into() };
                 if settings {
                     if let Some(settings::Open::Remove(s)) = self.settings.open.as_mut() {
                         *s = sheets::Remove { busy: false, error: Some(msg), sign_out: s.sign_out };
@@ -696,12 +697,12 @@ impl WalletTab {
                 self.changed();
                 self.wallet_ver = u64::MAX;
                 self.sync_wallet();
-                self.toast(st, "All wallets removed from this device", Tone::Info);
+                self.toast(st, tr().wallet_setup.toast_all_removed, Tone::Info);
             }
             Done::Wiped(Err(e)) => {
                 if let Some(settings::Open::RemoveAll(s)) = self.settings.open.as_mut() {
                     s.busy = false;
-                    s.error = Some(if e.len() < 140 { e } else { "Could not remove the wallets".into() });
+                    s.error = Some(if e.len() < 140 { e } else { tr().wallet_setup.remove_all_failed.into() });
                 }
             }
             Done::Ledger(c) => {

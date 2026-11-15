@@ -16,6 +16,7 @@
 use crate::data::model::Game;
 use crate::screens::wallet::{live, service};
 use crate::state::{Overlay, State, Tone};
+use rare_i18n::{tr, trf};
 use rare_sui::saves::{self, crypto, local, ludusavi, meta::{Backup, BackupMeta}, sync::{self, Base, GameSet, History, Plan, Scan, SyncState, Target}};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -557,7 +558,7 @@ fn keep_local(t: &Target, reason: &str) -> Result<Option<(Vec<u8>, Scan)>, Strin
         return Ok(None);
     }
     if scan.bytes > MAX_AUTO_BYTES {
-        return Err(format!("{} saves are too large to keep automatically", t.label()));
+        return Err(trf!(tr().features.cs_too_large, name = t.label()));
     }
     let h = history();
     if let Some(top) = h.list(t.id()).into_iter().next().filter(|v| v.fp == scan.fp) {
@@ -571,7 +572,7 @@ fn keep_local(t: &Target, reason: &str) -> Result<Option<(Vec<u8>, Scan)>, Strin
 }
 
 fn download(keys: &Keys, t: &Target, b: &Backup) -> Result<Scan, String> {
-    let sui = sui().ok_or("no network")?;
+    let sui = sui().ok_or(tr().features.cs_no_network)?;
     let data = live::rt().block_on(saves::walrus::fetch_backup(&http(), sui.network(), &keys.key, b)).map_err(|e| e.to_string())?;
     keep_local(t, "download")?;
     t.restore(&local::home()?, &data)?;
@@ -585,7 +586,7 @@ fn upload(keys: &Arc<Keys>, t: &Target, data: &[u8], scan: &Scan) -> Result<Back
     if testnet() && std::env::var("RARE_SAVES_E2E_OFFLINE").is_ok() {
         return Err("network unreachable (end to end check)".into());
     }
-    let sui = sui().ok_or("no network")?;
+    let sui = sui().ok_or(tr().features.cs_no_network)?;
     let w = Writer(keys.clone());
     let epochs = keep_epochs();
     let b = live::rt().block_on(saves::upload(sui, &http(), &w, &keys.key, meta_for(t, scan), data, epochs, REUSE_LEFT_EPOCHS)).map_err(|e| e.to_string())?;
@@ -653,10 +654,10 @@ fn job_before(g: Game, emulation_app: bool) {
         match sync::plan(&scan, base.as_ref(), top) {
             Plan::Download => {
                 with(|i| {
-                    i.busy.insert(id.clone(), "Getting your cloud save");
+                    i.busy.insert(id.clone(), tr().features.cs_getting);
                 });
                 if let Err(e) = download(&keys, t, top.unwrap()) {
-                    notes.push(format!("Couldn't get the cloud save for {}: {e}", t.label()));
+                    notes.push(trf!(tr().features.cs_get_failed, name = t.label(), error = e));
                 }
             }
             Plan::Conflict => conflicts.push(ConflictSet { target: t.clone(), local: scan, cloud: top.unwrap().clone() }),
@@ -715,18 +716,18 @@ fn job_after(g: Game, emulation_app: bool) {
         let base = base_of(t.id());
         match sync::plan(&scan, base.as_ref(), newest(&cloud, t.id())) {
             Plan::Upload if inner().funds.is_some_and(|f| uploads_left(f) == 0) => {
-                err = Some("Cloud saves need funds. Add WAL and SUI in Saves.".into());
+                err = Some(tr().features.cs_need_funds.into());
             }
             Plan::Upload => {
                 with(|i| {
-                    i.busy.insert(id.clone(), "Saving to the cloud");
+                    i.busy.insert(id.clone(), tr().features.cs_saving);
                 });
                 if let Err(e) = upload(keys, t, &data, &scan) {
                     log::warn!("cloudsync: upload {}: {e}", t.id());
                     if no_funds(&e) {
-                        err = Some("Cloud saves need funds. Add WAL and SUI in Saves.".into());
+                        err = Some(tr().features.cs_need_funds.into());
                     } else {
-                        err = Some("Couldn't upload yet. Rare tries again shortly.".into());
+                        err = Some(tr().features.cs_upload_later.into());
                         retry = true;
                     }
                 }
@@ -833,7 +834,7 @@ pub fn before_launch(st: &mut State, g: &Game) -> bool {
         if i.busy.contains_key(&g.id) {
             return false;
         }
-        i.busy.insert(g.id.clone(), "Checking cloud saves");
+        i.busy.insert(g.id.clone(), tr().features.cs_checking);
     }
     bump();
     st.launching = Some(g.id.clone());
@@ -1031,7 +1032,7 @@ pub fn install(secret: &[u8], account: &str) -> Result<String, String> {
 /// Turn on: one wallet signature makes the save key and the writer; kept on this device.
 pub fn turn_on() {
     let Some(addr) = service::wallet().and_then(|w| w.keystore.current_signing_account().ok().flatten()).map(|a| a.address) else {
-        super::bus::note("Add a Rare Wallet account you can sign with first", true);
+        super::bus::note(tr().features.cs_need_signer, true);
         return;
     };
     if std::mem::replace(&mut inner().unlocking, true) {
@@ -1042,17 +1043,17 @@ pub fn turn_on() {
     let rx = service::work(move |w| {
         let mut auth = rare_wallet::passkey_account::Ctap { state: &w.passkey, sink: w.sink(), rt: w.rt.clone() };
         let via = *w.via.lock().unwrap();
-        rare_wallet::secret::derive::derive_secret(&w.signing, &mut auth, via, crypto::SAVES_CONTEXT, Some(&a2), Some("Turn on cloud saves")).map(|s| s.to_vec()).map_err(|e| e.to_string())
+        rare_wallet::secret::derive::derive_secret(&w.signing, &mut auth, via, crypto::SAVES_CONTEXT, Some(&a2), Some(tr().features.cs_turn_on_prompt)).map(|s| s.to_vec()).map_err(|e| e.to_string())
     });
     spawn(move || {
-        let r = rx.recv().unwrap_or_else(|_| Err("The wallet stopped. Try again.".into())).and_then(|r| r);
+        let r = rx.recv().unwrap_or_else(|_| Err(tr().features.cs_wallet_stopped.into())).and_then(|r| r);
         match r.and_then(|secret| install(&secret, &addr)) {
             Ok(_) => {
                 with(|i| i.unlocking = false);
                 ensure_index();
                 refresh_cloud(None);
                 let broke = funds().is_none_or(|f| uploads_left(f) == 0);
-                super::bus::note(if broke { "Cloud saves are on. Add funds so Rare can upload." } else { "Cloud saves are on" }, false);
+                super::bus::note(if broke { tr().features.cs_on_needs_funds } else { tr().features.cs_on }, false);
             }
             Err(e) => {
                 with(|i| i.unlocking = false);
@@ -1081,13 +1082,13 @@ pub fn add_funds() {
         let s = tx.split_u64(rare_sui::ptb::Arg::Gas, FUND_MIST);
         let w = tx.coin_with_balance(saves::store::wal_type(sui().map(|s| s.network()).unwrap_or(rare_sui::Network::Mainnet)), FUND_FROST);
         tx.transfer_to(&[s, w], &writer);
-        match service::send(rare_wallet::sign::TxInput::Ptb(tx), &acct, "Add funds for cloud saves") {
+        match service::send(rare_wallet::sign::TxInput::Ptb(tx), &acct, tr().features.cs_add_funds_title) {
             Ok(_) => {
                 if let Some(sui) = sui() {
                     let f = live::rt().block_on(futures_balance(sui, &writer));
                     with(|i| i.funds = f.or(i.funds));
                 }
-                super::bus::note("Funds added for cloud saves", false);
+                super::bus::note(tr().features.cs_funds_added, false);
             }
             Err(e) => super::bus::note(e.to_string(), true),
         }
@@ -1109,7 +1110,7 @@ pub fn resolve(st: &mut State, keep: Option<Keep>) {
     let Some(g) = st.game(&c.game).cloned() else { return };
     let emu = game_ctx(st, &g);
     with(|i| {
-        i.busy.insert(c.game.clone(), if keep == Keep::Cloud { "Getting your cloud save" } else { "Saving to the cloud" });
+        i.busy.insert(c.game.clone(), if keep == Keep::Cloud { tr().features.cs_getting } else { tr().features.cs_saving });
     });
     if c.launch {
         st.launching = Some(c.game.clone());
@@ -1138,7 +1139,7 @@ fn resolve_job(c: Conflict, keep: Keep, g: Game, emu: bool) {
     with(|i| {
         i.busy.remove(&c.game);
         if let Some(e) = &err {
-            i.out.push(Out::Note(if keep == Keep::Device && no_funds(e) { "Kept this device's save. Cloud saves need funds to upload it.".into() } else { format!("Couldn't finish: {e}") }, true));
+            i.out.push(Out::Note(if keep == Keep::Device && no_funds(e) { tr().features.cs_kept_device.into() } else { trf!(tr().features.cs_finish_failed, error = e) }, true));
         }
         if c.launch {
             i.cleared.insert(c.game.clone());
@@ -1191,7 +1192,7 @@ pub fn restore(st: &mut State, id: &str, row: &VersionRow) {
     let emu = game_ctx(st, &g);
     let row = row.clone();
     with(|i| {
-        i.busy.insert(id.to_string(), "Restoring");
+        i.busy.insert(id.to_string(), tr().features.cs_restoring);
     });
     spawn(move || restore_job(g, emu, row));
 }
@@ -1203,15 +1204,15 @@ fn restore_job(g: Game, emu: bool, row: VersionRow) {
         (i.cloud.clone(), i.index.clone(), i.keys.clone(), i.on)
     };
     let r = (|| -> Result<(), String> {
-        let t = targets_for(&g, emu, index.as_deref(), &cloud).into_iter().find(|t| t.id() == row.set).ok_or("These saves are not on this device")?;
+        let t = targets_for(&g, emu, index.as_deref(), &cloud).into_iter().find(|t| t.id() == row.set).ok_or(tr().features.cs_not_on_device)?;
         let data = match (row.local, &row.cloud, &keys) {
             (Some(created), _, _) => history().read(&row.set, created)?,
             (None, Some(blob), Some(k)) => {
-                let b = cloud.iter().find(|b| &b.blob_object_id == blob).ok_or("That cloud copy is gone")?;
-                let sui = sui().ok_or("no network")?;
+                let b = cloud.iter().find(|b| &b.blob_object_id == blob).ok_or(tr().features.cs_copy_gone)?;
+                let sui = sui().ok_or(tr().features.cs_no_network)?;
                 live::rt().block_on(saves::walrus::fetch_backup(&http(), sui.network(), &k.key, b)).map_err(|e| e.to_string())?
             }
-            _ => return Err("Turn on cloud saves to get this copy".into()),
+            _ => return Err(tr().features.cs_turn_on_to_get.into()),
         };
         keep_local(&t, "restore")?;
         t.restore(&local::home()?, &data)?;
@@ -1227,8 +1228,8 @@ fn restore_job(g: Game, emu: bool, row: VersionRow) {
     with(|i| {
         i.busy.remove(&g.id);
         i.out.push(match &r {
-            Ok(()) => Out::Note("Restored. The saves you had are kept in Versions.".into(), false),
-            Err(e) => Out::Note(format!("Couldn't restore: {e}"), true),
+            Ok(()) => Out::Note(tr().features.cs_restored.into(), false),
+            Err(e) => Out::Note(trf!(tr().features.cs_restore_failed, error = e), true),
         });
     });
     drop(_job);

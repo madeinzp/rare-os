@@ -15,6 +15,7 @@ use rare_render::focus::Focusable;
 use rare_render::view::El;
 use rare_sui::saves::{self, crypto, local, meta};
 use std::sync::mpsc::{channel, Receiver, Sender};
+use rare_i18n::{tr, trf};
 
 /// What a worker reports back.
 enum Up {
@@ -139,7 +140,7 @@ impl SavesPage {
 
     fn unlock(&mut self) {
         let Some(addr) = self.address.clone() else {
-            self.cloud.error = Some("Add a Rare Wallet account first, in Wallet.".into());
+            self.cloud.error = Some(tr().features_more.saves_add_account.into());
             self.ver += 1;
             return;
         };
@@ -148,11 +149,11 @@ impl SavesPage {
         let rx = service::work(move |w| {
             let mut auth = rare_wallet::passkey_account::Ctap { state: &w.passkey, sink: w.sink(), rt: w.rt.clone() };
             let via = *w.via.lock().unwrap();
-            let secret = rare_wallet::secret::derive::derive_secret(&w.signing, &mut auth, via, crypto::SAVES_CONTEXT, Some(&addr), Some("Unlock cloud saves")).map_err(|e| e.to_string())?;
+            let secret = rare_wallet::secret::derive::derive_secret(&w.signing, &mut auth, via, crypto::SAVES_CONTEXT, Some(&addr), Some(tr().features_more.saves_unlock_prompt)).map_err(|e| e.to_string())?;
             crypto::derive_save_key(&secret[..], &addr).map_err(|e| e.to_string())
         });
         spawn(move || {
-            let r = rx.recv().unwrap_or_else(|_| Err("The wallet stopped. Try again.".into())).and_then(|r| r);
+            let r = rx.recv().unwrap_or_else(|_| Err(tr().features_more.saves_wallet_stopped.into())).and_then(|r| r);
             let _ = tx.send(Up::Key(r));
         });
         self.cloud.busy = Some((String::new(), Step::Encode));
@@ -190,10 +191,10 @@ impl SavesPage {
             p.cloud.error = Some(e.to_string());
             p.ver += 1;
         };
-        let Some(set) = self.raw_sets.iter().find(|s| s.id == id).cloned() else { return fail(self, "That save isn't on this device anymore.") };
-        let Some(sui) = live::sui().cloned() else { return fail(self, "Couldn't reach Sui. Check the connection and try again.") };
+        let Some(set) = self.raw_sets.iter().find(|s| s.id == id).cloned() else { return fail(self, tr().features_more.saves_gone) };
+        let Some(sui) = live::sui().cloned() else { return fail(self, tr().features_more.saves_no_sui) };
         let Some(signer) = crate::features::signer::current() else {
-            self.cloud.error = Some("Add a Rare Wallet account you can sign with first".into());
+            self.cloud.error = Some(tr().features_more.saves_add_signing_account.into());
             self.ver += 1;
             return;
         };
@@ -326,7 +327,7 @@ impl Page for SavesPage {
                             self.raw.insert(0, b);
                             self.sync();
                             self.refresh();
-                            st.toast(format!("{what} backed up"), Tone::Info, now);
+                            st.toast(trf!(tr().features_more.saves_backed_up, what = what), Tone::Info, now);
                         }
                         Err(e) => self.cloud.error = Some(e),
                     }
@@ -334,8 +335,8 @@ impl Page for SavesPage {
                 Up::Restored(r, emu) => {
                     self.cloud.busy = None;
                     match r {
-                        Ok(moved) if !moved.is_empty() => st.toast(format!("Restored. Your previous saves are kept in {}", moved.rsplit('/').next().unwrap_or("")), Tone::Info, now),
-                        Ok(_) => st.toast(format!("{emu} saves restored"), Tone::Info, now),
+                        Ok(moved) if !moved.is_empty() => st.toast(trf!(tr().features_more.saves_restored_kept, folder = moved.rsplit('/').next().unwrap_or("")), Tone::Info, now),
+                        Ok(_) => st.toast(trf!(tr().features_more.saves_restored, emulator = emu), Tone::Info, now),
                         Err(e) => self.cloud.error = Some(e),
                     }
                     self.detect();

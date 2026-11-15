@@ -1,35 +1,44 @@
 //! Small shared pieces of the notify screens: timeAgo, the price labels, NoticeArt (Toast.tsx).
 
-use super::data::types::Notice;
+use rare_i18n::{tr, trf};
+use super::data::types::{AlertDir, Notice};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
 use rare_render::theme::tok;
 use rare_render::{Fit, Id, ImgReq, Node, Src};
+
+/// The word an alert direction reads as in a sentence: "above" or "below".
+pub fn dir_word(d: AlertDir) -> &'static str {
+    match d {
+        AlertDir::Above => tr().notify.above,
+        AlertDir::Below => tr().notify.below,
+    }
+}
 
 /// marketplace/format.ts timeAgo for an epoch time in ms: "12s", "3m", "2h", "4d", "1mo", "1y".
 pub fn time_ago(t: Option<i64>, now: i64) -> String {
     let Some(t) = t.filter(|t| *t != 0) else { return "\u{2014}".into() };
     let s = ((now - t) as f64 / 1000.0).round().max(0.0) as i64;
     if s < 60 {
-        return format!("{s}s");
+        return trf!(tr().notify.time_s, n = s);
     }
     let m = s / 60;
     if m < 60 {
-        return format!("{m}m");
+        return trf!(tr().notify.time_m, n = m);
     }
     let h = m / 60;
     if h < 24 {
-        return format!("{h}h");
+        return trf!(tr().notify.time_h, n = h);
     }
     let d = h / 24;
     if d < 30 {
-        return format!("{d}d");
+        return trf!(tr().notify.time_d, n = d);
     }
     let mo = d / 30;
     if mo < 12 {
-        return format!("{mo}mo");
+        return trf!(tr().notify.time_mo, n = mo);
     }
-    format!("{}y", d / 365)
+    trf!(tr().notify.time_y, n = d / 365)
 }
 
 fn group(int: u64) -> String {

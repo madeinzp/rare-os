@@ -15,6 +15,7 @@ use rare_render::view::El;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
+use rare_i18n::{tr, trf};
 
 /// Quick settings was opened from setup: closing it reopens setup.
 static FROM_SETUP: AtomicBool = AtomicBool::new(false);
@@ -331,14 +332,20 @@ impl FirstRunPage {
                     }
                     self.enter();
                 }
-                shell::Effect::SetLanguage(c) => config::set(&[("language", c.into())]),
+                shell::Effect::SetLanguage(c) => {
+                    config::set(&[("language", c.clone().into())]);
+                    // First run comes back in the new language (the app is built again).
+                    if let Some(l) = rare_i18n::Lang::from_code(&c) {
+                        crate::lang::switch(l);
+                    }
+                }
                 shell::Effect::Sound(_) => {}
                 shell::Effect::Finish => {
                     config::set(&[("onboarded", true.into()), ("onboardingStep", serde_json::Value::Null)]);
                     IN_SETUP.store(false, Ordering::Relaxed);
                     fx.run(Act::Scan);
                     st.close();
-                    st.toast("Press the Rare button in any game for the Rare menu", Tone::Info, now());
+                    st.toast(tr().features_more.firstrun_done_toast, Tone::Info, now());
                 }
             }
         }
@@ -357,7 +364,7 @@ impl FirstRunPage {
             }
             Some(wifi::Effect::Scan) => self.work(|| Ans::Scan(wifi_scan())),
             Some(wifi::Effect::AskPassword(ssid)) => {
-                st.ask_secret(PW_KEY, format!("Password for {ssid}"), None);
+                st.ask_secret(PW_KEY, trf!(tr().features_more.firstrun_wifi_password, ssid = ssid), None);
                 self.pending_ssid = Some(ssid);
             }
             Some(wifi::Effect::Connect { ssid, password }) => self.work(move || {
@@ -474,7 +481,7 @@ impl Page for FirstRunPage {
             }
             "emulators" => Some(match &self.emus {
                 Some(c) => emulators::view(c, &self.picked).map(&Msg::Emu),
-                None => crate::screens::firstrun::kit::step(crate::screens::wallet::markup::text("Emulators"), None, vec![crate::screens::firstrun::kit::working(true, Some("Looking for your games"))], vec![], false),
+                None => crate::screens::firstrun::kit::step(crate::screens::wallet::markup::text(tr().features_more.firstrun_emulators), None, vec![crate::screens::firstrun::kit::working(true, Some(tr().features_more.firstrun_looking_games))], vec![], false),
             }),
             "time" => Some(time::view(self.zone.as_deref(), &crate::screens::shell::clock_text(), self.zone_picked).map(&Msg::Time)),
             "stores" => {
@@ -499,13 +506,13 @@ impl Page for FirstRunPage {
         use rare_render::focus::hints::{hint, Key};
         let mut v = Vec::new();
         if self.sh.i > 0 && !self.sh.finishing {
-            v.push(hint(Key::B, "Back"));
+            v.push(hint(Key::B, tr().common.back));
         } else if self.sh.i == 0 && config::get_bool("onboarded") {
-            v.push(hint(Key::B, "Back"));
+            v.push(hint(Key::B, tr().common.back));
         }
         // the controller check lights Y instead
         if self.sh.step() != "controller" {
-            v.push(hint(Key::Y, "Skip setup"));
+            v.push(hint(Key::Y, tr().features_more.firstrun_skip_setup));
         }
         v
     }

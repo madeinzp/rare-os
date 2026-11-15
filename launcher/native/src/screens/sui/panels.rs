@@ -3,6 +3,7 @@
 //! fallback, and a Steam game's Proton choice.
 
 use crate::data::model::{fmt_ago, Game};
+use rare_i18n::{tr, trf, trn};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::ui::{button_el, BSize, ButtonSpec, BVariant};
 
@@ -22,16 +23,16 @@ pub enum Msg {
 pub fn play_buttons(g: &Game, running: bool, launching: bool) -> Vec<El<Msg>> {
     if running {
         return vec![
-            button_el(ButtonSpec::new("Resume").v(BVariant::Primary).size(BSize::Lg).def(true).hint("Resume").icon("play", "").class("min-w-[10rem]"), Some(Msg::Resume)),
-            button_el(ButtonSpec::new("Quit game").size(BSize::Lg).hint("Quit game"), Some(Msg::Quit)),
+            button_el(ButtonSpec::new(tr().common.resume).v(BVariant::Primary).size(BSize::Lg).def(true).hint(tr().common.resume).icon("play", "").class("min-w-[10rem]"), Some(Msg::Resume)),
+            button_el(ButtonSpec::new(tr().sui.quit_game).size(BSize::Lg).hint(tr().sui.quit_game), Some(Msg::Quit)),
         ];
     }
     let label = if launching {
-        "Starting..."
+        tr().sui.starting
     } else if g.source == "apps" {
-        "Open"
+        tr().common.open
     } else {
-        "Play"
+        tr().common.play
     };
     vec![button_el(ButtonSpec::new(label).v(BVariant::Primary).size(BSize::Lg).def(true).icon("play", "").disabled(launching).class("min-w-[10rem]"), Some(Msg::Launch))]
 }
@@ -56,13 +57,13 @@ pub struct RecentRom {
 
 fn fmt_hours(s: u64) -> String {
     if s < 3600 {
-        format!("{} min", (s as f64 / 60.0).round().max(1.0))
+        trf!(tr().sui.minutes_short, n = (s as f64 / 60.0).round().max(1.0))
     } else {
         let h = (s as f64 / 360.0).round() / 10.0;
         if h.fract() == 0.0 {
-            format!("{} h", h as i64)
+            trf!(tr().sui.hours_short, n = h as i64)
         } else {
-            format!("{h} h")
+            trf!(tr().sui.hours_short, n = h)
         }
     }
 }
@@ -80,14 +81,14 @@ pub fn emulation_panel(e: &Emulation) -> El<Msg> {
     let sys_name = |id: &str| e.systems.iter().find(|s| s.0 == id).map(|s| s.1.clone()).unwrap_or_else(|| id.to_uppercase());
     let mut d = div("flex max-w-[75rem] gap-[1rem]").kid(
         div("min-w-0 flex-[3] rounded-panel bg-l1 px-[1.25rem] py-[1rem]")
-            .kid(div("mb-[0.6rem] flex items-baseline gap-[0.6rem]").kid(span("text-small font-semibold").text("Systems")).kid(span("tabular-nums text-meta text-muted").text(format!("{total} games"))))
+            .kid(div("mb-[0.6rem] flex items-baseline gap-[0.6rem]").kid(span("text-small font-semibold").text(tr().sui.systems)).kid(span("tabular-nums text-meta text-muted").text(trn!(tr().common.games_n, total))))
             .kid(div("grid grid-cols-3 gap-x-[1.2rem] gap-y-[0.35rem]").kids(e.systems.iter().take(12).map(|(id, name, count)| {
                 div("flex min-w-0 items-baseline justify-between gap-[0.5rem] text-small").key(id).kid(span("truncate").text(name)).kid(span("tabular-nums shrink-0 text-muted").text(count.to_string()))
             }))),
     );
     if !e.recent.is_empty() {
         d = d.kid(
-            div("min-w-0 flex-[2] rounded-panel bg-l1 px-[1.25rem] py-[1rem]").kid(div("mb-[0.6rem] text-small font-semibold").text("Played last")).kid(div("flex flex-col gap-[0.35rem]").kids(e.recent.iter().take(4).map(|g| {
+            div("min-w-0 flex-[2] rounded-panel bg-l1 px-[1.25rem] py-[1rem]").kid(div("mb-[0.6rem] text-small font-semibold").text(tr().sui.played_last)).kid(div("flex flex-col gap-[0.35rem]").kids(e.recent.iter().take(4).map(|g| {
                 div("flex min-w-0 items-baseline gap-[0.6rem] text-small")
                     .key(format!("{}:{}", g.system, g.name))
                     .kid(span("min-w-0 flex-1 truncate").text(rom_name(&g.name)))
@@ -112,20 +113,20 @@ pub struct WebProfile {
 pub fn web_game_info(p: Option<&WebProfile>, url: Option<&str>, browser: Option<&str>) -> El<Msg> {
     let mode = p.map(|p| p.input.as_str()).unwrap_or("keys");
     let label = match mode {
-        "gamepad" => "Controller",
-        "focus" => "Controller picks buttons",
-        _ => "Controller as keyboard",
+        "gamepad" => tr().sui.input_gamepad,
+        "focus" => tr().sui.input_focus,
+        _ => tr().sui.input_keys,
     };
     let words = p.and_then(|p| p.controls.clone()).unwrap_or_else(|| {
         if mode == "keys" {
-            "D-pad and left stick are the arrow keys, A Enter, B Escape, X Space. The right stick moves a pointer, RB clicks. View opens the keyboard.".into()
+            tr().sui.controls_keys.into()
         } else {
-            "Guide returns to Rare with the game still running.".into()
+            tr().sui.controls_guide.into()
         }
     });
     let mut d = div("flex max-w-[60rem] items-end gap-[1.5rem]").kid(div("min-w-0 flex-1").kid(div("text-label font-medium text-secondary").text(label)).kid(div("mt-[0.25rem] text-small text-fg/80").text(words)));
     if let (Some(_), Some(b)) = (url, browser) {
-        let l = format!("Open in {b}");
+        let l = trf!(tr().sui.open_in_browser, browser = b);
         d = d.kid(button_el(ButtonSpec::new(&l).size(BSize::Sm).v(BVariant::Ghost).hint(&l), Some(Msg::OpenInBrowser)));
     }
     d
@@ -171,7 +172,7 @@ pub fn proton_panel(st: &ProtonStatus, busy: bool, progress: Option<(&str, u64, 
         entries.push(("stable".into(), s.label.clone(), None, current == Some(&s.name) && st.game.is_none()));
     }
     for t in pick(&["experimental"]) {
-        entries.push((t.name.clone(), "Experimental".into(), Some(t.name.clone()), st.game.as_ref() == Some(&t.name)));
+        entries.push((t.name.clone(), tr().sui.experimental.into(), Some(t.name.clone()), st.game.as_ref() == Some(&t.name)));
     }
     for t in pick(&["ge", "cachyos", "other"]) {
         entries.push((t.name.clone(), t.label.clone(), Some(t.name.clone()), st.game.as_ref() == Some(&t.name)));
@@ -181,25 +182,24 @@ pub fn proton_panel(st: &ProtonStatus, busy: bool, progress: Option<(&str, u64, 
         d = d.kid(button_el(ButtonSpec::new(&label).v(if on { BVariant::Primary } else { BVariant::Ghost }).disabled(busy), (!on).then(|| Msg::SetProton(name, label.clone()))).key(key));
     }
     for k in &st.installable {
-        d = d.kid(button_el(ButtonSpec::new(&format!("Install {}", kind_label(k))).v(BVariant::Ghost).disabled(busy), Some(Msg::InstallProton(k.clone()))).key(k));
+        d = d.kid(button_el(ButtonSpec::new(&trf!(tr().sui.install_tool, name = kind_label(k))).v(BVariant::Ghost).disabled(busy), Some(Msg::InstallProton(k.clone()))).key(k));
     }
     for t in st.tools.iter().filter(|t| t.stale) {
-        d = d.kid(button_el(ButtonSpec::new(&format!("Remove old {}", t.label)).v(BVariant::Ghost).disabled(busy), Some(Msg::RemoveProton(t.name.clone(), t.label.clone()))).key(&t.name));
+        d = d.kid(button_el(ButtonSpec::new(&trf!(tr().sui.remove_old_tool, name = t.label)).v(BVariant::Ghost).disabled(busy), Some(Msg::RemoveProton(t.name.clone(), t.label.clone()))).key(&t.name));
     }
     if busy {
         let txt = match progress {
             Some((phase, done, total)) => {
-                let name = match phase {
-                    "lookup" => "Looking up the release",
-                    "download" => "Downloading",
-                    "verify" => "Checking the checksum",
-                    "unpack" => "Unpacking",
-                    _ => "",
-                };
-                let pct = if phase == "download" && total > 0 { format!(" {}%", ((done as f64 / total as f64) * 100.0).round()) } else { String::new() };
-                format!("{name}{pct}")
+                match phase {
+                    "lookup" => tr().sui.proton_lookup.to_string(),
+                    "download" if total > 0 => trf!(tr().sui.proton_download_pct, pct = ((done as f64 / total as f64) * 100.0).round()),
+                    "download" => tr().common.downloading.to_string(),
+                    "verify" => tr().sui.proton_verify.to_string(),
+                    "unpack" => tr().sui.proton_unpack.to_string(),
+                    _ => String::new(),
+                }
             }
-            None => "Restarting Steam".into(),
+            None => tr().sui.restarting_steam.into(),
         };
         d = d.kid(span("text-meta text-muted").text(txt));
     }

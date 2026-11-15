@@ -5,6 +5,7 @@
 //! piece is a focusable with the launcher's focus look (`.tile` scales, `.btn` fills white, the rest
 //! fill layer 04).
 
+use rare_i18n::{tr, trf};
 use super::host::*;
 use crate::kit::icon::{svg_box, svg_tinted};
 use crate::kit::{delta, glyph, icon, sui as kit_sui, verified, GSize, Pb};
@@ -221,7 +222,17 @@ pub fn btn(ui: &mut Ui, st: S, label: &str, tag: u32, v: V, sz: Sz, def: bool, c
 
 /// MarketSections: LT, Collections Coins Perps Traders, RT (display only; LT/RT switch).
 pub fn market_sections(ui: &mut Ui, cur: Section) -> El {
-    let items: Vec<kit::TabItem> = MARKET_SECTIONS.iter().map(|(_, l)| kit::TabItem::new(*l)).collect();
+    let items: Vec<kit::TabItem> = MARKET_SECTIONS
+        .iter()
+        .map(|(sec, _)| {
+            kit::TabItem::new(match sec {
+                Section::Collections => tr().market.sec_collections,
+                Section::Coins => tr().search.coins,
+                Section::Perps => tr().trade.perps,
+                Section::Traders => tr().trade.traders,
+            })
+        })
+        .collect();
     let i = MARKET_SECTIONS.iter().position(|(s_, _)| *s_ == cur).unwrap_or(0);
     let lt = glyph(ui, Pb::Lt, GSize::Sm);
     let rt = glyph(ui, Pb::Rt, GSize::Sm);
@@ -302,9 +313,9 @@ pub fn mover_card(ui: &mut Ui, c: &CollectionRow, tag: u32, def: bool) -> El {
     let cols = [Track::Fr(1.0), Track::Fr(1.0), Track::Fr(1.0)];
     let grid = ui
         .bx(s().grid(&cols).gap(0.5).mt(0.75))
-        .child(ui.bx(s().col().min0()).child(label(ui, "FLOOR PRICE")).child(strut(ui, fl)))
-        .child(ui.bx(s().col().min0()).child(label(ui, "VOLUME 1D")).child(strut(ui, vol)))
-        .child(ui.bx(s().col().min0()).child(label(ui, "VOL CHANGE 1D")).child(strut(ui, ch)));
+        .child(ui.bx(s().col().min0()).child(label(ui, tr().market.floor_price_caps)).child(strut(ui, fl)))
+        .child(ui.bx(s().col().min0()).child(label(ui, tr().market.volume_1d_caps)).child(strut(ui, vol)))
+        .child(ui.bx(s().col().min0()).child(label(ui, tr().market.vol_change_1d_caps)).child(strut(ui, ch)));
     let body = ui.bx(s().col().p(1.0)).child(name).child(grid);
     let look = Look::default().bg(tok::L1).radius(ui.r(0.5)).border(1.0, BORDER).clip();
     let focus = look.clone().border(1.0, BORDER_HOVER).scale(1.06);
@@ -329,15 +340,15 @@ fn cell(ui: &Ui, st: S, end: bool) -> El {
 
 pub fn collection_head(ui: &mut Ui, win: &str) -> El {
     let h = |ui: &Ui, txt: &str, st: S| cell(ui, st, true).child(ui.text(txt, t(SM).w(500).c(tok::MUTED).trunc()));
-    let first = cell(ui, s(), false).child(ui.text_s(s().mr(1.25), "#", t(SM).w(500).c(tok::MUTED))).child(ui.text(" Collection", t(SM).w(500).c(tok::MUTED).trunc()));
+    let first = cell(ui, s(), false).child(ui.text_s(s().mr(1.25), "#", t(SM).w(500).c(tok::MUTED))).child(ui.text(format!(" {}", tr().market.collection), t(SM).w(500).c(tok::MUTED).trunc()));
     let cells = vec![
         first,
-        h(ui, "Floor", s().px(0.25)),
-        h(ui, "Top offer", s().px(0.25)),
-        h(ui, &format!("Floor {win}"), s().px(0.25)),
-        h(ui, "Volume", s().px(0.25)),
-        h(ui, "Sales", s().px(0.25)),
-        h(ui, "Listed", s().pl(0.25).pr(0.5)),
+        h(ui, tr().market.floor, s().px(0.25)),
+        h(ui, tr().market.top_offer, s().px(0.25)),
+        h(ui, &trf!(tr().market.floor_win, win = win), s().px(0.25)),
+        h(ui, tr().market.volume, s().px(0.25)),
+        h(ui, tr().market.sales, s().px(0.25)),
+        h(ui, tr().market.listed, s().pl(0.25).pr(0.5)),
     ];
     ui.bx(s().grid(&TABLE_COLS).items_center().h(3.25).gap_xy(0.5, 0.0).px(0.75)).kids(cells)
 }
@@ -395,7 +406,7 @@ pub fn item_card(ui: &mut Ui, st: S, c: &ItemCard, w: f32, tag: u32, def: bool, 
                 price = price.child(v);
             }
         }
-        None => price = price.child(ui.text(if c.staked.is_some() { "Staked" } else { "Not listed" }, t(SM).c(tok::MUTED))),
+        None => price = price.child(ui.text(if c.staked.is_some() { tr().market.staked } else { tr().market.not_listed }, t(SM).c(tok::MUTED))),
     }
     let last = c.last_sale_mist.as_deref().map(|m| mf::fmt_sui(Some(m), SuiOpts { dp: 3, compact: false, trim: true })).unwrap_or_else(|| DASH.into());
     let hist = history_icon(ui, 0.875, tok::MUTED);
@@ -415,19 +426,33 @@ pub const EVENT_COLS: [Track; 6] = [Track::Rem(5.0), Track::MinFr(2.25, 1.0), Tr
 pub fn event_head(ui: &mut Ui, item: bool) -> El {
     let tm = t(META).w(500).c(tok::MUTED).tab();
     let cells = vec![
-        cell(ui, s(), false).child(ui.text("Type", tm.trunc())),
-        cell(ui, s(), false).child(ui.text(if item { "Item" } else { "Venue" }, tm.trunc())),
-        cell(ui, s(), true).child(ui.text("Price", tm.trunc())),
-        cell(ui, s(), false).child(ui.text("From", tm.trunc())),
-        cell(ui, s(), false).child(ui.text("To", tm.trunc())),
-        cell(ui, s(), true).child(ui.text("Time", tm.trunc())),
+        cell(ui, s(), false).child(ui.text(tr().market.col_type, tm.trunc())),
+        cell(ui, s(), false).child(ui.text(if item { tr().market.col_item } else { tr().market.col_venue }, tm.trunc())),
+        cell(ui, s(), true).child(ui.text(tr().market.col_price, tm.trunc())),
+        cell(ui, s(), false).child(ui.text(tr().market.col_from, tm.trunc())),
+        cell(ui, s(), false).child(ui.text(tr().market.col_to, tm.trunc())),
+        cell(ui, s(), true).child(ui.text(tr().market.col_time, tm.trunc())),
     ];
     ui.bx(s().grid(&EVENT_COLS).items_center().h(2.0).gap_xy(0.5, 0.0).px(0.5)).kids(cells)
 }
 
+/// An activity row's type: sale, list, offer...; a kind the app does not know shows as the API sent it.
+pub fn event_kind(kind: &str) -> String {
+    match kind {
+        "sale" => tr().market.ev_sale.into(),
+        "list" => tr().market.ev_list.into(),
+        "delist" => tr().market.ev_delist.into(),
+        "offer" => tr().market.ev_offer.into(),
+        "offer_cancel" => tr().market.ev_offer_cancel.into(),
+        "transfer" => tr().market.ev_transfer.into(),
+        "mint" => tr().market.ev_mint.into(),
+        other => other.to_string(),
+    }
+}
+
 pub fn event_row(ui: &mut Ui, e: &MarketEvent, item: bool, now_ms: f64, tag: u32) -> El {
     let tm = t(META).tab();
-    let kind = mf::event_label(&e.kind).map(str::to_string).unwrap_or_else(|| e.kind.clone());
+    let kind = event_kind(&e.kind);
     let second = if item {
         let mut c = cell(ui, s().gap(0.5), false);
         if let Some(it) = &e.item {
@@ -446,7 +471,7 @@ pub fn event_row(ui: &mut Ui, e: &MarketEvent, item: bool, now_ms: f64, tag: u32
     let price = e.price_mist.as_deref().map(|m| mf::fmt_sui(Some(m), SuiOpts { dp: 3, ..Default::default() })).unwrap_or_else(|| DASH.into());
     let from = e.from_name.clone().unwrap_or_else(|| mf::short_addr(e.from.as_deref()));
     let to = e.to_name.clone().unwrap_or_else(|| mf::short_addr(e.to.as_deref()));
-    let ago = format!("{} ago", rare_market::format::time_ago(Some(&e.at), now_ms as i64));
+    let ago = trf!(tr().market.time_ago, when = rare_market::format::time_ago(Some(&e.at), now_ms as i64));
     let cells = vec![
         cell(ui, s(), false).child(ui.text(kind, tm.c(tok::MUTED).trunc())),
         second,
@@ -468,10 +493,10 @@ pub fn holder_head(ui: &mut Ui) -> El {
     let tm = t(XS).c(tok::MUTED);
     let cells = vec![
         cell(ui, s(), false).child(ui.text("#", tm)),
-        cell(ui, s(), false).child(ui.text("Holder", tm.trunc())),
-        cell(ui, s(), true).child(ui.text("Items", tm.trunc())),
-        cell(ui, s(), false).child(ui.text("Share of supply", tm.trunc())),
-        cell(ui, s(), true).child(ui.text("Listed", tm.trunc())),
+        cell(ui, s(), false).child(ui.text(tr().market.col_holder, tm.trunc())),
+        cell(ui, s(), true).child(ui.text(tr().market.col_items, tm.trunc())),
+        cell(ui, s(), false).child(ui.text(tr().market.col_share, tm.trunc())),
+        cell(ui, s(), true).child(ui.text(tr().market.listed, tm.trunc())),
     ];
     ui.bx(s().grid(&HOLDER_COLS).items_center().h(2.5).gap_xy(0.5, 0.0).px(1.0)).kids(cells)
 }

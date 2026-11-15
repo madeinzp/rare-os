@@ -2,6 +2,7 @@
 //! on-screen keyboard shows who it is as you type). Under "Other ways to add": a friend's code, or
 //! this player's QR code with its 6-letter code, valid 15 minutes.
 
+use rare_i18n::{tr, trn};
 use super::bits::{lucide, qr};
 use super::model::FriendsData;
 use super::screen::{T_ADD_FIELD, T_ENTER_CODE, T_MORE, T_NEW_CODE, T_PICK_USERNAME};
@@ -37,24 +38,24 @@ pub fn add_pane(ui: &mut Ui, d: &FriendsData, st: &AddState) -> El {
         .border(1.0, tok::BORDER_LIGHT)
         .child(lucide(ui, "search", 1.1, tok::MUTED.alpha(0.8)))
         .child(ui.text(
-            "Username, name.sui or 0x...",
+            tr().friends.add_field_placeholder,
             T::new(Ty::Row).c(tok::MUTED.alpha(0.8)).trunc(),
         ));
-    let field = fill_nav(field, T_ADD_FIELD, Some("Type"), None, false);
+    let field = fill_nav(field, T_ADD_FIELD, Some(tr().friends.type_hint), None, false);
     let mut by_name = crate::kit::panel(ui, s().col().gap(0.9).px(1.4).py(1.2))
         .child(
             ui.bx(s().col())
-                .child(ui.text("Add by username", T::new(Ty::Body).w(600)))
-                .child(ui.text("Type a username. A SuiNS name like name.sui or a 0x address works too. They get a request to accept.", T::new(Ty::Small).c(tok::MUTED).wrap())),
+                .child(ui.text(tr().friends.add_by_username, T::new(Ty::Body).w(600)))
+                .child(ui.text(tr().friends.add_by_username_body, T::new(Ty::Small).c(tok::MUTED).wrap())),
         )
         .child(field);
     if d.my_username.is_none() {
-        let pick = button(ui, Btn::new("Pick a username", T_PICK_USERNAME).sm());
+        let pick = button(ui, Btn::new(tr().friends.pick_a_username, T_PICK_USERNAME).sm());
         by_name = by_name.child(
             ui.bx(s().row().items_center().gap(1.0))
                 .child(ui.text_s(
                     s().grow(),
-                    "Friends find you by your username. You have not picked one yet.",
+                    tr().friends.no_username_note,
                     T::new(Ty::Small).c(tok::MUTED).wrap(),
                 ))
                 .child(pick),
@@ -72,7 +73,7 @@ pub fn add_pane(ui: &mut Ui, d: &FriendsData, st: &AddState) -> El {
             .px(1.4))
         .radius(ui.r(0.5))
         .child(ui.text(
-            "Other ways to add",
+            tr().friends.other_ways,
             T::new(Ty::Body).w(600).c(tok::fg(0.85)),
         ))
         .child(lucide(
@@ -88,14 +89,14 @@ pub fn add_pane(ui: &mut Ui, d: &FriendsData, st: &AddState) -> El {
     let more = fill_nav(
         more,
         T_MORE,
-        Some(if st.more { "Hide" } else { "Show" }),
+        Some(if st.more { tr().friends.hide } else { tr().friends.show }),
         None,
         false,
     );
 
     let mut col = ui.bx(s().col().gap(1.25)).child(by_name).child(more);
     if st.more {
-        let enter = button(ui, Btn::new("Enter a code", T_ENTER_CODE));
+        let enter = button(ui, Btn::new(tr().friends.enter_a_code, T_ENTER_CODE));
         let code_row = ui
             .bx(s()
                 .row()
@@ -106,9 +107,9 @@ pub fn add_pane(ui: &mut Ui, d: &FriendsData, st: &AddState) -> El {
                 .py(0.85))
             .child(
                 ui.bx(s().col().grow())
-                    .child(ui.text("Friend code", T::new(Ty::Body).w(600)))
+                    .child(ui.text(tr().friends.friend_code, T::new(Ty::Body).w(600)))
                     .child(ui.text(
-                        "The code under your friend's QR code. You become friends right away.",
+                        tr().friends.friend_code_body,
                         T::new(Ty::Small).c(tok::MUTED).wrap(),
                     )),
             )
@@ -123,26 +124,23 @@ pub fn add_pane(ui: &mut Ui, d: &FriendsData, st: &AddState) -> El {
         let left = live
             .map(|c| minutes_left(c.expires_at, d.now_ms))
             .unwrap_or(0);
-        let works = if live.is_some() {
-            format!(
-                " Works for {left} more {}.",
-                if left == 1 { "minute" } else { "minutes" }
-            )
+        let qr_note = if live.is_some() {
+            trn!(tr().friends.qr_note_expires, left)
         } else {
-            String::new()
+            tr().friends.qr_note.to_string()
         };
         let big = ui.text_s(
             s().mt(0.9).h(2.25),
             live.map(|c| spaced_code(&c.code)).unwrap_or_default(),
             T::new(Ty::Px(2.25, 2.25)).w(600).track(0.12).tab(),
         );
-        let fresh = button(ui, Btn::new("New code", T_NEW_CODE));
+        let fresh = button(ui, Btn::new(tr().friends.new_code, T_NEW_CODE));
         let words = ui
             .bx(s().col().grow())
-            .child(ui.text("Your QR code", T::new(Ty::Label).c(tok::MUTED)))
+            .child(ui.text(tr().friends.your_qr_code, T::new(Ty::Label).c(tok::MUTED)))
             .child(ui.text_s(s().mt(0.2), d.my_name.clone(), T::new(Ty::Row).w(600).trunc()))
             .child(big)
-            .child(ui.text_s(s().mt(0.9).max_w(30.0), format!("A friend scans it with their phone, or types the code in Rare Launcher.{works}"), T::new(Ty::Small).c(tok::MUTED).wrap()))
+            .child(ui.text_s(s().mt(0.9).max_w(30.0), qr_note, T::new(Ty::Small).c(tok::MUTED).wrap()))
             .child(ui.bx(s().row().mt(1.0).gap(0.75)).child(fresh));
         col = col.child(
             crate::kit::panel(ui, s().row().items_center().gap(2.0).px(1.6).py(1.5))

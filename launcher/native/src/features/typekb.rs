@@ -25,6 +25,7 @@ use rare_input::Pad;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
+use rare_i18n::tr;
 
 // Linux input key codes.
 const KEY_BACKSPACE: u16 = 14;
@@ -178,7 +179,7 @@ fn typist() -> &'static Mutex<Sender<Job>> {
                             }
                             Err(e) => {
                                 log::warn!("keyboard: no virtual keyboard ({e})");
-                                crate::side::toast("The keyboard can't type here: no virtual keyboard on this device", true);
+                                crate::side::toast(tr().features_more.typekb_unavailable, true);
                                 continue;
                             }
                         }

@@ -4,6 +4,7 @@
 
 use super::{chip, chips, slider, switch_row};
 use crate::act::Act;
+use rare_i18n::tr;
 use crate::kit::{s, Ui};
 use crate::page::{Acts, Feedback, Fx};
 use crate::state::{State, Tone};
@@ -95,16 +96,16 @@ pub fn view(ui: &mut Ui, acts: &mut Acts) -> Option<El> {
                 chip(ui, &l, d.default, acts.tag(Act::Local(OUT + i as u32)))
             })
             .collect();
-        col = col.child(chips(ui, "Output", "qam-output", items));
+        col = col.child(chips(ui, tr().quick.output, "qam-output", items));
         any = true;
     }
     if let Some(muted) = a.mic_muted {
-        let sub = if muted { "Muted".to_string() } else { a.default_input().map(|d| d.label.clone()).unwrap_or_else(|| "On".into()) };
-        col = col.child(switch_row(ui, "Microphone", &sub, !muted, acts.tag(Act::Local(MUTE))));
+        let sub = if muted { tr().quick.muted.to_string() } else { a.default_input().map(|d| d.label.clone()).unwrap_or_else(|| tr().common.on.into()) };
+        col = col.child(switch_row(ui, tr().quick.microphone, &sub, !muted, acts.tag(Act::Local(MUTE))));
         any = true;
     }
     if let Some(l) = a.mic_level {
-        col = col.child(slider(ui, "Mic level", "mic", l as f32, 0.0, 100.0, "%", acts.tag(Act::Local(LEVEL)), false));
+        col = col.child(slider(ui, tr().quick.mic_level, "mic", l as f32, 0.0, 100.0, "%", acts.tag(Act::Local(LEVEL)), false));
         any = true;
     }
     any.then_some(col)
@@ -118,7 +119,7 @@ pub fn act(st: &mut State, fx: &mut Fx, code: u32) {
             fx.fb(Feedback::Toggle);
             edit(|a| a.mic_muted = Some(!muted));
             st.ver.qs += 1;
-            after(fx, if muted { "Couldn't turn the mic on." } else { "Couldn't mute the mic." }, move || rare_system::audio::set_mic_muted(!muted));
+            after(fx, if muted { tr().quick.err_mic_on } else { tr().quick.err_mic_mute }, move || rare_system::audio::set_mic_muted(!muted));
         }
         c if (OUT..OUT + 50).contains(&c) => {
             let Some(d) = a.outputs.get((c - OUT) as usize).cloned() else { return };
@@ -127,7 +128,7 @@ pub fn act(st: &mut State, fx: &mut Fx, code: u32) {
             }
             edit(|a| a.outputs.iter_mut().for_each(|o| o.default = o.id == d.id));
             st.ver.qs += 1;
-            after(fx, "Couldn't switch the output.", move || rare_system::audio::set_default_output(&d.id.to_string()));
+            after(fx, tr().quick.err_output, move || rare_system::audio::set_default_output(&d.id.to_string()));
         }
         _ => {}
     }

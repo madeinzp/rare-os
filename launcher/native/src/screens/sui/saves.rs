@@ -3,6 +3,7 @@
 //! that save set; nothing runs in the background and nothing is paid without Rare Wallet's review.
 //! The work itself is rare-sui's `saves` (WS 9); this is the screen over its state.
 
+use rare_i18n::{tr, trf, trn};
 use crate::screens::wallet::fmt::{date_md, num_locale, to_precision};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::ui::{button_el, dot, empty, head_row, load_bar, panel, section_head, segmented, BSize, ButtonSpec, BVariant, Tone};
@@ -11,10 +12,10 @@ pub const KEEP_OPTIONS: [u32; 4] = [30, 90, 180, 365];
 
 pub fn keep_label(d: u32) -> &'static str {
     match d {
-        30 => "30 days",
-        90 => "90 days",
-        180 => "6 months",
-        _ => "1 year",
+        30 => tr().sui.keep_30,
+        90 => tr().sui.keep_90,
+        180 => tr().sui.keep_180,
+        _ => tr().sui.keep_365,
     }
 }
 
@@ -56,13 +57,13 @@ pub fn ago(t: Option<i64>, now: i64, tz_min: i32) -> String {
     let Some(t) = t.filter(|t| *t != 0) else { return String::new() };
     let s = (now - t) as f64 / 1000.0;
     if s < 3600.0 {
-        "just now".into()
+        tr().sui.ago_just_now.into()
     } else if s < 86400.0 {
-        format!("{} h ago", (s / 3600.0).round())
+        trf!(tr().sui.ago_hours, n = (s / 3600.0).round())
     } else if s < 86400.0 * 2.0 {
-        "yesterday".into()
+        tr().sui.ago_yesterday.into()
     } else if s < 86400.0 * 30.0 {
-        format!("{} days ago", (s / 86400.0).round())
+        trn!(tr().sui.ago_days, (s / 86400.0).round() as u64)
     } else {
         date_md(t, tz_min, false)
     }
@@ -82,14 +83,14 @@ pub enum Step {
 
 pub fn step_label(s: Step) -> &'static str {
     match s {
-        Step::Pack => "Packing",
-        Step::Encode => "Encrypting",
-        Step::Register => "Approve in Rare Wallet",
-        Step::Upload => "Uploading",
-        Step::Certify => "Approve to confirm",
-        Step::Done => "Done",
-        Step::Download => "Downloading",
-        Step::Unpack => "Restoring",
+        Step::Pack => tr().sui.step_pack,
+        Step::Encode => tr().sui.step_encode,
+        Step::Register => tr().sui.step_register,
+        Step::Upload => tr().sui.step_upload,
+        Step::Certify => tr().sui.step_certify,
+        Step::Done => tr().common.done,
+        Step::Download => tr().common.downloading,
+        Step::Unpack => tr().sui.step_unpack,
     }
 }
 
@@ -196,45 +197,37 @@ pub fn view(c: &Cloud, address: Option<&str>, confirm: Option<&str>, now: i64, t
     let mut s = div("h-full overflow-y-auto px-[2.5rem] pb-[3rem] pt-[2rem]").attr("data-scroll", "").kid(
         div("flex items-end gap-[1rem]")
             .kid(
-                div("min-w-0 flex-1").kid(h1("text-title font-semibold tracking-[-0.02em]").text("Cloud saves")).kid(p("mt-[0.25rem] max-w-[46rem] text-small text-muted").text(
-                    "Emulator and web game saves, encrypted on this device and kept on Walrus. Your wallet pays for the storage and only your account can open them. Steam games use Steam Cloud.",
-                )),
+                div("min-w-0 flex-1").kid(h1("text-title font-semibold tracking-[-0.02em]").text(tr().sui.cloud_saves)).kid(p("mt-[0.25rem] max-w-[46rem] text-small text-muted").text(tr().sui.saves_intro)),
             )
             .kid(span("").kid(glyph("x")).attr("data-size", "sm"))
-            .kid(segmented(&[("30", "30 days"), ("90", "90 days"), ("180", "6 months"), ("365", "1 year")], &c.days.to_string(), "")),
+            .kid(segmented(&[("30", keep_label(30)), ("90", keep_label(90)), ("180", keep_label(180)), ("365", keep_label(365))], &c.days.to_string(), "")),
     );
     let status = match (address, c.key) {
-        (None, _) => ("No account".to_string(), "Add a Rare Wallet account to back up saves.".to_string()),
+        (None, _) => (tr().sui.no_account.to_string(), tr().sui.no_account_body.to_string()),
         (Some(_), true) => (
-            "Unlocked on this device".into(),
-            format!(
-                "{n} {} on Walrus{}. Backing up everything here for {keep} costs about {} plus {} in fees.",
-                if n == 1 { "backup" } else { "backups" },
-                if c.testnet { " testnet" } else { "" },
-                fmt_wal(Some(total_wal)),
-                fmt_sui_mist(total_sui)
-            ),
+            tr().sui.unlocked.into(),
+            trn!(if c.testnet { tr().sui.unlocked_body_testnet } else { tr().sui.unlocked_body }, n, keep = keep, wal = fmt_wal(Some(total_wal)), sui = fmt_sui_mist(total_sui)),
         ),
-        (Some(_), false) => ("Locked".into(), "Approve one signature in Rare Wallet to make your save key. It costs nothing and the key never leaves this device.".into()),
+        (Some(_), false) => (tr().sui.locked.into(), tr().sui.locked_body.into()),
     };
     let mut pnl = vec![
         span("flex h-[2.5rem] w-[2.5rem] shrink-0 items-center justify-center rounded-full bg-l3 text-icon-2").kid(if c.key { icon("cloud", "").attr("size", "1.2rem") } else { icon("lock", "").attr("size", "1.15rem") }),
         div("min-w-0 flex-1").kid(div("text-body font-semibold").text(status.0)).kid(div("text-small text-muted").text(status.1)),
     ];
     if address.is_some() && !c.key {
-        pnl.push(button_el(ButtonSpec::new("Unlock").v(BVariant::Primary).def(true).hint("Unlock"), Some(Msg::Unlock)));
+        pnl.push(button_el(ButtonSpec::new(tr().sui.unlock).v(BVariant::Primary).def(true).hint(tr().sui.unlock), Some(Msg::Unlock)));
     }
     s = s.kid(panel("mt-[1.5rem] flex items-center gap-[1rem] px-[1.25rem] py-[1rem]", pnl));
     s = s.kid(auto_panel(&c.auto, address.is_some()));
     if let Some(e) = &c.error {
         s = s.kid(div("mt-[0.9rem] flex items-center gap-[0.5rem] text-small text-fg").kid(dot(Tone::Negative, false, "")).kid(text(e)));
     }
-    s = s.kid(section_head(text("On this device"), c.sets.as_ref().map(|x| text(format!("{} found", x.len()))), None, "mb-[0.5rem] mt-[2rem]"));
+    s = s.kid(section_head(text(tr().sui.on_this_device_title), c.sets.as_ref().map(|x| text(trf!(tr().sui.n_found, n = x.len()))), None, "mb-[0.5rem] mt-[2rem]"));
     match &c.sets {
         Some(sets) if sets.is_empty() => {
             s = s.kid(empty(
-                "No emulator saves found",
-                Some(text("Rare looks in RetroArch, RPCS3, PCSX2, Cemu, DuckStation, Dolphin, PPSSPP and other emulators, EmuDeck's Emulation folder and your web games.")),
+                tr().sui.no_saves_found,
+                Some(text(tr().sui.no_saves_body)),
                 vec![],
                 "",
             ));
@@ -243,7 +236,7 @@ pub fn view(c: &Cloud, address: Option<&str>, confirm: Option<&str>, now: i64, t
             s = s.kid(head_row(
                 COLS,
                 "",
-                vec![span("").text("Saves"), span("text-right").text("Size"), span("text-right").text("Changed"), span("text-right").text("Last backup"), span("text-right").text(keep), span("")],
+                vec![span("").text(tr().sui.col_saves), span("text-right").text(tr().sui.col_size), span("text-right").text(tr().sui.col_changed), span("text-right").text(tr().sui.col_last_backup), span("text-right").text(keep), span("")],
             ));
             s = s.kid(div("").attr("data-nav-group", "saves-here").kids(sets.iter().map(|set| {
                 let last = latest.iter().find(|(id, _)| *id == set.id).map(|(_, b)| *b);
@@ -254,11 +247,11 @@ pub fn view(c: &Cloud, address: Option<&str>, confirm: Option<&str>, now: i64, t
         None => {}
     }
     if !elsewhere.is_empty() {
-        s = s.kid(section_head(text("From your other devices"), Some(text("not on this device yet")), None, "mb-[0.5rem] mt-[2rem]"));
+        s = s.kid(section_head(text(tr().sui.other_devices), Some(text(tr().sui.not_here_yet)), None, "mb-[0.5rem] mt-[2rem]"));
         s = s.kid(div("").attr("data-nav-group", "saves-elsewhere").kids(elsewhere.iter().map(|b| {
             let mine = c.busy.as_ref().filter(|(id, _)| *id == b.set_id).map(|(_, st)| step_label(*st));
             let again = confirm == Some(b.blob_object_id.as_str());
-            let label = mine.unwrap_or(if again { "Press again" } else { "Restore here" });
+            let label = mine.unwrap_or(if again { tr().sui.press_again } else { tr().sui.restore_here });
             div(cn(&["grid h-[3.25rem] items-center gap-x-[0.75rem] px-[0.75rem] text-small", COLS]))
                 .key(&b.blob_object_id)
                 .kid(span("min-w-0 truncate").kid(span("font-medium text-fg").text(&b.emulator)).kid(text(" ")).kid(span("text-muted").text(&b.label)))
@@ -266,7 +259,7 @@ pub fn view(c: &Cloud, address: Option<&str>, confirm: Option<&str>, now: i64, t
                 .kid(span(""))
                 .kid(span("text-right text-muted").text(ago(Some(b.created), now, tz_min)))
                 .kid(span(""))
-                .kid(span("flex justify-end").kid(button_el(ButtonSpec::new(label).size(BSize::Sm).hint(if again { "Restore" } else { "Restore here" }).disabled(c.busy.is_some()), Some(Msg::Restore(b.blob_object_id.clone())))))
+                .kid(span("flex justify-end").kid(button_el(ButtonSpec::new(label).size(BSize::Sm).hint(if again { tr().sui.restore } else { tr().sui.restore_here }).disabled(c.busy.is_some()), Some(Msg::Restore(b.blob_object_id.clone())))))
         })));
     }
     div("rise fixed inset-0 z-30 bg-bg").attr("data-nav-scope", "").on_pad("x", Msg::Keep).kid(load_bar(c.busy.is_some() || c.sets.is_none(), "")).kid(s)
@@ -276,22 +269,22 @@ pub fn view(c: &Cloud, address: Option<&str>, confirm: Option<&str>, now: i64, t
 fn auto_panel(a: &Auto, account: bool) -> El<Msg> {
     let (title, body) = if a.on {
         let funds = match (a.funds, a.uploads_left) {
-            (Some((wal, sui)), Some(n)) => format!(" Funds: {} and {}, about {n} uploads.", fmt_wal(Some(wal as u128)), fmt_sui_mist(sui as u128)),
+            (Some((wal, sui)), Some(n)) => format!(" {}", trn!(tr().sui.auto_funds, n, wal = fmt_wal(Some(wal as u128)), sui = fmt_sui_mist(sui as u128))),
             _ => String::new(),
         };
-        ("Automatic cloud saves are on", format!("Rare checks the cloud before you play and uploads after, for emulators, web games and PC games outside Steam, Epic and GOG. Uploads use a cloud saves address of your account, so nothing asks to approve.{funds}"))
+        (tr().sui.auto_on, format!("{}{funds}", tr().sui.auto_on_body))
     } else {
-        ("Automatic cloud saves are off", "Turn on to sync saves before and after every session. One wallet signature on this device; then add a little WAL and SUI for the uploads.".to_string())
+        (tr().sui.auto_off, tr().sui.auto_off_body.to_string())
     };
     let mut kids = vec![
         span("flex h-[2.5rem] w-[2.5rem] shrink-0 items-center justify-center rounded-full bg-l3 text-icon-2").kid(icon(if a.on { "refresh-cw" } else { "cloud-off" }, "").attr("size", "1.15rem")),
         div("min-w-0 flex-1").kid(div("text-body font-semibold").text(title)).kid(div("text-small text-muted").text(body)),
     ];
     if a.on {
-        kids.push(button_el(ButtonSpec::new("Add funds").hint("Add 1 WAL and 0.2 SUI"), Some(Msg::AddFunds)));
-        kids.push(button_el(ButtonSpec::new("Turn off").hint("Turn off"), Some(Msg::AutoOff)));
+        kids.push(button_el(ButtonSpec::new(tr().sui.add_funds).hint(tr().sui.add_funds_hint), Some(Msg::AddFunds)));
+        kids.push(button_el(ButtonSpec::new(tr().common.turn_off).hint(tr().common.turn_off), Some(Msg::AutoOff)));
     } else if account {
-        kids.push(button_el(ButtonSpec::new(if a.unlocking { "Waiting for the wallet" } else { "Turn on" }).v(BVariant::Primary).hint("Turn on").disabled(a.unlocking), Some(Msg::AutoOn)));
+        kids.push(button_el(ButtonSpec::new(if a.unlocking { tr().sui.waiting_wallet } else { tr().common.turn_on }).v(BVariant::Primary).hint(tr().common.turn_on).disabled(a.unlocking), Some(Msg::AutoOn)));
     }
     panel("mt-[0.75rem] flex items-center gap-[1rem] px-[1.25rem] py-[1rem]", kids)
 }
@@ -299,11 +292,14 @@ fn auto_panel(a: &Auto, account: bool) -> El<Msg> {
 fn set_row(set: &SaveSet, last: Option<&Backup>, est: Option<u128>, c: &Cloud, confirm: Option<&str>, now: i64, tz_min: i32) -> El<Msg> {
     let mine = c.busy.as_ref().filter(|(id, _)| *id == set.id).map(|(_, s)| *s);
     let last_txt = if !c.key {
-        "Unlock to see".to_string()
+        tr().sui.unlock_to_see.to_string()
     } else if let Some(b) = last {
-        format!("{}{}", ago(Some(b.created), now, tz_min), b.days_left.map(|d| format!(" · {d} d left")).unwrap_or_default())
+        match b.days_left {
+            Some(d) => trf!(tr().sui.backup_age_left, when = ago(Some(b.created), now, tz_min), n = d),
+            None => ago(Some(b.created), now, tz_min),
+        }
     } else {
-        "Never".into()
+        tr().sui.never.into()
     };
     let actions = match mine {
         Some(st) => span("flex h-[2.25rem] items-center gap-[0.5rem] text-small text-fg").kid(dot(Tone::Brand, true, "")).kid(text(step_label(st))),
@@ -312,11 +308,11 @@ fn set_row(set: &SaveSet, last: Option<&Backup>, est: Option<u128>, c: &Cloud, c
             if let Some(b) = last {
                 let again = confirm == Some(b.blob_object_id.as_str());
                 a = a.kid(button_el(
-                    ButtonSpec::new(if again { "Press again" } else { "Restore" }).size(BSize::Sm).hint(if again { "Restore" } else { "Restore this backup" }).disabled(c.busy.is_some()),
+                    ButtonSpec::new(if again { tr().sui.press_again } else { tr().sui.restore }).size(BSize::Sm).hint(if again { tr().sui.restore } else { tr().sui.restore_this_backup }).disabled(c.busy.is_some()),
                     Some(Msg::Restore(b.blob_object_id.clone())),
                 ));
             }
-            a.kid(button_el(ButtonSpec::new("Back up").size(BSize::Sm).hint("Back up now").disabled(!c.key || c.busy.is_some()), Some(Msg::BackUp(set.id.clone()))))
+            a.kid(button_el(ButtonSpec::new(tr().sui.back_up).size(BSize::Sm).hint(tr().sui.back_up_now).disabled(!c.key || c.busy.is_some()), Some(Msg::BackUp(set.id.clone()))))
         }
     };
     let actions = if mine.is_some() { span("flex justify-end gap-[0.5rem]").kid(actions) } else { actions };
@@ -329,7 +325,7 @@ fn set_row(set: &SaveSet, last: Option<&Backup>, est: Option<u128>, c: &Cloud, c
                 .kid(span("font-medium text-fg").text(&set.emulator))
                 .kid(text(" "))
                 .kid(span("text-muted").text(&set.label))
-                .kid(span("ml-[0.5rem] text-label text-muted").text(format!("{} files", num_locale(set.files as f64, 0, 0)))),
+                .kid(span("ml-[0.5rem] text-label text-muted").text(trn!(tr().sui.n_files, set.files, n = num_locale(set.files as f64, 0, 0)))),
         )
         .kid(span("text-right tabular-nums text-fg").text(fmt_bytes(set.bytes)))
         .kid(span("text-right text-muted").text(ago(set.modified, now, tz_min)))

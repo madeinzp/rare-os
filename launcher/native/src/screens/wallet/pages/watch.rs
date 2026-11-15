@@ -4,6 +4,7 @@
 use crate::screens::wallet::home::lib::Hint;
 use crate::screens::wallet::kit::{btn, field, page, FieldSpec, Variant};
 use crate::screens::wallet::markup::*;
+use rare_i18n::tr;
 use crate::screens::wallet::onboard::flow::{h, plain_error, Failure};
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -35,25 +36,25 @@ pub enum Effect {
 pub fn view(st: &State) -> El<Msg> {
     let off = st.input.trim().is_empty() || st.busy;
     page(
-        Some("Watch an address"),
-        Some(text("Follow any wallet's coins and collectibles. You cannot send from it.")),
+        Some(tr().wallet.watch_title),
+        Some(text(tr().wallet.watch_body)),
         None,
         true,
         "",
         vec![div("flex flex-col gap-5")
             .kid(field(
-                FieldSpec { label: Some("Address or SuiNS name"), value: &st.input, placeholder: Some("0x... or name.sui"), error: (!st.error.is_empty()).then_some(st.error.as_str()), def: true, ..Default::default() },
+                FieldSpec { label: Some(tr().wallet.address_or_name), value: &st.input, placeholder: Some(tr().wallet.address_placeholder), error: (!st.error.is_empty()).then_some(st.error.as_str()), def: true, ..Default::default() },
                 Msg::TypeAddress,
             ))
-            .kid(field(FieldSpec { label: Some("Name (optional)"), value: &st.name, placeholder: Some("Watch 1"), ..Default::default() }, Msg::TypeName))
-            .kid(btn(if st.busy { "Adding" } else { "Start watching" }, Variant::Primary, &format!("w-full {}", if off { "pointer-events-none opacity-40" } else { "" }), Some(Msg::Add)))],
+            .kid(field(FieldSpec { label: Some(tr().wallet.name_optional), value: &st.name, placeholder: Some(tr().wallet.watch_name_placeholder), ..Default::default() }, Msg::TypeName))
+            .kid(btn(if st.busy { tr().wallet.adding } else { tr().wallet.start_watching }, Variant::Primary, &format!("w-full {}", if off { "pointer-events-none opacity-40" } else { "" }), Some(Msg::Add)))],
     )
 }
 
 pub fn update(st: &mut State, msg: Msg) -> Option<Effect> {
     match msg {
-        Msg::TypeAddress => Some(Effect::Ask { prompt: "Address or SuiNS name", value: st.input.clone(), placeholder: "0x... or name.sui" }),
-        Msg::TypeName => Some(Effect::Ask { prompt: "Name (optional)", value: st.name.clone(), placeholder: "Watch 1" }),
+        Msg::TypeAddress => Some(Effect::Ask { prompt: tr().wallet.address_or_name, value: st.input.clone(), placeholder: tr().wallet.address_placeholder }),
+        Msg::TypeName => Some(Effect::Ask { prompt: tr().wallet.name_optional, value: st.name.clone(), placeholder: tr().wallet.watch_name_placeholder }),
         Msg::Address(v) => {
             st.input = v;
             None
@@ -77,7 +78,7 @@ pub fn update(st: &mut State, msg: Msg) -> Option<Effect> {
 pub fn done(st: &mut State, res: Result<(), Failure>) {
     st.busy = false;
     if let Err(e) = res {
-        st.error = plain_error(&e, "Could not add that address");
+        st.error = plain_error(&e, tr().wallet.could_not_add_address);
     }
 }
 

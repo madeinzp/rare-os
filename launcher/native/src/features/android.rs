@@ -9,6 +9,7 @@ use crate::act::Act;
 use crate::kit::{self, s, tok, Btn as B, Ty, Ui, T};
 use crate::page::{hash, Acts, Btn, Feedback, Fx, Page};
 use crate::state::{OptionItem, OptionsSpec, Overlay, State, Tone};
+use rare_i18n::{tr, trf};
 use rare_android::jobs::{self, Kind};
 use rare_android::Status;
 use rare_render::focus::hints::{hint, Hint, Key};
@@ -89,11 +90,11 @@ pub fn act(st: &mut State, a: &str, now: f64) -> bool {
                 st.toast(e, Tone::Info, now);
             }
         }
-        "find" => st.ask_text(FIND, "Find Android games on F-Droid", "", Some("Game name")),
+        "find" => st.ask_text(FIND, tr().features.android_find_title, "", Some(tr().features.android_find_placeholder)),
         "get" => {
             let (package, name) = arg.split_once('|').unwrap_or((arg, arg));
             match jobs::start(Kind::Install { package: package.into(), name: name.into() }) {
-                Ok(()) => st.toast(format!("Getting {name}"), Tone::Info, now),
+                Ok(()) => st.toast(trf!(tr().features.android_getting, name = name), Tone::Info, now),
                 Err(e) => st.toast(e, Tone::Info, now),
             }
         }
@@ -110,7 +111,7 @@ pub fn tick_state(st: &mut State) {
         let q = q.trim().to_string();
         if !q.is_empty() {
             *SEARCH.lock().unwrap() = Some((q.clone(), None));
-            st.toast(format!("Searching F-Droid for {q}"), Tone::Info, now);
+            st.toast(trf!(tr().features.android_searching, query = q), Tone::Info, now);
             std::thread::spawn(move || {
                 let r = rare_android::fdroid::search(&q);
                 if let Some(s) = SEARCH.lock().unwrap().as_mut().filter(|s| s.0 == q) {
@@ -130,11 +131,11 @@ pub fn tick_state(st: &mut State) {
     };
     if let Some((q, Some(r))) = landed {
         match r {
-            Ok(hits) if hits.is_empty() => st.toast(format!("Nothing on F-Droid for {q}"), Tone::Info, now),
+            Ok(hits) if hits.is_empty() => st.toast(trf!(tr().features.android_nothing_found, query = q), Tone::Info, now),
             Ok(hits) => st.options = Some(results_sheet(&q, &hits)),
             Err(e) => {
                 log::warn!("f-droid search: {e}");
-                st.toast("Couldn't reach F-Droid. Check the network and try again.", Tone::Error, now);
+                st.toast(tr().features.android_unreachable, Tone::Error, now);
             }
         }
     }
@@ -159,7 +160,7 @@ fn results_sheet(q: &str, hits: &[rare_android::fdroid::Hit]) -> OptionsSpec {
             OptionItem { label, on: None, act: Act::Legacy(format!("android:get:{}|{}", h.package, name)) }
         })
         .collect();
-    OptionsSpec { title: format!("F-Droid: {q}"), sub: Some("Free and open source. Pick one to install.".into()), items }
+    OptionsSpec { title: trf!(tr().features.android_results_title, query = q), sub: Some(tr().features.android_results_sub.into()), items }
 }
 
 /// The Android job's line and bar for an app (an install or uninstall of it), or setup's.
@@ -208,7 +209,7 @@ pub fn storage_items() -> Vec<rare_library::storage::Item> {
         apps += bytes;
         let id = format!("android:{pkg}");
         let kind = if rare_android::is_store(&id) { ItemKind::App } else { ItemKind::Game };
-        v.push(Item { key: id.clone(), title: name, kind, source: "Android".into(), game_id: Some(id), path: rare_android::apk_dirs(&pkg).into_iter().next(), bytes, no_move: Some("Android apps stay inside Android on this device.".into()) });
+        v.push(Item { key: id.clone(), title: name, kind, source: "Android".into(), game_id: Some(id), path: rare_android::apk_dirs(&pkg).into_iter().next(), bytes, no_move: Some(tr().features.android_apps_stay.into()) });
     }
     let total = rare_android::total_size();
     v.push(Item {
@@ -219,20 +220,20 @@ pub fn storage_items() -> Vec<rare_library::storage::Item> {
         game_id: None,
         path: None,
         bytes: total.saturating_sub(apps),
-        no_move: Some("Android's system and data stay on this device.".into()),
+        no_move: Some(tr().features.android_system_stays.into()),
     });
     v
 }
 
 /// Uninstall details for an Android app (the sheet's "This frees").
 pub fn uninstall_info(id: &str) -> Result<crate::data::model::UninstallInfo, String> {
-    let pkg = rare_android::package_of(id).ok_or("Not an Android app")?;
+    let pkg = rare_android::package_of(id).ok_or_else(|| tr().features.android_not_app.to_string())?;
     Ok(crate::data::model::UninstallInfo { steam: false, size: rare_android::app_size(pkg).unwrap_or(0), saves: None, place: None, free: None })
 }
 
 /// Uninstalls an Android app (waits for the job; call off the UI thread).
 pub fn uninstall(id: &str) -> Result<(), String> {
-    let pkg = rare_android::package_of(id).ok_or("Not an Android app")?;
+    let pkg = rare_android::package_of(id).ok_or_else(|| tr().features.android_not_app.to_string())?;
     let name = jobs::name_of(id);
     jobs::run_wait(Kind::Remove { package: pkg.to_string(), name }).map(|_| ())
 }
@@ -281,7 +282,7 @@ fn pct(v: f32) -> String {
 impl TouchPage {
     fn save(&mut self, st: &mut State, now: f64) {
         if let Err(e) = rare_android::touch::set_map(&self.pkg, self.map.clone()) {
-            st.toast(format!("Couldn't save the touch controls. {e}"), Tone::Error, now);
+            st.toast(trf!(tr().features.android_touch_save_failed, error = e), Tone::Error, now);
         }
     }
 
@@ -292,7 +293,7 @@ impl TouchPage {
         if frame.is_file() {
             c = c.child(kit::art(ui, s().fill(), &[frame.to_string_lossy().into_owned()], cw, ch, kit::ArtFit::Cover(0.5), None));
         } else {
-            let note = ui.text_s(s().wp(0.8), "Open the game, press Rare, then come back here to see it behind the spots.", T::new(Ty::Small).c(tok::MUTED).center().wrap());
+            let note = ui.text_s(s().wp(0.8), tr().features.android_touch_empty_canvas, T::new(Ty::Small).c(tok::MUTED).center().wrap());
             c = c.child(ui.bx(s().fill().col().items_center().justify_center()).child(note));
         }
         let d = 2.6;
@@ -340,7 +341,7 @@ impl Page for TouchPage {
             self.tags.push(tag);
             let spot = match self.placing {
                 Some((pi, x, y)) if pi == i => format!("{}, {}", pct(x), pct(y)),
-                _ => self.map.get(*b).map(|p| format!("{}, {}", pct(p[0]), pct(p[1]))).unwrap_or_else(|| "Not set".into()),
+                _ => self.map.get(*b).map(|p| format!("{}, {}", pct(p[0]), pct(p[1]))).unwrap_or_else(|| tr().features.android_not_set.into()),
             };
             let set = self.map.contains_key(*b);
             let row = ui
@@ -348,19 +349,19 @@ impl Page for TouchPage {
                 .radius(ui.r(0.45))
                 .child(ui.text_s(s().w(4.0), *label, T::new(Ty::Body).w(600)))
                 .child(ui.text_s(s().grow().min0(), spot, T::new(Ty::Small).c(if set { tok::fg(0.85) } else { tok::MUTED }).trunc()));
-            let row = kit::nav(kit::row_look(row), tag, Some(if self.placing.is_some() { "Set" } else { "Set spot" }), set.then_some("Clear"), i == 0);
+            let row = kit::nav(kit::row_look(row), tag, Some(if self.placing.is_some() { tr().features.android_set } else { tr().features.android_set_spot }), set.then_some(tr().features.android_clear), i == 0);
             rows.push(row.key(key(b)));
         }
         let list = ui.bx(s().col().w(list_w).gap(0.15)).group(Group::new("android-touch", [0.0; 4]).remember()).kids(rows);
         let sub = match self.placing {
-            Some((i, _, _)) => format!("Placing {}: move with the d-pad{}, A to set, B to cancel", BUTTONS[i].1, if self.fine { " (fine)" } else { "" }),
-            None => "Each button presses its spot on the screen while you play. Buttons with no spot do nothing.".into(),
+            Some((i, _, _)) => trf!(if self.fine { tr().features.android_placing_fine } else { tr().features.android_placing }, button = BUTTONS[i].1),
+            None => tr().features.android_touch_help.into(),
         };
         let head = ui
             .bx(s().col().gap(0.3).mb(1.25))
-            .child(ui.text_s(s().wp(1.0).min0(), format!("Touch controls \u{b7} {}", self.title), T::new(Ty::Row).w(600).trunc()))
+            .child(ui.text_s(s().wp(1.0).min0(), trf!(tr().features.android_touch_title, game = self.title), T::new(Ty::Row).w(600).trunc()))
             .child(ui.text_s(s().wp(1.0), sub, T::new(Ty::Small).c(tok::MUTED).trunc()));
-        let done = kit::button(ui, B::new("Done", acts.tag(Act::Local(100))).sm().hint("Done"));
+        let done = kit::button(ui, B::new(tr().common.done, acts.tag(Act::Local(100))).sm().hint(tr().common.done));
         let body = ui.bx(s().row().gap(2.5).items_start()).child(list).child(self.canvas(ui, cw, ch));
         ui.bx(s().abs(Some(0.0), Some(0.0), Some(3.0), Some(0.0)).col().px(2.5).pt(2.0))
             .scope(crate::app::SCOPE_OVERLAY)
@@ -445,9 +446,9 @@ impl Page for TouchPage {
 
     fn hints(&self, _st: &State) -> Vec<Hint> {
         if self.placing.is_some() {
-            vec![hint(Key::A, "Set"), hint(Key::Y, if self.fine { "Coarse" } else { "Fine" }), hint(Key::B, "Cancel")]
+            vec![hint(Key::A, tr().features.android_set), hint(Key::Y, if self.fine { tr().features.android_coarse } else { tr().features.android_fine }), hint(Key::B, tr().common.cancel)]
         } else {
-            vec![hint(Key::A, "Set spot"), hint(Key::X, "Clear"), hint(Key::B, "Done")]
+            vec![hint(Key::A, tr().features.android_set_spot), hint(Key::X, tr().features.android_clear), hint(Key::B, tr().common.done)]
         }
     }
 

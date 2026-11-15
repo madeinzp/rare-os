@@ -9,6 +9,7 @@
 pub mod run;
 
 use crate::state::State;
+use rare_i18n::{tr, trf};
 use rare_agent::agent::{self, Event, Exec, Outcome};
 use rare_agent::provider::{self, Kind};
 use rare_agent::{voice, Call, Msg, Part};
@@ -94,14 +95,14 @@ pub fn save_key(k: Kind, value: Option<String>) {
         .name("ask-key".into())
         .spawn(move || {
             let Some(w) = crate::screens::wallet::service::wallet() else {
-                crate::features::bus::note("Rare Wallet isn't available.", true);
+                crate::features::bus::note(tr().features.ask_wallet_unavailable, true);
                 return;
             };
             if !w.keystore.has_vault().unwrap_or(false) {
-                crate::features::bus::note("Add an account with a PIN in Rare Wallet first. Your key is sealed with it.", true);
+                crate::features::bus::note(tr().features.ask_key_needs_account, true);
                 return;
             }
-            let ok = crate::screens::wallet::service::ask_unlock("Enter your PIN to save your API key in Rare Wallet").recv().unwrap_or(false);
+            let ok = crate::screens::wallet::service::ask_unlock(tr().features.ask_pin_save_key).recv().unwrap_or(false);
             if !ok {
                 return;
             }
@@ -115,10 +116,10 @@ pub fn save_key(k: Kind, value: Option<String>) {
                         keys.push(k.id().to_string());
                     }
                     crate::features::config::set(&[("agentKeys", serde_json::json!(keys))]);
-                    crate::features::bus::note(if v.is_some() { "Key saved in Rare Wallet" } else { "Key removed" }, false);
+                    crate::features::bus::note(if v.is_some() { tr().features.ask_key_saved } else { tr().features.ask_key_removed }, false);
                     crate::screens::settings::live::touch();
                 }
-                Err(e) => crate::features::bus::note(format!("Couldn't save the key: {e}"), true),
+                Err(e) => crate::features::bus::note(trf!(tr().features.ask_key_save_failed, error = e), true),
             }
         })
         .ok();
@@ -126,14 +127,14 @@ pub fn save_key(k: Kind, value: Option<String>) {
 
 /// The model config for a call, after the key (asking for the PIN when the vault is locked).
 fn config(s: &Setup) -> Result<provider::Config, String> {
-    let kind = s.kind.ok_or("Set up Ask Rare in Settings > Ask Rare first.")?;
+    let kind = s.kind.ok_or_else(|| tr().features.ask_setup_first.to_string())?;
     let key = match key_state(kind) {
         KeyState::NotNeeded | KeyState::Missing => None,
         KeyState::Ready(k) => Some(k),
         KeyState::Locked => {
-            let ok = crate::screens::wallet::service::ask_unlock("Enter your PIN to use your API key").recv_timeout(Duration::from_secs(180)).unwrap_or(false);
+            let ok = crate::screens::wallet::service::ask_unlock(tr().features.ask_pin_use_key).recv_timeout(Duration::from_secs(180)).unwrap_or(false);
             if !ok {
-                return Err("Unlock Rare Wallet to use your API key.".into());
+                return Err(tr().features.ask_unlock_wallet.into());
             }
             match key_state(kind) {
                 KeyState::Ready(k) => Some(k),
@@ -177,7 +178,7 @@ pub fn test() {
         .spawn(|| {
             let r = config(&setup()).and_then(|c| provider::test(&c).map(|w| (c.kind.name(), c.model.clone(), w)));
             match r {
-                Ok((p, m, w)) => crate::features::bus::note(format!("{p} answered with {m}: \"{w}\""), false),
+                Ok((p, m, w)) => crate::features::bus::note(trf!(tr().features.ask_test_answer, provider = p, model = m, word = w), false),
                 Err(e) => crate::features::bus::note(e, true),
             }
         })
@@ -360,7 +361,7 @@ pub fn ask(text: &str, shot: bool) {
                 for l in s.view.lines.iter_mut() {
                     if let Line::Step { state, .. } = l {
                         if *state == StepState::Running {
-                            *state = StepState::Failed("Stopped".into());
+                            *state = StepState::Failed(tr().features.ask_step_stopped.into());
                         }
                     }
                 }
@@ -460,7 +461,7 @@ impl Exec for Bridge {
         let (tx, rx) = channel();
         JOBS.lock().unwrap().push((call.clone(), tx));
         crate::features::bus::wake();
-        rx.recv_timeout(Duration::from_secs(90)).unwrap_or_else(|_| Outcome::err("Rare didn't answer in time."))
+        rx.recv_timeout(Duration::from_secs(90)).unwrap_or_else(|_| Outcome::err(tr().features.ask_no_answer))
     }
 }
 
@@ -549,7 +550,7 @@ static DOWNLOADING: AtomicBool = AtomicBool::new(false);
 pub fn listen(from: Source) {
     let s = setup();
     if !s.voice {
-        note("Turn on Speak to Rare in Settings > Ask Rare to talk.", false);
+        note(tr().features.ask_turn_on_speech, false);
         return;
     }
     if view().busy || S.lock().unwrap().as_ref().is_some_and(|s| s.rec.is_some()) {
@@ -588,7 +589,7 @@ pub fn download_model() {
             DOWNLOADING.store(false, Ordering::SeqCst);
             with(|s| s.view.download = None);
             match r {
-                Ok(_) => note("Speech is ready. Hold X to talk.", false),
+                Ok(_) => note(tr().features.ask_speech_ready, false),
                 Err(e) => note(&e, true),
             }
         })
@@ -617,7 +618,7 @@ pub fn stop_listen() {
             match r {
                 Ok(t) if !t.trim().is_empty() => ask(&t, setup().shots && can_shoot()),
                 Ok(_) if held < Duration::from_millis(400) => {}
-                Ok(_) => note("I didn't catch that. Hold X and speak.", false),
+                Ok(_) => note(tr().features.ask_not_caught, false),
                 Err(e) => note(&e, true),
             }
         })

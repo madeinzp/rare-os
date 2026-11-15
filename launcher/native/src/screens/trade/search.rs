@@ -3,6 +3,7 @@
 //! picker uses the same rows. Tags come from the caller (`tag(i)`), so it fits both the app's
 //! `Acts` and a self-hosted page's constants.
 
+use rare_i18n::tr;
 use super::cards::token_list_row;
 use super::fmt::normalize_type;
 use super::model::TokenRow;
@@ -79,16 +80,16 @@ pub fn coin_results(ui: &mut Ui, r: &Results, group: &str, limit: usize, first: 
             let t = TokenRow { coin_type: rc.coin_type.clone(), symbol: rc.symbol.clone(), name: rc.name.clone(), decimals: 9, logo: rc.logo.clone(), ..Default::default() };
             rows = rows.child(token_list_row(ui, &t, Some(rc.name.clone()), tag(i), first && i == 0).key(rare_render::view::key(&rc.coin_type)));
         }
-        return Some(ui.bx(s().col()).section().child(section_head(ui, s().mb(0.5), "Recent", None, None)).child(rows));
+        return Some(ui.bx(s().col()).section().child(section_head(ui, s().mb(0.5), tr().trade.recent, None, None)).child(rows));
     }
     let shown: Vec<&TokenRow> = r.rows.as_ref().map(|v| v.iter().take(limit).collect()).unwrap_or_default();
     let note = (!shown.is_empty()).then(|| shown.len().to_string());
-    let mut sec = ui.bx(s().col()).section().child(section_head(ui, s().mb(0.5), "Coins", note.as_deref(), None));
+    let mut sec = ui.bx(s().col()).section().child(section_head(ui, s().mb(0.5), tr().trade.coins, note.as_deref(), None));
     if shown.is_empty() {
         let msg = match (&r.rows, r.error) {
-            (None, true) => "Could not search coins right now.",
-            (None, false) => "Searching",
-            (Some(_), _) => "No coin matches. Paste a full coin type to open one that is not listed.",
+            (None, true) => tr().trade.search_failed,
+            (None, false) => tr().trade.searching,
+            (Some(_), _) => tr().trade.no_coin_match,
         };
         sec = sec.child(ui.text_s(s().py(1.0), msg, T::new(Ty::Small).c(tok::MUTED)));
     } else {

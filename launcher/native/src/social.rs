@@ -6,6 +6,7 @@
 //! Device-key signing for friends comes from rare-wallet: the app installs a signer with
 //! [`set_signer`] (and a recipient resolver with [`set_resolver`]); until then linking says so.
 
+use rare_i18n::{tr, trf};
 use crate::screens::friends::model::{FriendProfile, FriendsData, ItemCard, LibGame};
 use rare_friends::join::{Invites, LibraryGame};
 use rare_friends::live::{Activity, BeatInput, Live, Outcome};
@@ -79,11 +80,11 @@ pub fn device_key() -> Option<rare_friends::sign::DeviceKey> {
 /// Turns friends on for the account in use (one wallet signature, or none for a phrase account), so phone
 /// control has a key. Blocks: call it off the UI thread. Err says why it did not happen.
 pub fn link_device_key() -> Result<(), String> {
-    let Some(s) = LIVE.get() else { return Err("Friends is off in this run.".into()) };
+    let Some(s) = LIVE.get() else { return Err(tr().app.friends_off_run.into()) };
     if s.friends().current_key().is_some() || s.friends().turn_on() {
         return Ok(());
     }
-    Err(s.friends().read(|st| st.error.clone()).unwrap_or_else(|| "The sign-in to rare.market was cancelled.".into()))
+    Err(s.friends().read(|st| st.error.clone()).unwrap_or_else(|| tr().app.signin_cancelled.into()))
 }
 
 /// The notify stream reconnects (with this device's key it carries the phone's commands).
@@ -134,7 +135,7 @@ impl WalletSigner for SlotSigner {
     fn sign_personal_message(&self, message: &[u8], prompt: &rare_friends::api::SignPrompt) -> rare_friends::api::Result<String> {
         match SIGNER.get() {
             Some(s) => s.sign_personal_message(message, prompt),
-            None => Err(rare_friends::Error::Other("Signing for friends is not set up in this build yet.".into())),
+            None => Err(rare_friends::Error::Other(tr().app.friends_signing_missing.into())),
         }
     }
 }
@@ -151,7 +152,7 @@ impl RecipientResolver for SlotResolver {
             let address = format!("0x{:0>64}", &t[2..]);
             return Recipient::Ready { address, suins: None };
         }
-        Recipient::Missing { msg: "Name lookup is not available yet. Use a username or a 0x address.".into() }
+        Recipient::Missing { msg: tr().app.name_lookup_missing.into() }
     }
 }
 
@@ -449,10 +450,10 @@ impl Social {
     /// Sends a shared capture (its link) to a friend.
     pub fn send_capture(&self, addr: String, kind: String, url: String) {
         self.spawn(move |f, _| {
-            let label = f.person_of(&addr).map(|p| rare_friends::display::shown(Some(&p), "your friend").primary).unwrap_or_else(|| "your friend".into());
+            let label = f.person_of(&addr).map(|p| rare_friends::display::shown(Some(&p), tr().app.your_friend).primary).unwrap_or_else(|| tr().app.your_friend.into());
             let attach = rare_friends::types::Attach { kind, url };
             f.send_dm(&addr, "", Some(&attach)).map_err(|e| e.to_string())?;
-            Ok(Some(format!("Sent to {label}")))
+            Ok(Some(trf!(tr().app.sent_to, name = label)))
         });
     }
 
@@ -500,7 +501,7 @@ impl Social {
                 Some(rare_friends::resolve::Resolved::Err { msg }) => Err(msg),
                 Some(rare_friends::resolve::Resolved::Ok { address, label, .. }) => {
                     f.graph(rare_friends::GraphOp::Request, &address).map_err(|e| e.to_string())?;
-                    Ok(Some(format!("Request sent to {label}")))
+                    Ok(Some(trf!(tr().app.request_sent_to, name = label)))
                 }
             }
         });
@@ -518,8 +519,8 @@ impl Social {
         self.spawn(move |f, _| {
             let r = f.redeem_code(code.trim()).map_err(|e| e.to_string())?;
             f.refresh();
-            let label = f.person_of(&r.address).map(|p| rare_friends::display::shown(Some(&p), "your friend").primary).unwrap_or_else(|| "your friend".into());
-            Ok(Some(format!("You and {label} are friends")))
+            let label = f.person_of(&r.address).map(|p| rare_friends::display::shown(Some(&p), tr().app.your_friend).primary).unwrap_or_else(|| tr().app.your_friend.into());
+            Ok(Some(trf!(tr().app.you_and_friends, name = label)))
         });
     }
 
@@ -563,7 +564,7 @@ impl Social {
         self.spawn(move |f, _| {
             f.sign_out_account(&address);
             crate::screens::settings::live::touch();
-            Ok(Some("Signed out of rare.market on this device".into()))
+            Ok(Some(tr().app.signed_out_market.into()))
         });
     }
 
@@ -593,7 +594,7 @@ impl Social {
                     if m.items.is_none() {
                         m.items = Some(Vec::new());
                     }
-                    Err(format!("Could not load your items. {e}"))
+                    Err(trf!(tr().app.items_load_failed, error = e))
                 }
             }
         });
@@ -651,7 +652,7 @@ impl Social {
             "turn-off" => {
                 self.spawn(|f, _| {
                     f.turn_off();
-                    Ok(Some("Friends is off on this device".into()))
+                    Ok(Some(tr().app.friends_off_device.into()))
                 });
                 After::Nothing
             }
@@ -682,12 +683,12 @@ impl Social {
                     _ => GraphOp::Request,
                 };
                 self.spawn(move |f, _| {
-                    let label = f.person_of(&who).map(|p| rare_friends::display::shown(Some(&p), "them").primary).unwrap_or_else(|| "them".into());
+                    let label = f.person_of(&who).map(|p| rare_friends::display::shown(Some(&p), tr().app.them).primary).unwrap_or_else(|| tr().app.them.into());
                     f.graph(op, &who).map_err(|e| e.to_string())?;
                     Ok(match op {
-                        GraphOp::Accept => Some(format!("You and {label} are friends")),
-                        GraphOp::Remove => Some(format!("{label} was removed")),
-                        GraphOp::Block => Some(format!("{label} is blocked")),
+                        GraphOp::Accept => Some(trf!(tr().app.you_and_friends, name = label)),
+                        GraphOp::Remove => Some(trf!(tr().app.was_removed, name = label)),
+                        GraphOp::Block => Some(trf!(tr().app.is_blocked, name = label)),
                         _ => None,
                     })
                 });
@@ -727,7 +728,7 @@ impl Social {
             }
             "invite" => {
                 let (id, to) = (arg(2).to_string(), list(parts.get(3).copied().unwrap_or("")));
-                self.spawn(move |f, _| f.invite_to_party(&id, &to).map(|_| Some("Invites sent".into())).map_err(|e| e.to_string()));
+                self.spawn(move |f, _| f.invite_to_party(&id, &to).map(|_| Some(tr().app.invites_sent.into())).map_err(|e| e.to_string()));
                 After::Nothing
             }
             "join-party" => {
@@ -755,10 +756,10 @@ impl Social {
                 } else {
                     self.inner.friends.read(|s| s.parties.iter().find(|p| p.id == arg(2)).and_then(|p| p.game.clone()))
                 };
-                let Some(r) = target else { return After::Toast("They are not playing anything right now".into(), true) };
+                let Some(r) = target else { return After::Toast(tr().app.not_playing_now.into(), true) };
                 self.join_steam_lobby_or(r)
             }
-            "dm-write" => After::Ask { tag: format!("dm:{}", arg(2)), title: "Write a message", placeholder: "Up to 280 characters" },
+            "dm-write" => After::Ask { tag: format!("dm:{}", arg(2)), title: tr().app.write_message_title, placeholder: tr().app.up_to_280 },
             "send-capture" => After::Share(arg(2).to_string()),
             "dm-older" => {
                 let a = arg(2).to_string();
@@ -776,10 +777,10 @@ impl Social {
                 self.send_capture(arg(2).to_string(), kind.to_string(), url.to_string());
                 After::Nothing
             }
-            "write" => After::Ask { tag: format!("write:{}", arg(2)), title: "Message to your party", placeholder: "Up to 280 characters" },
-            "add-by-name" => After::Ask { tag: "add".into(), title: "Add a friend", placeholder: "Username, name.sui or 0x..." },
-            "pick-username" => After::Ask { tag: "username".into(), title: rare_friends::pick_username::TITLE, placeholder: rare_friends::pick_username::PLACEHOLDER },
-            "enter-code" => After::Ask { tag: "code".into(), title: "Your friend's code", placeholder: "6 letters and numbers" },
+            "write" => After::Ask { tag: format!("write:{}", arg(2)), title: tr().app.party_message_title, placeholder: tr().app.up_to_280 },
+            "add-by-name" => After::Ask { tag: "add".into(), title: tr().app.add_friend_title, placeholder: tr().app.add_friend_placeholder },
+            "pick-username" => After::Ask { tag: "username".into(), title: tr().app.pick_username_title, placeholder: tr().app.pick_username_placeholder },
+            "enter-code" => After::Ask { tag: "code".into(), title: tr().app.friend_code_title, placeholder: tr().app.friend_code_placeholder },
             _ => After::Nothing,
         }
     }
@@ -804,7 +805,7 @@ impl Social {
                 inner.bump();
             })
             .ok();
-        After::Toast(format!("Joining {}", r.title), false)
+        After::Toast(trf!(tr().app.joining, title = r.title), false)
     }
 
     /// Join a game from its reference (a friend's or a party's), through the library.
@@ -943,7 +944,7 @@ impl TrophyWatch {
             .into_iter()
             .take(3)
             .map(|a| {
-                let mut n = rare_notify::LocalNotice::new(rare_notify::NoticeKind::Trophy, format!("Trophy unlocked: {}", a.name), rare_notify::types::NoticeAction::Trophies);
+                let mut n = rare_notify::LocalNotice::new(rare_notify::NoticeKind::Trophy, trf!(tr().app.trophy_unlocked, name = a.name), rare_notify::types::NoticeAction::Trophies);
                 if !title.is_empty() {
                     n.body = Some(title.clone());
                 }

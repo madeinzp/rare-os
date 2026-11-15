@@ -2,6 +2,7 @@
 //! web launcher bundles (lib/games.seed.json). Only live and beta games show as games
 //! (games/catalog.ts isActive).
 
+use rare_i18n::tr;
 use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug, PartialEq, Default)]
@@ -71,12 +72,12 @@ impl SuiGame {
     /// "Live · Web, PC" (SuiGames.tsx statusLine).
     pub fn status_line(&self) -> String {
         let status = match self.status.as_deref() {
-            Some("live") => "Live",
-            Some("beta") => "Beta",
-            Some("coming") => "Coming soon",
-            Some("announced") => "Announced",
-            Some("paused") => "Paused",
-            Some("dead") => "Offline",
+            Some("live") => tr().data.status_live,
+            Some("beta") => tr().data.status_beta,
+            Some("coming") => tr().data.status_coming,
+            Some("announced") => tr().data.status_announced,
+            Some("paused") => tr().data.status_paused,
+            Some("dead") => tr().common.offline,
             Some(s) => s,
             None => "",
         };
@@ -84,9 +85,9 @@ impl SuiGame {
             .platforms
             .iter()
             .map(|p| match p.as_str() {
-                "web" => "Web",
+                "web" => tr().data.source_web,
                 "pc" => "PC",
-                "mobile" => "Mobile",
+                "mobile" => tr().data.platform_mobile,
                 "suiplay" => "SuiPlay",
                 p => p,
             })

@@ -4,6 +4,7 @@
 //! (launcher/src/lib/games.seed.json) for offline and the fixtures.
 
 use crate::data::model::Game;
+use rare_i18n::{tr, trf};
 use serde::Deserialize;
 use serde_json::{Map, Value};
 use std::sync::OnceLock;
@@ -105,15 +106,15 @@ pub fn web_controls(id: &str, url: Option<&str>) -> (&'static str, String) {
     });
     let mode = p.and_then(|v| v.get("input")).and_then(Value::as_str).unwrap_or("keys");
     let label = match mode {
-        "gamepad" => "Controller",
-        "focus" => "Controller picks buttons",
-        _ => "Controller as keyboard",
+        "gamepad" => tr().sui.input_gamepad,
+        "focus" => tr().sui.input_focus,
+        _ => tr().sui.input_keys,
     };
     let text = p.and_then(|v| v.get("controls")).and_then(Value::as_str).map(str::to_string).unwrap_or_else(|| {
         if mode == "keys" {
-            "D-pad and left stick are the arrow keys, A Enter, B Escape, X Space. The right stick moves a pointer, RB clicks. View opens the keyboard.".into()
+            tr().sui.controls_keys.into()
         } else {
-            "Guide returns to Rare with the game still running.".into()
+            tr().sui.controls_guide.into()
         }
     });
     (label, text)
@@ -127,10 +128,10 @@ pub fn anti_cheat(id: &str) -> Option<(bool, String)> {
     let status = e.first()?.as_str()?;
     let names = e.get(1)?.as_array()?.iter().filter_map(Value::as_str).collect::<Vec<_>>().join(", ");
     match status {
-        "Denied" => Some((true, format!("Online play won't run here: the publisher blocks Linux in its anti-cheat ({names}). Offline modes may still work."))),
-        "Broken" => Some((true, format!("Online play won't run here: its anti-cheat ({names}) doesn't support Linux yet. Offline modes may still work."))),
-        "Supported" => Some((false, format!("{names} supports Linux and Proton."))),
-        "Running" => Some((false, format!("Runs with {names} on Proton, unofficially."))),
+        "Denied" => Some((true, trf!(tr().sui.ac_denied, names = names))),
+        "Broken" => Some((true, trf!(tr().sui.ac_broken, names = names))),
+        "Supported" => Some((false, trf!(tr().sui.ac_supported, names = names))),
+        "Running" => Some((false, trf!(tr().sui.ac_running, names = names))),
         _ => None,
     }
 }
@@ -143,12 +144,12 @@ pub fn is_active(g: &SuiGame) -> bool {
 /// `STATUS_LABEL`.
 pub fn status_label(s: &str) -> String {
     match s {
-        "live" => "Live",
-        "beta" => "Beta",
-        "coming" => "Coming soon",
-        "announced" => "Announced",
-        "paused" => "Paused",
-        "dead" => "Offline",
+        "live" => tr().sui.status_live,
+        "beta" => tr().sui.status_beta,
+        "coming" => tr().sui.status_coming,
+        "announced" => tr().sui.status_announced,
+        "paused" => tr().sui.status_paused,
+        "dead" => tr().common.offline,
         other => other,
     }
     .to_string()
@@ -156,9 +157,9 @@ pub fn status_label(s: &str) -> String {
 
 pub fn platform_label(p: &str) -> String {
     match p {
-        "web" => "Web",
+        "web" => tr().sui.platform_web,
         "pc" => "PC",
-        "mobile" => "Mobile",
+        "mobile" => tr().sui.platform_mobile,
         "suiplay" => "SuiPlay",
         other => other,
     }

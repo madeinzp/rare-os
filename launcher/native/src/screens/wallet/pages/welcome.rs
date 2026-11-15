@@ -9,6 +9,7 @@ use crate::screens::wallet::kit::{btn, btn_full, list_button, page, panel, Size,
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::onboard::flow::h;
 use crate::screens::wallet::onboard::other_ways::other_ways;
+use rare_i18n::tr;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Msg {
@@ -19,31 +20,37 @@ pub enum Msg {
 
 pub fn welcome_view() -> El<Msg> {
     page(
-        Some("Rare Wallet"),
+        Some(tr().wallet.rare_wallet),
         None,
         None,
         true,
         "",
         vec![
             div("flex flex-col gap-3")
-                .kid(btn("Create account", Variant::Primary, "w-full", Some(Msg::Push(WalletView::CreatePhrase))).def(true))
-                .kid(btn("Sign in with a passkey", Variant::Secondary, "w-full", Some(Msg::Push(WalletView::Passkey { mode: PasskeyMode::Signin }))))
-                .kid(p("text-center text-sm text-secondary").text(CREATE_LINE)),
+                .kid(btn(tr().wallet.create_account, Variant::Primary, "w-full", Some(Msg::Push(WalletView::CreatePhrase))).def(true))
+                .kid(btn(tr().wallet.sign_in_passkey, Variant::Secondary, "w-full", Some(Msg::Push(WalletView::Passkey { mode: PasskeyMode::Signin }))))
+                .kid(p("text-center text-sm text-secondary").text(create_line())),
             div("mt-6").kid(passkey_create_way()),
-            h2("mb-2 mt-9 text-base font-semibold").text("Other ways to sign in"),
+            h2("mb-2 mt-9 text-base font-semibold").text(tr().wallet.other_ways_sign_in),
             other_ways(Msg::Push, false),
-            div("mt-6 flex justify-center").kid(btn_full("Move your assets from your old SuiPlay wallet", Variant::Ghost, Size::Md, false, "", Some(Msg::Push(WalletView::Playtron)))),
+            div("mt-6 flex justify-center").kid(btn_full(tr().wallet.move_assets, Variant::Ghost, Size::Md, false, "", Some(Msg::Push(WalletView::Playtron)))),
         ],
     )
 }
 
 /// What "Create account" makes, in one line.
-pub const CREATE_LINE: &str = "Your account is kept on this SuiPlay and signs with A. You write down 12 words once as a backup.";
+pub fn create_line() -> &'static str {
+    tr().wallet.create_line
+}
 
 /// A PIN account: signs here with a PIN, a phone or a security key is the backup.
-pub const PIN_WAY: &str = "Signs on this SuiPlay with a PIN. Your phone or a security key is the backup";
+pub fn pin_way() -> &'static str {
+    tr().wallet.pin_way
+}
 /// A PIN account from another SuiPlay, back on this one.
-pub const RESTORE_WAY: &str = "Your 12 recovery words and your phone or security key. Same address";
+pub fn restore_way() -> &'static str {
+    tr().wallet.restore_way
+}
 
 /// The PIN account and the passkey-only account, for people who want one.
 fn passkey_create_way() -> El<Msg> {
@@ -52,9 +59,9 @@ fn passkey_create_way() -> El<Msg> {
         None,
         "p-1",
         vec![
-            list_button(Some(icon("lock", "").attr("size", "1.4rem")), "Create account with PIN", Some(text(PIN_WAY)), None, Msg::Push(WalletView::PinAccount), false, ""),
-            list_button(Some(icon("rotate-ccw", "").attr("size", "1.4rem")), "Restore an account with PIN", Some(text(RESTORE_WAY)), None, Msg::Push(WalletView::Import { what: crate::screens::wallet::home::stack::ImportWhat::Restore }), false, ""),
-            list_button(Some(icon("smartphone", "").attr("size", "1.4rem")), "Create a passkey account", Some(text("Signs with your phone or a security key. No words to write down")), None, Msg::Push(WalletView::Passkey { mode: PasskeyMode::Create }), false, ""),
+            list_button(Some(icon("lock", "").attr("size", "1.4rem")), tr().wallet.create_pin_account, Some(text(pin_way())), None, Msg::Push(WalletView::PinAccount), false, ""),
+            list_button(Some(icon("rotate-ccw", "").attr("size", "1.4rem")), tr().wallet.restore_pin_account, Some(text(restore_way())), None, Msg::Push(WalletView::Import { what: crate::screens::wallet::home::stack::ImportWhat::Restore }), false, ""),
+            list_button(Some(icon("smartphone", "").attr("size", "1.4rem")), tr().wallet.create_passkey_account, Some(text(tr().wallet.passkey_way)), None, Msg::Push(WalletView::Passkey { mode: PasskeyMode::Create }), false, ""),
         ],
     )
 }
@@ -81,9 +88,9 @@ pub fn add_view(p_: &AddProps) -> El<Msg> {
             "p-1",
             vec![list_button(
                 Some(icon("file-text", "").attr("size", "1.4rem")),
-                "Add an account from your recovery phrase",
-                Some(text("The next account of the phrase already on this device")),
-                p_.busy.then(|| text("Adding")),
+                tr().wallet.add_from_phrase,
+                Some(text(tr().wallet.add_from_phrase_body)),
+                p_.busy.then(|| text(tr().wallet.adding)),
                 Msg::Derive,
                 false,
                 "",
@@ -93,20 +100,20 @@ pub fn add_view(p_: &AddProps) -> El<Msg> {
     ways = ways.kid(other_ways(Msg::Push, false));
     let mut body = vec![
         div("flex flex-col gap-3")
-            .kid(btn("Create account", Variant::Primary, "w-full", Some(Msg::Push(WalletView::CreatePhrase))).def(true))
-            .kid(btn("Sign in with a passkey", Variant::Secondary, "w-full", Some(Msg::Push(WalletView::Passkey { mode: PasskeyMode::Signin }))))
-            .kid(p("text-center text-sm text-secondary").text(CREATE_LINE)),
+            .kid(btn(tr().wallet.create_account, Variant::Primary, "w-full", Some(Msg::Push(WalletView::CreatePhrase))).def(true))
+            .kid(btn(tr().wallet.sign_in_passkey, Variant::Secondary, "w-full", Some(Msg::Push(WalletView::Passkey { mode: PasskeyMode::Signin }))))
+            .kid(p("text-center text-sm text-secondary").text(create_line())),
         div("mt-6").kid(passkey_create_way()),
-        h2("mb-2 mt-8 text-base font-semibold").text(if p_.none { "Other ways to sign in" } else { "Other ways to add" }),
+        h2("mb-2 mt-8 text-base font-semibold").text(if p_.none { tr().wallet.other_ways_sign_in } else { tr().wallet.other_ways_add }),
         ways,
     ];
     if let Some(e) = &p_.error {
         body.push(p("mt-4 text-sm text-negative").text(e));
     }
     if p_.none {
-        body.push(div("mt-6 flex justify-center").kid(btn_full("Move your assets from your old SuiPlay wallet", Variant::Ghost, Size::Md, false, "", Some(Msg::Push(WalletView::Playtron)))));
+        body.push(div("mt-6 flex justify-center").kid(btn_full(tr().wallet.move_assets, Variant::Ghost, Size::Md, false, "", Some(Msg::Push(WalletView::Playtron)))));
     }
-    page(Some(if p_.none { "Sign in" } else { "Add an account" }), (!p_.none).then(|| text("Pick how you want to add it.")), None, true, "", body)
+    page(Some(if p_.none { tr().common.sign_in } else { tr().wallet.add_an_account }), (!p_.none).then(|| text(tr().wallet.pick_how_to_add)), None, true, "", body)
 }
 
 pub fn add_hints() -> Vec<Hint> {
@@ -126,11 +133,11 @@ mod tests {
                 "Rare Wallet",
                 "Create account",
                 "Sign in with a passkey",
-                CREATE_LINE,
+                create_line(),
                 "Create account with PIN",
-                PIN_WAY,
+                pin_way(),
                 "Restore an account with PIN",
-                RESTORE_WAY,
+                restore_way(),
                 "Create a passkey account",
                 "Signs with your phone or a security key. No words to write down",
                 "Other ways to sign in",

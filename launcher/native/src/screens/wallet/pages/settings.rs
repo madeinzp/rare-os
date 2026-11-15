@@ -7,6 +7,7 @@ use crate::screens::wallet::home::sheets::{self, ChangePin, LedgerCheck, Remove,
 use crate::screens::wallet::kit::{list_button, page, panel, segmented};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::types::{RareAccount, SecretKind};
+use rare_i18n::{tr, trf};
 
 /// home/autoLock.ts: minutes idle before the vault locks (0 = off); 15 by default.
 pub const AUTOLOCK_OPTIONS: [u32; 4] = [0, 1, 5, 15];
@@ -76,55 +77,55 @@ pub enum Msg {
 pub fn view(pr: &Props, st: &State) -> El<Msg> {
     let has_vault = pr.vault.is_some_and(|v| v.exists);
     let kind = pr.vault.map(|v| v.kind).unwrap_or(SecretKind::Pin);
-    let noun = if kind == SecretKind::Passphrase { "passphrase" } else { "PIN" };
+    let pass = kind == SecretKind::Passphrase;
     let has_key = pr.account.is_some_and(|a| a.kind == "native");
     let ic = |n: &'static str| icon(n, "").attr("size", "1.3rem");
     let mut sec = div("mt-2 divide-y divide-border-primary");
     if has_vault {
-        sec = sec.kid(list_button(Some(ic("lock")), "Lock now", Some(text("Ask for your PIN next time")), None, Msg::LockNow, true, ""));
+        sec = sec.kid(list_button(Some(ic("lock")), tr().wallet.lock_now, Some(text(tr().wallet.lock_now_body)), None, Msg::LockNow, true, ""));
         sec = sec.kid(
             div("flex items-center gap-4 px-4 py-3")
                 .kid(span("flex w-[1.3rem] shrink-0 justify-center text-icon-primary").kid(ic("plug")))
-                .kid(span("min-w-0 flex-1").kid(span("block text-base font-medium").text("Auto-lock")).kid(span("block text-sm text-secondary").text("Lock after being idle")))
+                .kid(span("min-w-0 flex-1").kid(span("block text-base font-medium").text(tr().wallet.auto_lock)).kid(span("block text-sm text-secondary").text(tr().wallet.auto_lock_body)))
                 .kid(segmented(
-                    &[("0", "Off"), ("1", "1 min"), ("5", "5 min"), ("15", "15 min")],
+                    &[("0", tr().common.off), ("1", &trf!(tr().wallet.n_min, n = 1)), ("5", &trf!(tr().wallet.n_min, n = 5)), ("15", &trf!(tr().wallet.n_min, n = 15))],
                     &st.auto.to_string(),
                     |v| Msg::Auto(v.parse().unwrap_or(AUTOLOCK_DEFAULT)),
                     "",
                 )),
         );
-        sec = sec.kid(list_button(Some(ic("key-round")), &format!("Change {noun}"), None, None, Msg::Open("pin"), false, ""));
+        sec = sec.kid(list_button(Some(ic("key-round")), if pass { tr().wallet.change_passphrase } else { tr().wallet.change_pin }, None, None, Msg::Open("pin"), false, ""));
     }
     // A key in the device vault opens without a PIN: say "Needs your PIN" only when it does.
-    let needs = has_vault.then(|| text(format!("Needs your {noun}")));
+    let needs = has_vault.then(|| text(if pass { tr().wallet.needs_passphrase } else { tr().wallet.needs_pin }));
     if pr.has_phrase {
-        sec = sec.kid(list_button(Some(ic("file-text")), "Show recovery phrase", needs.clone(), None, Msg::Open("phrase"), false, ""));
+        sec = sec.kid(list_button(Some(ic("file-text")), tr().wallet.show_phrase, needs.clone(), None, Msg::Open("phrase"), false, ""));
     }
     if has_key {
-        sec = sec.kid(list_button(Some(ic("eye")), "Show private key", needs, None, Msg::Open("key"), false, ""));
+        sec = sec.kid(list_button(Some(ic("eye")), tr().wallet.show_key, needs, None, Msg::Open("key"), false, ""));
     }
     let where_ = match pr.vault.and_then(|v| v.backend.as_deref()) {
-        Some("keyring") => "Keys are stored in your system keyring.",
-        Some("file") => "Keys are stored encrypted on this device.",
-        _ if pr.keys_here => "Keys are stored encrypted on this device.",
-        _ => "No keys are stored on this device yet.",
+        Some("keyring") => tr().wallet.keys_keyring,
+        Some("file") => tr().wallet.keys_encrypted,
+        _ if pr.keys_here => tr().wallet.keys_encrypted,
+        _ => tr().wallet.keys_none,
     };
-    let security = panel(Some("Security"), None, "pb-2", vec![sec, p("px-5 pb-3 pt-3 text-sm text-secondary").text(where_)]);
+    let security = panel(Some(tr().wallet.security), None, "pb-2", vec![sec, p("px-5 pb-3 pt-3 text-sm text-secondary").text(where_)]);
     let mut games = div("mt-2 divide-y divide-border-primary");
     if pr.origins.is_empty() {
-        games = games.kid(p("flex items-center gap-4 px-4 py-3.5 text-sm text-secondary").kid(ic("gamepad-2")).kid(text(" No games are connected to this wallet.")));
+        games = games.kid(p("flex items-center gap-4 px-4 py-3.5 text-sm text-secondary").kid(ic("gamepad-2")).kid(text(format!(" {}", tr().wallet.no_games_connected))));
     }
     for o in pr.origins {
-        games = games.kid(list_button(Some(ic("gamepad-2")), host_of(o), None, Some(text("Remove")), Msg::RemoveOrigin(o.clone()), false, "").key(o));
+        games = games.kid(list_button(Some(ic("gamepad-2")), host_of(o), None, Some(text(tr().common.remove)), Msg::RemoveOrigin(o.clone()), false, "").key(o));
     }
-    let connected = panel(Some("Connected games"), None, "pb-2", vec![games]);
-    let hw = panel(Some("Hardware wallets"), None, "pb-2", vec![div("mt-2").kid(list_button(Some(ic("plug")), "Ledger and Keystone help", Some(text("Fix USB permission and check your device")), None, Msg::Open("hw"), false, ""))]);
+    let connected = panel(Some(tr().wallet.connected_games), None, "pb-2", vec![games]);
+    let hw = panel(Some(tr().wallet.hardware_wallets), None, "pb-2", vec![div("mt-2").kid(list_button(Some(ic("plug")), tr().wallet.hw_help_row, Some(text(tr().wallet.hw_help_row_body)), None, Msg::Open("hw"), false, ""))]);
     let mut rm = div("mt-2 divide-y divide-border-primary");
     if let Some(a) = pr.account {
-        rm = rm.kid(list_button(Some(ic("trash-2")), "Remove this account", Some(text(&a.label)), None, Msg::Open("remove"), false, ""));
+        rm = rm.kid(list_button(Some(ic("trash-2")), tr().wallet.remove_this_account, Some(text(&a.label)), None, Msg::Open("remove"), false, ""));
     }
-    rm = rm.kid(list_button(Some(ic("shield-alert")), "Remove all wallets from this device", Some(text("Erases every account and key here")), None, Msg::Open("removeAll"), false, ""));
-    let remove = panel(Some("Remove"), None, "pb-2", vec![rm]);
+    rm = rm.kid(list_button(Some(ic("shield-alert")), tr().wallet.remove_all_row, Some(text(tr().wallet.remove_all_row_body)), None, Msg::Open("removeAll"), false, ""));
+    let remove = panel(Some(tr().common.remove), None, "pb-2", vec![rm]);
 
     let mut body = vec![div("grid grid-cols-2 items-start gap-6").kid(div("flex min-w-0 flex-col gap-6").kid(security).kid(connected)).kid(div("flex min-w-0 flex-col gap-6").kid(hw).kid(remove))];
     match &st.open {
@@ -143,11 +144,11 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
         Some(Open::RemoveAll(s)) => body.push(sheets::remove_all_view(s).map(&Msg::RemoveAll)),
         None => {}
     }
-    page(Some("Settings"), pr.account.map(|a| text(&a.label)), None, false, "", body)
+    page(Some(tr().common.settings), pr.account.map(|a| text(&a.label)), None, false, "", body)
 }
 
 pub fn hints() -> Vec<Hint> {
-    vec![hint("a", "Select"), hint("b", "Back")]
+    vec![hint("a", tr().common.select), hint("b", tr().common.back)]
 }
 
 #[derive(Clone, Debug, PartialEq)]

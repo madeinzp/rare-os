@@ -7,6 +7,7 @@
 //! right side (its default button, else its first). Side effects leave as `Out::Act("friends:..")`
 //! for the app to run against rare-friends (and the wallet, the OSK, the launcher).
 
+use rare_i18n::{tr, trf, trn};
 use super::add::{add_pane, AddState};
 use super::bits::*;
 use super::model::FriendsData;
@@ -194,10 +195,10 @@ pub fn still_there(d: &FriendsData, sel: &Sel) -> bool {
 pub fn privacy_line(p: Option<&Privacy>) -> &'static str {
     match p {
         None => "",
-        Some(p) if p.appear_offline => "Appearing offline",
-        Some(p) if p.visibility == Visibility::Everyone => "Status shown to everyone",
-        Some(p) if p.show_playing => "Friends see what you play",
-        Some(_) => "Friends see you online",
+        Some(p) if p.appear_offline => tr().friends.appearing_offline,
+        Some(p) if p.visibility == Visibility::Everyone => tr().friends.status_everyone,
+        Some(p) if p.show_playing => tr().friends.friends_see_playing,
+        Some(_) => tr().friends.friends_see_online,
     }
 }
 
@@ -208,12 +209,12 @@ pub fn join_note(d: &FriendsData, g: &GameRef) -> &'static str {
         .iter()
         .any(|x| x.id == g.id || g.appid.is_some_and(|a| x.id == format!("steam:{a}")));
     match g.kind {
-        GameKind::Steam if own => "Starts it through Steam, where their invite lands",
-        GameKind::Steam => "Not on this device: opens it in Steam",
-        GameKind::Web if g.join.is_some() => "Opens their game with the party invite",
-        GameKind::Web => "Opens the same game; group up in its party screen",
-        _ if own => "Starts the same game here",
-        _ => "Not on this device",
+        GameKind::Steam if own => tr().friends.join_steam_own,
+        GameKind::Steam => tr().friends.join_steam_missing,
+        GameKind::Web if g.join.is_some() => tr().friends.join_web_invite,
+        GameKind::Web => tr().friends.join_web_same,
+        _ if own => tr().friends.join_same_here,
+        _ => tr().friends.not_on_device,
     }
 }
 
@@ -253,13 +254,13 @@ pub fn view(ui: &mut Ui, d: &FriendsData, v: &View) -> El {
     let online = if fs.friends.is_empty() {
         String::new()
     } else {
-        format!("{} online", g.playing.len() + g.online.len())
+        trf!(tr().friends.online_count, n = g.playing.len() + g.online.len())
     };
     let head = baseline_row(
         ui,
         s().mb(0.6).gap(0.75).px(1.0),
         vec![
-            (T::new(Ty::Title).w(600), "Friends".into()),
+            (T::new(Ty::Title).w(600), tr().common.friends.into()),
             (T::new(Ty::Small).c(tok::MUTED), online),
         ],
     );
@@ -280,15 +281,15 @@ pub fn view(ui: &mut Ui, d: &FriendsData, v: &View) -> El {
     let add = icon_line(
         ui,
         Some("user-plus"),
-        "Add a friend",
-        "By username, SuiNS name or address",
+        tr().friends.add_a_friend,
+        tr().friends.add_a_friend_sub,
     );
     list = list.child(list_row(
         ui,
         &Sel::Add,
         on(&Sel::Add),
         tag_of(&Sel::Add),
-        "Open",
+        tr().common.open,
         add,
     ));
     match fs.active_party() {
@@ -300,18 +301,18 @@ pub fn view(ui: &mut Ui, d: &FriendsData, v: &View) -> El {
                 &sel,
                 on(&sel),
                 tag_of(&sel),
-                "Open party",
+                tr().friends.open_party,
                 line,
             ));
         }
         None => {
-            let line = icon_line(ui, Some("users"), "Start a party", "Play together and chat");
+            let line = icon_line(ui, Some("users"), tr().friends.start_a_party, tr().friends.start_a_party_sub);
             list = list.child(list_row(
                 ui,
                 &Sel::NewParty,
                 on(&Sel::NewParty),
                 tag_of(&Sel::NewParty),
-                "Open",
+                tr().common.open,
                 line,
             ));
         }
@@ -324,20 +325,20 @@ pub fn view(ui: &mut Ui, d: &FriendsData, v: &View) -> El {
             &sel,
             on(&sel),
             tag_of(&sel),
-            "Open invite",
+            tr().friends.open_invite,
             line,
         ));
     }
-    list = list.maybe(group_head(ui, "Requests", fs.received.len()));
+    list = list.maybe(group_head(ui, tr().friends.requests, fs.received.len()));
     for f in &fs.received {
         let sel = Sel::Request(f.address.clone());
-        let line = person_line(ui, d, f, None, "Wants to be your friend");
-        list = list.child(list_row(ui, &sel, on(&sel), tag_of(&sel), "Open", line));
+        let line = person_line(ui, d, f, None, tr().friends.wants_to_be_friend);
+        list = list.child(list_row(ui, &sel, on(&sel), tag_of(&sel), tr().common.open, line));
     }
     for (title, fs) in [
-        ("Playing", &g.playing),
-        ("Online", &g.online),
-        ("Offline", &g.offline),
+        (tr().common.playing, &g.playing),
+        (tr().common.online, &g.online),
+        (tr().common.offline, &g.offline),
     ] {
         list = list.maybe(group_head(ui, title, fs.len()));
         for f in fs.iter() {
@@ -347,19 +348,19 @@ pub fn view(ui: &mut Ui, d: &FriendsData, v: &View) -> El {
             if unread > 0 {
                 line.push(unread_mark(ui, unread));
             }
-            list = list.child(list_row(ui, &sel, on(&sel), tag_of(&sel), "Open", line));
+            list = list.child(list_row(ui, &sel, on(&sel), tag_of(&sel), tr().common.open, line));
         }
     }
-    list = list.maybe(group_head(ui, "Sent", fs.sent.len()));
+    list = list.maybe(group_head(ui, tr().friends.sent, fs.sent.len()));
     for f in &fs.sent {
         let sel = Sel::Sent(f.address.clone());
-        let line = person_line(ui, d, f, None, "Request sent");
-        list = list.child(list_row(ui, &sel, on(&sel), tag_of(&sel), "Open", line));
+        let line = person_line(ui, d, f, None, tr().friends.request_sent);
+        list = list.child(list_row(ui, &sel, on(&sel), tag_of(&sel), tr().common.open, line));
     }
     if fs.friends.is_empty() && fs.received.is_empty() && fs.sent.is_empty() {
         list = list.child(ui.text_s(
             s().px(1.0).pt(0.75),
-            "No friends yet. Add one by username, SuiNS name or address.",
+            tr().friends.no_friends_add,
             T::new(Ty::Small).c(tok::MUTED).wrap(),
         ));
     }
@@ -367,30 +368,30 @@ pub fn view(ui: &mut Ui, d: &FriendsData, v: &View) -> El {
     let recent = super::profile::recent_list(d);
     if !recent.is_empty() {
         let n = recent.len();
-        let line = icon_line(ui, Some("history"), "Recently played with", &format!("{n} {}", if n == 1 { "friend" } else { "friends" }));
-        list = list.child(list_row(ui, &Sel::Recent, on(&Sel::Recent), tag_of(&Sel::Recent), "Open", line));
+        let line = icon_line(ui, Some("history"), tr().friends.recently_played_with, &trn!(tr().friends.friends_n, n));
+        list = list.child(list_row(ui, &Sel::Recent, on(&Sel::Recent), tag_of(&Sel::Recent), tr().common.open, line));
     }
     if !fs.blocked.is_empty() {
         let n = fs.blocked.len();
         let line = icon_line(
             ui,
             None,
-            "Blocked",
-            &format!("{n} {}", if n == 1 { "player" } else { "players" }),
+            tr().friends.blocked,
+            &trn!(tr().friends.players_n, n),
         );
         list = list.child(list_row(
             ui,
             &Sel::Blocked,
             on(&Sel::Blocked),
             tag_of(&Sel::Blocked),
-            "Open",
+            tr().common.open,
             line,
         ));
     }
     let line = icon_line(
         ui,
         Some("shield"),
-        "Privacy",
+        tr().friends.privacy,
         privacy_line(fs.me.as_ref().map(|m| &m.settings)),
     );
     list = list.child(list_row(
@@ -398,7 +399,7 @@ pub fn view(ui: &mut Ui, d: &FriendsData, v: &View) -> El {
         &Sel::Privacy,
         on(&Sel::Privacy),
         tag_of(&Sel::Privacy),
-        "Open",
+        tr().common.open,
         line,
     ));
 
@@ -483,7 +484,7 @@ fn person_line(
     friend: Option<&Friend>,
     line: &str,
 ) -> Vec<El> {
-    let shown = rare_friends::display::shown(Some(p), "Someone");
+    let shown = rare_friends::display::shown(Some(p), tr().friends.someone);
     let mut runs = vec![(T::new(Ty::Body).w(500).trunc(), label(Some(p)))];
     if let Some(sec) = shown.secondary {
         runs.push((T::new(Ty::Meta).c(tok::MUTED).trunc(), sec));
@@ -538,21 +539,17 @@ fn party_line(ui: &mut Ui, p: &Party, me: Option<&str>, invite: bool) -> Vec<El>
         .map(|m| &m.person)
         .collect();
     let title = if invite {
-        format!("Party invite from {}", label(host))
+        trf!(tr().friends.party_invite_from, name = label(host))
     } else if host.map(|h| h.address.as_str()) == me {
-        "Your party".to_string()
+        tr().friends.your_party.to_string()
     } else {
-        format!("{}'s party", label(host))
+        trf!(tr().friends.party_of, name = label(host))
     };
     let n = joined.len();
-    let sub = format!(
-        "{}{n} {}",
-        p.game
-            .as_ref()
-            .map(|g| format!("{}, ", g.title))
-            .unwrap_or_default(),
-        if n == 1 { "player" } else { "players" }
-    );
+    let sub = match p.game.as_ref() {
+        Some(g) => trn!(tr().friends.party_sub_game, n, game = g.title.clone()),
+        None => trn!(tr().friends.players_n, n),
+    };
     let stack = avatar_stack(
         ui,
         &joined.iter().take(3).copied().collect::<Vec<_>>(),
@@ -585,22 +582,22 @@ fn group_head(ui: &mut Ui, title: &str, n: usize) -> Option<El> {
 fn gate(ui: &mut Ui, d: &FriendsData) -> El {
     let fs = &d.st;
     let body = match fs.status {
-        FriendsStatus::None => Some(("Add a Rare Wallet account to use friends", "Your friends know you by your Sui address, shown with your SuiNS name and NFT picture.".to_string(), Btn::new("Open Rare Wallet", T_GATE).primary().def(true))),
-        FriendsStatus::Watch => Some(("This account is watch only", "Friends need an account that can sign. Pick or add one in Rare Wallet.".to_string(), Btn::new("Open Rare Wallet", T_GATE).primary().def(true))),
+        FriendsStatus::None => Some((tr().friends.gate_none_title, tr().friends.gate_none_body.to_string(), Btn::new(tr().friends.open_rare_wallet, T_GATE).primary().def(true))),
+        FriendsStatus::Watch => Some((tr().friends.gate_watch_title, tr().friends.gate_watch_body.to_string(), Btn::new(tr().friends.open_rare_wallet, T_GATE).primary().def(true))),
         FriendsStatus::Unlinked | FriendsStatus::Linking => {
             let linking = fs.status == FriendsStatus::Linking;
             Some((
-                "Turn on friends",
-                "Rare Wallet signs one message that lets this device handle your friends, parties and presence. It does not move funds or cost gas. Your friend list stays private on rare.market, never on chain.".to_string(),
-                Btn::new(if linking { "Signing in" } else { "Turn on friends" }, T_GATE).primary().def(true).disabled(linking),
+                tr().friends.turn_on_friends,
+                tr().friends.gate_unlinked_body.to_string(),
+                Btn::new(if linking { tr().friends.signing_in } else { tr().friends.turn_on_friends }, T_GATE).primary().def(true).disabled(linking),
             ))
         }
-        FriendsStatus::Error => Some(("Friends could not load", fs.error.clone().unwrap_or_else(|| "Check your connection.".into()), Btn::new("Try again", T_GATE).def(true))),
+        FriendsStatus::Error => Some((tr().friends.gate_error_title, fs.error.clone().unwrap_or_else(|| tr().friends.check_connection.into()), Btn::new(tr().common.try_again, T_GATE).def(true))),
         _ => None,
     };
     let mut page = ui.bx(s().fill().col().px(2.5).pt(0.5)).child(ui.text_s(
         s().mb(1.25),
-        "Friends",
+        tr().common.friends,
         T::new(Ty::Title).w(600),
     ));
     if let Some((title, text, btn)) = body {
@@ -675,7 +672,7 @@ pub fn hair_top(ui: &Ui) -> El {
 
 /// `PersonHead`: the 5rem picture, the name, the SuiNS line, the address, and a line under it.
 pub fn person_head(ui: &mut Ui, p: &Person, extra: Option<El>) -> El {
-    let shown = rare_friends::display::shown(Some(p), "Someone");
+    let shown = rare_friends::display::shown(Some(p), tr().friends.someone);
     let mut col = ui
         .bx(s().col().shrink().min0())
         .child(ui.text(label(Some(p)), T::new(Ty::Title).w(600).trunc()));
@@ -721,15 +718,15 @@ fn friend_pane(ui: &mut Ui, d: &FriendsData, f: &Friend, v: &View) -> El {
             .child(game_art(ui, s().fill(), d, g, false, 5.5, 8.25));
         let words = ui
             .bx(s().col().grow())
-            .child(ui.text("Playing", T::new(Ty::Label).c(tok::MUTED)))
+            .child(ui.text(tr().common.playing, T::new(Ty::Label).c(tok::MUTED)))
             .child(ui.text(g.title.clone(), T::new(Ty::Row).w(600).trunc()))
             .child(ui.text(join_note(d, g), T::new(Ty::Meta).c(tok::MUTED)));
         let join = button(
             ui,
-            Btn::new("Join game", T_JOIN_GAME)
+            Btn::new(tr().friends.join_game, T_JOIN_GAME)
                 .primary()
                 .def(true)
-                .hint("Join"),
+                .hint(tr().friends.join),
         );
         panel = panel.child(
             ui.bx(s().row().items_center().gap(1.1).pt(1.2))
@@ -742,36 +739,36 @@ fn friend_pane(ui: &mut Ui, d: &FriendsData, f: &Friend, v: &View) -> El {
     // One row at every size: Remove and Block live behind X ("Remove or block"), which swaps them
     // into this row in place of the everyday actions.
     let mut acts = Vec::new();
-    const X: &str = "Remove or block";
+    let x = tr().friends.remove_or_block;
     match sure {
         None if !v.more => {
-            acts.push(button(ui, Btn::new("Message", T_MESSAGE).def(g.is_none()).x(X)));
+            acts.push(button(ui, Btn::new(tr().friends.message, T_MESSAGE).def(g.is_none()).x(x)));
             if !in_party {
-                acts.push(button(ui, Btn::new(if party.is_some() { "Invite to party" } else { "Start a party" }, T_INVITE_PARTY).x(X)));
+                acts.push(button(ui, Btn::new(if party.is_some() { tr().friends.invite_to_party } else { tr().friends.start_a_party }, T_INVITE_PARTY).x(x)));
             }
-            acts.push(button(ui, Btn::new("Send a capture", T_SEND_CAPTURE).x(X)));
-            acts.push(button(ui, Btn::new("Send coins", T_SEND_COINS).x(X)));
-            acts.push(button(ui, Btn::new("Send an item", T_SEND_ITEM).x(X)));
+            acts.push(button(ui, Btn::new(tr().friends.send_a_capture, T_SEND_CAPTURE).x(x)));
+            acts.push(button(ui, Btn::new(tr().friends.send_coins, T_SEND_COINS).x(x)));
+            acts.push(button(ui, Btn::new(tr().friends.send_an_item, T_SEND_ITEM).x(x)));
         }
         None => {
-            acts.push(button(ui, Btn::new("Remove friend", T_REMOVE).def(true)));
-            acts.push(button(ui, Btn::new("Block", T_BLOCK)));
-            acts.push(button(ui, Btn::new("Cancel", T_LESS).ghost()));
+            acts.push(button(ui, Btn::new(tr().friends.remove_friend, T_REMOVE).def(true)));
+            acts.push(button(ui, Btn::new(tr().friends.block, T_BLOCK)));
+            acts.push(button(ui, Btn::new(tr().common.cancel, T_LESS).ghost()));
         }
         Some(k) => {
             acts.push(button(
                 ui,
                 Btn::new(
                     if k == Sure::Remove {
-                        "Yes, remove"
+                        tr().friends.yes_remove
                     } else {
-                        "Yes, block"
+                        tr().friends.yes_block
                     },
                     T_YES,
                 )
                 .v(Variant::Outline),
             ));
-            acts.push(button(ui, Btn::new("Keep", T_KEEP).ghost().def(true)));
+            acts.push(button(ui, Btn::new(tr().friends.keep, T_KEEP).ghost().def(true)));
         }
     }
     panel = panel.child(
@@ -780,13 +777,13 @@ fn friend_pane(ui: &mut Ui, d: &FriendsData, f: &Friend, v: &View) -> El {
             .kids(acts),
     );
     let mut items = vec![StatItem {
-        label: "Friends since".into(),
+        label: tr().friends.friends_since.into(),
         value: date_long(f.since),
     }];
     if f.presence.state == PresenceState::Offline && f.presence.last_seen.is_some_and(|t| t != 0) {
-        let t = rare_friends::format::presence_text(&f.presence, false, d.now_ms);
+        let t = crate::screens::friends::bits::presence_text(&f.presence, false, d.now_ms);
         items.push(StatItem {
-            label: "Last seen".into(),
+            label: tr().friends.last_seen.into(),
             value: t.trim_start_matches("Last seen ").to_string(),
         });
     }
@@ -798,12 +795,12 @@ fn friend_pane(ui: &mut Ui, d: &FriendsData, f: &Friend, v: &View) -> El {
 }
 
 fn request_pane(ui: &mut Ui, f: &Pending) -> El {
-    let line = ui.text("Wants to be your friend", T::new(Ty::Small).c(tok::MUTED));
+    let line = ui.text(tr().friends.wants_to_be_friend, T::new(Ty::Small).c(tok::MUTED));
     let head = person_head(ui, f, Some(line));
     let acts = vec![
-        button(ui, Btn::new("Accept", T_ACCEPT).primary().def(true)),
-        button(ui, Btn::new("Decline", T_DECLINE)),
-        button(ui, Btn::new("Block", T_BLOCK_REQ).ghost()),
+        button(ui, Btn::new(tr().friends.accept, T_ACCEPT).primary().def(true)),
+        button(ui, Btn::new(tr().friends.decline, T_DECLINE)),
+        button(ui, Btn::new(tr().friends.block, T_BLOCK_REQ).ghost()),
     ];
     entry_panel(ui)
         .child(head)
@@ -813,18 +810,18 @@ fn request_pane(ui: &mut Ui, f: &Pending) -> El {
                 .kids(acts),
         )
         .child(ui.text(
-            "They will not be told if you decline or block.",
+            tr().friends.decline_note,
             T::new(Ty::Small).c(tok::MUTED),
         ))
 }
 
 fn sent_pane(ui: &mut Ui, f: &Pending) -> El {
     let line = ui.text(
-        format!("Request sent {}", date_short(f.at)),
+        trf!(tr().friends.request_sent_on, date = date_short(f.at)),
         T::new(Ty::Small).c(tok::MUTED),
     );
     let head = person_head(ui, f, Some(line));
-    let cancel = button(ui, Btn::new("Cancel request", T_CANCEL_REQ).def(true));
+    let cancel = button(ui, Btn::new(tr().friends.cancel_request, T_CANCEL_REQ).def(true));
     entry_panel(ui)
         .child(head)
         .child(ui.bx(s().row().gap(0.75)).child(cancel))
@@ -833,7 +830,7 @@ fn sent_pane(ui: &mut Ui, f: &Pending) -> El {
 fn blocked(ui: &mut Ui, list: &[Pending]) -> El {
     let mut panel = crate::kit::panel(ui, s().col()).child(ui.text_s(
         s().px(1.4).pb(0.4).pt(1.2),
-        "Blocked players cannot send you requests or invites, and never see your status.",
+        tr().friends.blocked_note,
         T::new(Ty::Small).c(tok::MUTED).wrap(),
     ));
     for (i, f) in list.iter().enumerate() {
@@ -845,7 +842,7 @@ fn blocked(ui: &mut Ui, list: &[Pending]) -> El {
                 short_address(&f.address),
                 T::new(Ty::Meta).c(tok::MUTED).mono().trunc(),
             ));
-        let b = button(ui, Btn::new("Unblock", T_UNBLOCK + i as u32).sm());
+        let b = button(ui, Btn::new(tr().friends.unblock, T_UNBLOCK + i as u32).sm());
         panel = panel.child(
             ui.bx(s()
                 .row()
@@ -885,7 +882,7 @@ pub fn switch_row(ui: &mut Ui, title: &str, body: &str, on: bool, first: bool, t
     fill_nav(
         el,
         tag,
-        Some(if on { "Turn off" } else { "Turn on" }),
+        Some(if on { tr().common.turn_off } else { tr().common.turn_on }),
         None,
         false,
     )
@@ -894,9 +891,9 @@ pub fn switch_row(ui: &mut Ui, title: &str, body: &str, on: bool, first: bool, t
 /// The privacy switches, in order: (title, body, on).
 pub fn privacy_rows(p: &Privacy) -> [(&'static str, &'static str, bool); 3] {
     [
-        ("Show what I'm playing", "Friends see the game you are in. Off: they only see that you are online.", p.show_playing),
-        ("Appear offline", "Friends see you as offline. You still see them, and get their invites.", p.appear_offline),
-        ("Show my status to everyone", "Off: only friends see your status. On: anyone can look up your name, picture and status on rare.market.", p.visibility == Visibility::Everyone),
+        (tr().friends.privacy_playing_title, tr().friends.privacy_playing_body, p.show_playing),
+        (tr().friends.privacy_offline_title, tr().friends.privacy_offline_body, p.appear_offline),
+        (tr().friends.privacy_everyone_title, tr().friends.privacy_everyone_body, p.visibility == Visibility::Everyone),
     ]
 }
 
@@ -907,12 +904,12 @@ fn privacy(ui: &mut Ui, p: &Privacy) -> El {
     }
     let words = ui
         .bx(s().col().grow())
-        .child(ui.text("Friends on this device", T::new(Ty::Body).w(600)))
+        .child(ui.text(tr().friends.friends_on_device, T::new(Ty::Body).w(600)))
         .child(ui.text(
-            "Turning off signs this device out. Your friends and requests stay on rare.market.",
+            tr().friends.turn_off_note,
             T::new(Ty::Small).c(tok::MUTED).wrap(),
         ));
-    let off = button(ui, Btn::new("Turn off", T_TURN_OFF));
+    let off = button(ui, Btn::new(tr().common.turn_off, T_TURN_OFF));
     let device = crate::kit::panel(ui, s().row().items_center().gap(1.25).px(1.4).py(1.0))
         .child(words)
         .child(off);
@@ -924,27 +921,24 @@ fn new_party(ui: &mut Ui, d: &FriendsData) -> El {
     let acts = vec![
         button(
             ui,
-            Btn::new("Invite friends", T_INVITE_FRIENDS)
+            Btn::new(tr().friends.invite_friends, T_INVITE_FRIENDS)
                 .primary()
                 .def(true)
                 .disabled(d.st.friends.is_empty()),
         ),
-        button(ui, Btn::new("Start without invites", T_START_EMPTY)),
+        button(ui, Btn::new(tr().friends.start_without_invites, T_START_EMPTY)),
     ];
     let mut panel = crate::kit::panel(ui, s().col().gap(1.0).px(1.6).py(1.5))
-        .child(ui.text("Start a party", T::new(Ty::Row).w(600)))
+        .child(ui.text(tr().friends.start_a_party, T::new(Ty::Row).w(600)))
         .child(ui.text_s(
             s().max_w(38.0),
-            "Invite friends, pick a game and chat. The party shows on everyone's Home, and Join opens the same game for each of them. Chat is kept for 24 hours.",
+            tr().friends.new_party_body,
             T::new(Ty::Small).c(tok::MUTED).wrap(),
         ))
         .child(ui.bx(s().row().gap(0.75)).kids(acts));
     if let Some(g) = g {
         panel = panel.child(ui.text(
-            format!(
-                "The party starts with {}, the game you are playing.",
-                g.title
-            ),
+            trf!(tr().friends.party_starts_with, game = g.title.clone()),
             T::new(Ty::Meta).c(tok::MUTED),
         ));
     }

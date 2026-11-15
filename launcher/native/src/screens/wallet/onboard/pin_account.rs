@@ -3,6 +3,7 @@
 //! signs anywhere (rare.market) and unlocks the device after 5 wrong PINs. Effects run in
 //! `flows/pin_account.rs`.
 
+use rare_i18n::tr;
 use super::ceremony::{self, bluetooth_view, BtMsg, Ceremony, Via};
 use super::flow::{plain_error, udev_fix, Failure};
 use super::hw_parts::hw_error;
@@ -100,10 +101,18 @@ pub struct Props<'a> {
     pub known: bool,
 }
 
-pub const PIN_BODY: &str = "You sign on this SuiPlay with this PIN. After 5 wrong PINs it locks until your backup unlocks it.";
-pub const RESTORE_PIN_BODY: &str = "Your account signs on this SuiPlay with this PIN. After 5 wrong PINs it locks until your backup unlocks it.";
-pub const RESTORE_BACKUP_BODY: &str = "Your phone or security key signs in once, so this SuiPlay knows the account. The address stays the same.";
-pub const BACKUP_BODY: &str = "Your backup signs on rare.market and anywhere you are away from this SuiPlay, and unlocks it if you forget the PIN.";
+pub fn pin_body() -> &'static str {
+    tr().wallet_setup.pin_body
+}
+pub fn restore_pin_body() -> &'static str {
+    tr().wallet_setup.restore_pin_body
+}
+pub fn restore_backup_body() -> &'static str {
+    tr().wallet_setup.restore_backup_body
+}
+pub fn backup_body() -> &'static str {
+    tr().wallet_setup.backup_body
+}
 
 fn choice(on: bool, ic: &'static str, title: &str, body: &str, msg: Msg, def: bool) -> El<Msg> {
     button(cn(&["flex w-full items-center gap-4 rounded border px-5 py-4 text-left transition-colors", if on { "border-border-light bg-layer-02" } else { "border-border-primary bg-layer-01" }]), Some(msg))
@@ -124,9 +133,9 @@ pub fn grouped(a: &str) -> String {
 pub fn title(st: &State) -> Option<&'static str> {
     match st.step {
         Step::Pin | Step::Done => None,
-        Step::Backups | Step::Bluetooth | Step::Run if st.restore => Some("Sign in with your backup"),
-        Step::Backups => Some("Add a backup"),
-        Step::Bluetooth | Step::Run => Some("Add a backup"),
+        Step::Backups | Step::Bluetooth | Step::Run if st.restore => Some(tr().wallet_setup.sign_in_backup),
+        Step::Backups => Some(tr().wallet_setup.add_backup),
+        Step::Bluetooth | Step::Run => Some(tr().wallet_setup.add_backup),
     }
 }
 
@@ -134,8 +143,8 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
     let root = match st.step {
         Step::Pin if pr.has_pin => {
             let mut d = div("flex flex-col items-center text-center")
-                .kid(h2("text-xl font-bold").text("Enter your PIN"))
-                .kid(p("mt-1 max-w-[28rem] text-sm text-secondary").text("This SuiPlay already has a PIN. Your new account uses it too."))
+                .kid(h2("text-xl font-bold").text(tr().wallet_setup.enter_pin))
+                .kid(p("mt-1 max-w-[28rem] text-sm text-secondary").text(tr().wallet_setup.has_pin_note))
                 .kid(div("mt-6 w-full").kid(pin_pad(PinPadSpec { value: &st.pin.value, ..Default::default() }, |k| Msg::Pin(pin_setup::Msg::Key(k))).on_pad("x", Msg::Pin(pin_setup::Msg::Key("back"))).on_pad("start", Msg::Pin(pin_setup::Msg::Key("ok")))));
             if let Some((m, _)) = &st.error {
                 d = d.kid(p("mt-4 max-w-[28rem] text-sm text-negative").text(m));
@@ -143,7 +152,7 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
             d
         }
         Step::Pin => {
-            let (t, b) = if st.restore { ("Set a PIN for this SuiPlay", RESTORE_PIN_BODY) } else { ("Create account with PIN", PIN_BODY) };
+            let (t, b) = if st.restore { (tr().wallet_setup.set_pin_for_suiplay, restore_pin_body()) } else { (tr().wallet_setup.create_with_pin, pin_body()) };
             let mut d = div("pt-4").kid(pin_setup::view_pin_only(&st.pin, t, b, false).map(&Msg::Pin));
             if let Some((m, _)) = &st.error {
                 d = d.kid(p("mt-4 text-center text-sm text-negative").text(m));
@@ -152,54 +161,56 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
         }
         Step::Backups if st.restore => {
             let b = st.backups;
-            let mut d = div("flex flex-col gap-4").kid(p("text-sm text-secondary").text(RESTORE_BACKUP_BODY)).kid(
+            let mut d = div("flex flex-col gap-4").kid(p("text-sm text-secondary").text(restore_backup_body())).kid(
                 div("flex flex-col gap-2")
                     .role("radiogroup")
-                    .kid(choice(b != Backups::Key, "smartphone", "Use your phone", "Scan a code with your phone's camera, then use Face ID or your fingerprint", Msg::Pick(Backups::Phone), true))
-                    .kid(choice(b == Backups::Key, "usb", "Use your security key", "Plug it into the USB-C port on top and touch it", Msg::Pick(Backups::Key), false)),
+                    .kid(choice(b != Backups::Key, "smartphone", tr().wallet_setup.use_phone, tr().wallet_setup.phone_body, Msg::Pick(Backups::Phone), true))
+                    .kid(choice(b == Backups::Key, "usb", tr().wallet_setup.use_your_key, tr().wallet_setup.use_key_body, Msg::Pick(Backups::Key), false)),
             );
             if let Some((m, fix)) = &st.error {
                 d = d.kid(hw_error(m, fix.as_deref(), false, false).map(&|_| Msg::Continue));
             }
-            d.kid(btn("Continue", Variant::Primary, "w-full", Some(Msg::Continue)))
+            d.kid(btn(tr().common.continue_, Variant::Primary, "w-full", Some(Msg::Continue)))
         }
         Step::Backups => {
             let b = st.backups;
             let mut d = div("flex flex-col gap-4")
-                .kid(p("text-sm text-secondary").text(BACKUP_BODY))
+                .kid(p("text-sm text-secondary").text(backup_body()))
                 .kid(
                     div("flex flex-col gap-2")
                         .role("radiogroup")
-                        .kid(choice(b == Backups::Phone, "smartphone", "Add your phone", "Scan a code with your phone's camera, then use Face ID or your fingerprint", Msg::Pick(Backups::Phone), true))
-                        .kid(choice(b == Backups::Key, "usb", "Add a security key", "A USB key such as a YubiKey, in the USB-C port on top", Msg::Pick(Backups::Key), false))
-                        .kid(choice(b == Backups::Both, "shield-check", "Add both", "Your phone and a security key. Either one can sign and unlock.", Msg::Pick(Backups::Both), false)),
+                        .kid(choice(b == Backups::Phone, "smartphone", tr().wallet_setup.add_phone, tr().wallet_setup.phone_body, Msg::Pick(Backups::Phone), true))
+                        .kid(choice(b == Backups::Key, "usb", tr().wallet_setup.add_key, tr().wallet_setup.add_key_body, Msg::Pick(Backups::Key), false))
+                        .kid(choice(b == Backups::Both, "shield-check", tr().wallet_setup.add_both, tr().wallet_setup.add_both_body, Msg::Pick(Backups::Both), false)),
                 );
             if let Some((m, fix)) = &st.error {
                 d = d.kid(hw_error(m, fix.as_deref(), false, false).map(&|_| Msg::Continue));
             }
-            d.kid(btn("Continue", Variant::Primary, "w-full", Some(Msg::Continue)))
+            d.kid(btn(tr().common.continue_, Variant::Primary, "w-full", Some(Msg::Continue)))
         }
         Step::Bluetooth => bluetooth_view(st.bt_note.as_deref(), st.bt_busy, st.bt_error.as_deref(), true).map(&Msg::Bt),
         Step::Run => div("pt-2").kid(ceremony::view(pr.via, pr.ceremony, pr.qr_url, &st.key_pin).map(&Msg::Ceremony)),
         Step::Done => {
             let a = st.address.as_deref().unwrap_or("");
-            let backup = match st.backups {
-                Backups::Phone => "your phone",
-                Backups::Key => "your security key",
-                Backups::Both => "your phone or your security key",
-            };
             let (head, line) = if st.restore {
-                ("Your account is back", "This SuiPlay signs with your PIN again. Same address, same backups.".to_string())
+                (tr().wallet_setup.account_back, tr().wallet_setup.account_back_note)
             } else {
-                ("Your account is ready", format!("This SuiPlay signs with your PIN. On rare.market and anywhere else, {backup} signs."))
+                (
+                    tr().wallet_setup.account_ready,
+                    match st.backups {
+                        Backups::Phone => tr().wallet_setup.ready_note_phone,
+                        Backups::Key => tr().wallet_setup.ready_note_key,
+                        Backups::Both => tr().wallet_setup.ready_note_both,
+                    },
+                )
             };
             div("flex flex-col items-center gap-4 py-6 text-center")
                 .kid(icon("circle-check", "text-icon-primary").attr("size", "2.5rem").attr("stroke-width", "1.5"))
                 .kid(h2("text-xl font-bold").text(head))
                 .kid(p("max-w-[34rem] text-secondary").text(line))
-                .kid(div("w-full max-w-[34rem] rounded border border-border-primary bg-layer-01 px-5 py-4").kid(p("text-sm text-secondary").text("Address")).kid(p("mt-1 break-all font-mono text-base").text(grouped(a))))
+                .kid(div("w-full max-w-[34rem] rounded border border-border-primary bg-layer-01 px-5 py-4").kid(p("text-sm text-secondary").text(tr().wallet_setup.address)).kid(p("mt-1 break-all font-mono text-base").text(grouped(a))))
                 .kid(p("max-w-[34rem] text-sm text-secondary").text(pr.kept))
-                .kid(div("mt-2 flex w-full max-w-[34rem] gap-3").kid(btn("Move everything here", Variant::Secondary, "flex-1", Some(Msg::Move))).kid(btn("Done", Variant::Primary, "flex-1", Some(Msg::Finish)).def(true)))
+                .kid(div("mt-2 flex w-full max-w-[34rem] gap-3").kid(btn(tr().wallet_setup.move_everything, Variant::Secondary, "flex-1", Some(Msg::Move))).kid(btn(tr().common.done, Variant::Primary, "flex-1", Some(Msg::Finish)).def(true)))
         }
     };
     if matches!(st.step, Step::Backups | Step::Bluetooth | Step::Run) || st.step == Step::Pin {
@@ -305,7 +316,7 @@ fn start(st: &mut State) -> Option<Effect> {
 
 pub fn bt_ready(st: &mut State, ready: bool) -> Option<Effect> {
     if !ready {
-        st.bt_note = Some("Your phone and this SuiPlay talk over Bluetooth to add your phone.".into());
+        st.bt_note = Some(tr().wallet_setup.bluetooth_add_phone.into());
         st.step = Step::Bluetooth;
         return None;
     }
@@ -342,18 +353,18 @@ pub fn ran(st: &mut State, run: u64, res: Result<String, Failure>) -> Option<Eff
                 return None;
             }
             if code == Some("ble-off") {
-                st.bt_note = Some("Turn Bluetooth back on to finish with your phone.".into());
+                st.bt_note = Some(tr().wallet_setup.ble_back_on.into());
                 st.step = Step::Bluetooth;
                 return None;
             }
             // a wrong PIN for this SuiPlay's existing key: enter it again
             if matches!(code, Some("wrong") | Some("pin-locked")) {
-                st.error = Some((plain_error(&e, "Wrong PIN"), None));
+                st.error = Some((plain_error(&e, tr().wallet_setup.wrong_pin), None));
                 st.chosen = None;
                 st.step = Step::Pin;
                 return None;
             }
-            let message = if code == Some("notfound") { "No security key found. Plug it into the USB-C port on top and try again.".to_string() } else { plain_error(&e, "Could not add the backup. Try again.") };
+            let message = if code == Some("notfound") { tr().wallet_setup.no_key_usbc.to_string() } else { plain_error(&e, tr().wallet_setup.backup_failed) };
             st.error = Some((message, udev_fix(&e)));
             st.step = Step::Backups;
             None
@@ -382,7 +393,7 @@ mod tests {
         let mut st = State::default();
         let v = view(&pr, &st);
         assert!(v.contains_text("Create account with PIN"));
-        assert!(v.contains_text(PIN_BODY));
+        assert!(v.contains_text(pin_body()));
         assert!(!v.contains_text("Use a passphrase instead"));
         keys(&pr, &mut st, "482916");
         assert!(view(&pr, &st).contains_text("Enter it again"));
@@ -411,7 +422,7 @@ mod tests {
         keys(&pr, &mut st, "135792");
         keys(&pr, &mut st, "135792");
         let v = view(&pr, &st);
-        assert!(v.contains_text(RESTORE_BACKUP_BODY) && !v.contains_text("Add both"));
+        assert!(v.contains_text(restore_backup_body()) && !v.contains_text("Add both"));
         update(&pr, &mut st, Msg::Pick(Backups::Key));
         assert_eq!(update(&pr, &mut st, Msg::Continue), Some(Effect::Start { run: 1, vias: vec![Via::Usb], pin: "135792".into() }));
         ran(&mut st, 1, Ok("0xabc".into()));

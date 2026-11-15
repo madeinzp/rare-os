@@ -5,6 +5,7 @@ use super::logic::{card_status, on_sale, price_now, studio_line, usd_text};
 use super::model::StoreGame;
 use crate::kit::{self, tok, ArtFit, DotTone};
 use crate::screens::market::host::*;
+use rare_i18n::tr;
 use rare_render::view::El;
 
 /// `GameLogo`: the logo cover-fit on layer 03 (rounded-card), or the name's first letter
@@ -64,13 +65,13 @@ pub fn store_card(ui: &mut Ui, g: &StoreGame, owned: bool, wide: bool, def: bool
         left = left.child(kit::dot(ui, s(), DotTone::Primary, false));
     }
     left = left.child(trunc_text(ui, s(), card_status(g), T::new(Ty::Meta).c(tok::MUTED)));
-    let right = if owned { Some(ui.text("In your library", T::new(Ty::Meta).c(tok::MUTED))) } else { price_text(ui, s(), g, Ty::Meta, now) };
+    let right = if owned { Some(ui.text(tr().store.in_library, T::new(Ty::Meta).c(tok::MUTED))) } else { price_text(ui, s(), g, Ty::Meta, now) };
     let bottom = ui.bx(s().row().items_center().justify_between().gap(0.75).min0()).child(left).maybe(right);
     // The 1px border sits inside the box in CSS (border-box): it adds to the padding.
     let mut st = s().col().justify_between().h(8.0).p(1.0 + 1.0 / ui.rem);
     st = if wide { st.wp(1.0).min0() } else { st.w(20.0) };
     let card = ui.bx(st).bg(tok::L1).radius(ui.r(0.5)).border(1.0, tok::HAIR).child(top).child(bottom).key(rare_render::view::key(&g.slug));
-    kit::nav(kit::tile(card, if wide { 1.03 } else { 1.06 }), tag, Some("Details"), None, def)
+    kit::nav(kit::tile(card, if wide { 1.03 } else { 1.06 }), tag, Some(tr().common.details), None, def)
 }
 
 /// One fact of the game page's stat line: plain text, or an element (the price, `.num` version).

@@ -7,9 +7,20 @@ use super::rows::*;
 use super::{SectionOut, SectionView};
 use crate::screens::overlay::common::*;
 use rare_agent::provider::Kind;
+use rare_i18n::{tr, trf};
 use rare_render::Id;
 
-pub const PROVIDERS: [(Option<Kind>, &str); 5] = [(None, "Off"), (Some(Kind::Claude), "Claude"), (Some(Kind::OpenAi), "OpenAI"), (Some(Kind::Compatible), "Other"), (Some(Kind::Ollama), "Ollama")];
+pub const PROVIDERS: [Option<Kind>; 5] = [None, Some(Kind::Claude), Some(Kind::OpenAi), Some(Kind::Compatible), Some(Kind::Ollama)];
+
+fn provider_label(k: Option<Kind>) -> &'static str {
+    match k {
+        None => tr().common.off,
+        Some(Kind::Claude) => "Claude",
+        Some(Kind::OpenAi) => "OpenAI",
+        Some(Kind::Compatible) => tr().settings.provider_other,
+        Some(Kind::Ollama) => "Ollama",
+    }
+}
 
 /// An address the owner typed: http(s) only, no trailing slash. Some(None) clears it.
 pub fn clean_url(v: &str) -> Option<Option<String>> {
@@ -34,48 +45,49 @@ impl AskSection {
         let mut rows = RowSet::default();
         let kind = kind_of(cfg);
         let p = panel(cx, parent);
-        setting_row(cx, p, "Ask Rare", Some("Talk or type in the Rare menu's Ask tab, even over a game. Rare uses a model you bring and pays nothing. Your key is sealed in Rare Wallet and goes only to the provider you pick."), true);
-        let idx = PROVIDERS.iter().position(|(k, _)| *k == kind).unwrap_or(0);
-        let labels: Vec<&str> = PROVIDERS.iter().map(|(_, l)| *l).collect();
+        let t = &tr().settings;
+        setting_row(cx, p, t.ask_title, Some(t.ask_intro), true);
+        let idx = PROVIDERS.iter().position(|k| *k == kind).unwrap_or(0);
+        let labels: Vec<&str> = PROVIDERS.iter().map(|k| provider_label(*k)).collect();
         let body = match kind {
-            None => "Pick where the answers come from.",
-            Some(Kind::Claude) => "Your Anthropic API key. Rare never registers with Anthropic.",
-            Some(Kind::OpenAi) => "Your OpenAI API key. Sign in with ChatGPT is not offered.",
-            Some(Kind::Compatible) => "Any service that speaks the OpenAI API: a router or your own server.",
-            Some(Kind::Ollama) => "Ollama on this device or a PC on your network. Works offline.",
+            None => t.ask_pick,
+            Some(Kind::Claude) => t.ask_claude,
+            Some(Kind::OpenAi) => t.ask_openai,
+            Some(Kind::Compatible) => t.ask_compat,
+            Some(Kind::Ollama) => t.ask_ollama,
         };
-        rows.choice(cx, nav, p, "ask-provider", "Model provider", Some(body), &labels, Some(idx), false);
+        rows.choice(cx, nav, p, "ask-provider", t.row_provider, Some(body), &labels, Some(idx), false);
         if let Some(k) = kind {
-            let model = cfg.agent_model.clone().filter(|m| !m.is_empty()).unwrap_or_else(|| if k.default_model().is_empty() { "Not set".into() } else { format!("{} (default)", k.default_model()) });
-            let r = setting_row(cx, p, "Model", Some(&model), false);
-            super::remote::small_button(cx, nav, r.right, "Change", "ask-model", 0);
+            let model = cfg.agent_model.clone().filter(|m| !m.is_empty()).unwrap_or_else(|| if k.default_model().is_empty() { t.not_set.into() } else { trf!(t.default_value, value = k.default_model()) });
+            let r = setting_row(cx, p, t.row_model, Some(&model), false);
+            super::remote::small_button(cx, nav, r.right, tr().common.change, "ask-model", 0);
             if k.takes_url() {
-                let url = cfg.agent_url.clone().filter(|u| !u.is_empty()).unwrap_or_else(|| if k.default_url().is_empty() { "Not set".into() } else { format!("{} (default)", k.default_url()) });
-                let r = setting_row(cx, p, "Address", Some(&url), false);
-                super::remote::small_button(cx, nav, r.right, "Change", "ask-url", 0);
+                let url = cfg.agent_url.clone().filter(|u| !u.is_empty()).unwrap_or_else(|| if k.default_url().is_empty() { t.not_set.into() } else { trf!(t.default_value, value = k.default_url()) });
+                let r = setting_row(cx, p, t.row_address, Some(&url), false);
+                super::remote::small_button(cx, nav, r.right, tr().common.change, "ask-url", 0);
             }
             if k.takes_key() {
                 let saved = crate::features::agent::setup().keys.iter().any(|x| x == k.id());
                 let line = match (saved, k.needs_key()) {
-                    (true, _) => "Saved in Rare Wallet",
-                    (false, true) => "Not set",
-                    (false, false) => "Not set (only if your service needs one)",
+                    (true, _) => t.key_saved,
+                    (false, true) => t.not_set,
+                    (false, false) => t.key_optional,
                 };
-                let r = setting_row(cx, p, "API key", Some(line), false);
-                super::remote::small_button(cx, nav, r.right, if saved { "Replace" } else { "Add" }, "ask-key", 0);
+                let r = setting_row(cx, p, t.row_api_key, Some(line), false);
+                super::remote::small_button(cx, nav, r.right, if saved { t.replace } else { tr().common.add }, "ask-key", 0);
                 if saved {
-                    super::remote::small_button(cx, nav, r.right, "Remove", "ask-key-remove", 0);
+                    super::remote::small_button(cx, nav, r.right, tr().common.remove, "ask-key-remove", 0);
                 }
             }
-            let r = setting_row(cx, p, "Check it works", Some("Sends one short question to your model."), false);
-            super::remote::small_button(cx, nav, r.right, "Test", "ask-test", 0);
+            let r = setting_row(cx, p, t.row_check, Some(t.check_body), false);
+            super::remote::small_button(cx, nav, r.right, t.test, "ask-test", 0);
         }
         let p = panel(cx, parent);
-        rows.switch(cx, nav, p, "ask-voice", "Speak to Rare", "Hold X on the Ask tab and talk. Speech turns into text on this device; the speech model (190 MB) downloads the first time.", cfg.agent_voice == Some(true), true);
-        rows.switch(cx, nav, p, "ask-hold", "Hold RC to talk", "Hold RC anywhere, even in a game, and let go to send. RC's own hold action is off while this is on.", cfg.agent_hold == Some(true), false);
+        rows.switch(cx, nav, p, "ask-voice", t.voice_title, t.voice_body, cfg.agent_voice == Some(true), true);
+        rows.switch(cx, nav, p, "ask-hold", t.hold_title, t.hold_body, cfg.agent_hold == Some(true), false);
         let p = panel(cx, parent);
-        rows.switch(cx, nav, p, "ask-shots", "Pictures of the game", "Over a game, a screenshot can go to your model with the question, for help with what is on screen. This is the default; the Ask tab has a switch each time.", cfg.agent_shots == Some(true), true);
-        setting_row(cx, p, "Agents on your network", Some("Tools on a laptop can use the same actions over MCP: Developer > Allow network apps, one switch per kind of action. Buying and sending always wait for you here."), false);
+        rows.switch(cx, nav, p, "ask-shots", t.shots_title, t.shots_body, cfg.agent_shots == Some(true), true);
+        setting_row(cx, p, t.agents_title, Some(t.agents_body), false);
         AskSection { rows }
     }
 }
@@ -87,7 +99,7 @@ impl SectionView for AskSection {
         match f.sid.as_str() {
             "ask-provider" => {
                 let Some((_, Val::Idx(i))) = self.rows.press(cx, nav, now) else { return SectionOut::None };
-                let k = PROVIDERS.get(i).and_then(|p| p.0);
+                let k = PROVIDERS.get(i).copied().flatten();
                 cfg.agent_provider = k.map(|k| k.id().to_string());
                 // Another provider: its own model and address defaults.
                 cfg.agent_model = None;

@@ -8,6 +8,7 @@ use crate::screens::wallet::kit::{btn, sheet, SheetSpec, Variant};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::onboard::pin_setup;
 use crate::screens::wallet::onboard::word_grid::{self, Grid};
+use rare_i18n::tr;
 use std::collections::BTreeSet;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,45 +65,47 @@ pub enum Effect {
     Close,
 }
 
-pub const WARN: &str = "These 12 words are this SuiPlay's key to your account. With them and your phone or security key, anyone can take everything in it. Rare never asks for them. Write them on paper and keep it safe. Never type them into a website, a message or a photo.";
+pub fn warn() -> &'static str {
+    tr().wallet_sign.recovery_warn
+}
 
 pub fn view(st: &State, phone: bool, key: bool, passkey: &super::panels::Passkey, now: u64) -> El<Msg> {
     match &st.phase {
         Phase::Warn => sheet(
             SheetSpec {
-                title: "Recovery words".into(),
+                title: tr().wallet_sign.recovery_words_title.into(),
                 subtitle: None,
                 icon: None,
-                footer: Some(vec![btn("Show the words", Variant::Primary, "flex-1", Some(Msg::Show)).def(true), btn("Cancel", Variant::Secondary, "flex-1", Some(Msg::Done))]),
+                footer: Some(vec![btn(tr().wallet_sign.show_words, Variant::Primary, "flex-1", Some(Msg::Show)).def(true), btn(tr().common.cancel, Variant::Secondary, "flex-1", Some(Msg::Done))]),
                 close: Some(Msg::Done),
                 width: "40rem",
             },
             vec![div("flex flex-col items-center gap-4 text-center")
                 .kid(icon("triangle-alert", "text-icon-secondary").attr("size", "2.25rem").attr("stroke-width", "1.5"))
-                .kid(p("max-w-[32rem] text-base").role("status").text(WARN))
-                .kid(p("max-w-[32rem] text-sm text-secondary").text("Check that nobody can see the screen. You need them only to sign with a PIN on another SuiPlay."))],
+                .kid(p("max-w-[32rem] text-base").role("status").text(warn()))
+                .kid(p("max-w-[32rem] text-sm text-secondary").text(tr().wallet_sign.recovery_hint))],
         ),
         Phase::Current(u) => {
             let (reason, alt) = match st.task {
-                Task::Change => ("Enter your current PIN", Some("Forgot it? Use your backup")),
-                Task::Words => ("Enter your PIN to see your recovery words", None),
+                Task::Change => (tr().wallet_sign.enter_current_pin, Some(tr().wallet_sign.forgot_use_backup)),
+                Task::Words => (tr().wallet_sign.enter_pin_for_words, None),
             };
-            let pend = unlock::Pending { reason: reason.into(), phone: alt.is_some(), title: Some(if st.task == Task::Change { "Change PIN" } else { "Recovery words" }.into()), phone_label: alt.map(str::to_string) };
+            let pend = unlock::Pending { reason: reason.into(), phone: alt.is_some(), title: Some(if st.task == Task::Change { tr().wallet_sign.change_pin_title } else { tr().wallet_sign.recovery_words_title }.into()), phone_label: alt.map(str::to_string) };
             unlock::view(&pend, unlock::VaultKind::Pin, u, now).map(&Msg::Unlock)
         }
         Phase::New { pin, saving, error } => {
-            let mut d = div("pt-2").kid(pin_setup::view_pin_only(pin, "Pick a new PIN", "6 to 12 digits. It signs on this SuiPlay; 5 wrong ones lock it until your backup unlocks it.", *saving).map(&Msg::New));
+            let mut d = div("pt-2").kid(pin_setup::view_pin_only(pin, tr().wallet_sign.pick_new_pin, tr().wallet_sign.new_pin_rules, *saving).map(&Msg::New));
             if let Some(e) = error {
                 d = d.kid(p("mt-3 text-center text-sm text-negative").text(e));
             }
-            sheet(SheetSpec { title: "Change PIN".into(), subtitle: None, icon: None, footer: Some(vec![btn("Cancel", Variant::Secondary, "flex-1", Some(Msg::Done))]), close: Some(Msg::Done), width: "40rem" }, vec![d])
+            sheet(SheetSpec { title: tr().wallet_sign.change_pin_title.into(), subtitle: None, icon: None, footer: Some(vec![btn(tr().common.cancel, Variant::Secondary, "flex-1", Some(Msg::Done))]), close: Some(Msg::Done), width: "40rem" }, vec![d])
         }
         Phase::Backup(l) => locked::view(&locked::Props { phone, key, passkey, forgot: true }, l).map(&Msg::Backup),
         Phase::Shown(words) => sheet(
-            SheetSpec { title: "Recovery words".into(), subtitle: Some("Write them down in this order".into()), icon: None, footer: Some(vec![btn("Done", Variant::Primary, "flex-1", Some(Msg::Done)).def(true)]), close: Some(Msg::Done), width: "52rem" },
+            SheetSpec { title: tr().wallet_sign.recovery_words_title.into(), subtitle: Some(tr().wallet_sign.write_down_order.into()), icon: None, footer: Some(vec![btn(tr().common.done, Variant::Primary, "flex-1", Some(Msg::Done)).def(true)]), close: Some(Msg::Done), width: "52rem" },
             vec![div("flex flex-col gap-4")
                 .kid(word_grid::view(&Grid { words, cols: Some(3), pick: false, active: None, bad: &BTreeSet::new(), def_index: None }, |_| Msg::Done))
-                .kid(p("text-sm text-secondary").text("Never share them. Anyone with these words and your backup can take your account."))],
+                .kid(p("text-sm text-secondary").text(tr().wallet_sign.never_share_words))],
         ),
     }
 }
@@ -229,7 +232,7 @@ mod tests {
         assert_eq!(press(&mut st, "111222", |k| Msg::Backup(locked::Msg::Pin(pin_setup::Msg::Key(k)))), Some(Effect::Save { old: None, new: "111222".into() }));
         // locked while entering the current PIN: straight to the backup
         let mut st = State::new(Task::Change);
-        checked(&mut st, "0".into(), Err((true, locked::LOCKED.into())));
+        checked(&mut st, "0".into(), Err((true, locked::locked().into())));
         assert!(matches!(st.phase, Phase::Backup(_)));
     }
 
@@ -237,7 +240,7 @@ mod tests {
     fn words_warn_first_then_pin_then_words() {
         let mut st = State::new(Task::Words);
         let v = view(&st, true, false, &Passkey::Idle, 0);
-        assert!(v.contains_text(WARN));
+        assert!(v.contains_text(warn()));
         update(&mut st, Msg::Show, 0);
         assert!(view(&st, true, false, &Passkey::Idle, 0).contains_text("Enter your PIN to see your recovery words"));
         let w: Vec<String> = (1..=12).map(|i| format!("word{i}")).collect();

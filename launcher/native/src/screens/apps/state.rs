@@ -3,28 +3,11 @@
 //! rare-launch, rare-overlay and rare-stream replace the fixtures later.
 
 use super::catalog::{app_by_id, app_by_run_id, run_id, AppEntry, AppStatus};
+use rare_i18n::{tr, trf};
 use rare_render::Src;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-
-/// `failed()` in lib/fail.ts: a sentence and what to do next.
-pub fn failed(what: &str, next: &str) -> String {
-    if next.is_empty() {
-        what.to_string()
-    } else {
-        format!("{what} {next}")
-    }
-}
-
-/// "Press the Rare button" or, in guest mode, "Hold View" (lib/guest.ts rareWay).
-pub fn rare_way(guest: bool) -> &'static str {
-    if guest {
-        "Hold View"
-    } else {
-        "Press the Rare button"
-    }
-}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InstallState {
@@ -159,14 +142,14 @@ impl Apps {
         match self.host.open(app, way) {
             Ok(()) => {
                 let msg = if ctrl == Some(super::catalog::Controller::Pointer) {
-                    format!("{}: the right stick moves the pointer. {} to come back to Rare.", app.name, rare_way(self.guest))
+                    trf!(if self.guest { tr().apps.pointer_toast_guest } else { tr().apps.pointer_toast }, name = app.name)
                 } else {
-                    format!("Opening {}", app.name)
+                    trf!(tr().apps.opening, name = app.name)
                 };
                 self.host.toast(&msg, false);
             }
             Err(e) => {
-                let m = failed(&format!("{} didn't start.", app.name), "Try again.");
+                let m = trf!(tr().apps.didnt_start, name = app.name);
                 let _ = e;
                 self.host.toast(&m, true);
             }
@@ -183,16 +166,16 @@ impl Apps {
 
     pub fn resume(&mut self, app: &AppEntry) {
         if self.host.resume_app(app).is_err() {
-            let m = failed(&format!("Couldn't switch back to {}.", app.name), "Try again.");
+            let m = trf!(tr().apps.cant_switch_back, name = app.name);
             self.host.toast(&m, true);
         }
     }
 
     pub fn close(&mut self, app: &AppEntry) {
         match self.host.close_app(app) {
-            Ok(()) => self.host.toast(&format!("Closing {}", app.name), false),
+            Ok(()) => self.host.toast(&trf!(tr().apps.closing, name = app.name), false),
             Err(_) => {
-                let m = failed(&format!("Couldn't close {}.", app.name), "Try again.");
+                let m = trf!(tr().apps.cant_close, name = app.name);
                 self.host.toast(&m, true);
             }
         }
@@ -204,8 +187,7 @@ impl Apps {
         if let Err(e) = self.host.install(app) {
             // Its own reason when it gives one (Battle.net without umu-run), else the usual step.
             let e = e.trim().trim_end_matches('.');
-            let next = if e.is_empty() { "Check your Wi-Fi and try again.".to_string() } else { format!("{e}.") };
-            let m = failed(&format!("Couldn't install {}.", app.name), &next);
+            let m = if e.is_empty() { trf!(tr().apps.cant_install, name = app.name) } else { trf!(tr().apps.cant_install_why, name = app.name, reason = e) };
             self.finish(&app.id, Some(m));
         }
     }
@@ -227,7 +209,7 @@ impl Apps {
             self.host.toast(e, true);
         } else if let Some(app) = app {
             let name = self.status.get(id).and_then(|s| s.offer.as_ref()).map(|o| o.name.clone()).unwrap_or_else(|| app.name.clone());
-            self.host.toast(&format!("{name} is installed"), false);
+            self.host.toast(&trf!(tr().apps.installed_toast, name = name), false);
         }
         self.touch();
     }
@@ -254,11 +236,11 @@ pub fn running_items(apps: &Apps, title: Option<&dyn Fn(&str) -> Option<String>>
             }
             let stream = apps.host.stream_of(rid);
             if stream.is_some() || rid.starts_with("stream:") {
-                let name = apps.host.stream_title(rid).unwrap_or_else(|| "PC game".into());
+                let name = apps.host.stream_title(rid).unwrap_or_else(|| tr().apps.pc_game.into());
                 return RunningItem { rid: rid.clone(), name, app: None, game: None, stream };
             }
             let game = apps.host.game_by_id(rid);
-            let name = game.as_ref().map(|g| g.title.clone()).or_else(|| title.and_then(|t| t(rid))).unwrap_or_else(|| "Game".into());
+            let name = game.as_ref().map(|g| g.title.clone()).or_else(|| title.and_then(|t| t(rid))).unwrap_or_else(|| tr().apps.game_fallback.into());
             RunningItem { rid: rid.clone(), name, app: None, game, stream: None }
         })
         .collect()
@@ -273,7 +255,7 @@ pub fn resume_item(apps: &mut Apps, it: &RunningItem) {
     } else if let Some(g) = &it.game {
         let _ = apps.host.resume_game(g);
     } else if apps.host.native_resume(&it.rid).is_err() {
-        let m = failed("Couldn't switch back.", "Try again.");
+        let m = tr().apps.cant_switch_back_generic.to_string();
         apps.host.toast(&m, true);
     }
 }
@@ -287,7 +269,7 @@ pub fn quit_item(apps: &mut Apps, it: &RunningItem) {
     } else if let Some(g) = &it.game {
         let _ = apps.host.quit_game(g);
     } else if apps.host.native_quit(&it.rid).is_err() {
-        let m = failed("Couldn't close it.", "Try again.");
+        let m = tr().apps.cant_close_generic.to_string();
         apps.host.toast(&m, true);
     }
 }

@@ -3,6 +3,7 @@
 //! word, and the next box opens; "Paste all words" takes the whole phrase. The key field shows
 //! dots only. Nothing is kept after leaving (`State` goes with the page).
 
+use rare_i18n::{tr, trf};
 use super::flow::{h, plain_error, Failure, Gate};
 use super::pin_setup::{self, PinOptions};
 use super::word_grid::{self, Grid};
@@ -71,33 +72,35 @@ pub enum Effect {
 }
 
 /// What restoring a PIN account does, in one line.
-pub const RESTORE_SUB: &str = "Type the 12 recovery words of your PIN account. Your phone or security key signs in once, then this SuiPlay signs with a new PIN. The address stays the same.";
+pub fn restore_sub() -> &'static str {
+    tr().wallet_setup.restore_sub
+}
 
 pub fn view(what: ImportWhat, st: &State, chk: &Check) -> El<Msg> {
     let is_key = what == ImportWhat::Key;
     let filled = st.words.iter().all(|w| !w.is_empty());
-    let phrase_error = if filled && !chk.phrase_ok { "That phrase is not valid. Check each word and the order." } else { "" };
-    let key_error = if !st.key.trim().is_empty() && !chk.key_ok { "That is not a valid private key. It starts with suiprivkey1." } else { "" };
+    let phrase_error = if filled && !chk.phrase_ok { tr().wallet_setup.phrase_invalid } else { "" };
+    let key_error = if !st.key.trim().is_empty() && !chk.key_ok { tr().wallet_setup.key_invalid } else { "" };
     let ready = if is_key { chk.key_ok } else { chk.phrase_ok };
     let off = !ready || st.busy;
     let body = if st.pin_step {
-        div("pt-4").kid(pin_setup::view(&st.pin, "Set a PIN", "It unlocks your keys on this device. It never leaves it.", st.busy).map(&Msg::Pin))
+        div("pt-4").kid(pin_setup::view(&st.pin, tr().wallet_setup.set_a_pin, tr().wallet_setup.keys_pin_note, st.busy).map(&Msg::Pin))
     } else if is_key {
         let err = if !key_error.is_empty() { Some(key_error) } else { (!st.error.is_empty()).then_some(st.error.as_str()) };
         div("flex flex-col gap-5")
-            .kid(field(FieldSpec { label: Some("Private key"), value: &st.key, secret: true, def: true, placeholder: Some("suiprivkey1..."), error: err, ..Default::default() }, Msg::TypeKey))
-            .kid(btn(if st.busy { "Adding" } else { "Import" }, Variant::Primary, &format!("w-full {}", if off { "pointer-events-none opacity-40" } else { "" }), Some(Msg::Import)))
+            .kid(field(FieldSpec { label: Some(tr().wallet_setup.way_key_title), value: &st.key, secret: true, def: true, placeholder: Some("suiprivkey1..."), error: err, ..Default::default() }, Msg::TypeKey))
+            .kid(btn(if st.busy { tr().wallet_setup.adding } else { tr().wallet_setup.import }, Variant::Primary, &format!("w-full {}", if off { "pointer-events-none opacity-40" } else { "" }), Some(Msg::Import)))
     } else {
         let bad: BTreeSet<usize> = if phrase_error.is_empty() { BTreeSet::new() } else { (0..st.words.len()).collect() };
         let first_empty = st.words.iter().position(|w| w.is_empty()).unwrap_or(0);
         let mut d = div("flex flex-col gap-5")
             .kid(if what == ImportWhat::Restore {
                 // a PIN account's words are always 12
-                div("flex items-center justify-end gap-4").kid(btn_full("Paste all words", Variant::Secondary, Size::Md, false, "", Some(Msg::PasteAll)))
+                div("flex items-center justify-end gap-4").kid(btn_full(tr().wallet_setup.paste_all, Variant::Secondary, Size::Md, false, "", Some(Msg::PasteAll)))
             } else {
                 div("flex items-center justify-between gap-4")
-                    .kid(segmented(&[("12", "12 words"), ("24", "24 words")], &st.count.to_string(), |v| Msg::Count(if v == "24" { 24 } else { 12 }), ""))
-                    .kid(btn_full("Paste all words", Variant::Secondary, Size::Md, false, "", Some(Msg::PasteAll)))
+                    .kid(segmented(&[("12", tr().wallet_setup.words_12), ("24", tr().wallet_setup.words_24)], &st.count.to_string(), |v| Msg::Count(if v == "24" { 24 } else { 12 }), ""))
+                    .kid(btn_full(tr().wallet_setup.paste_all, Variant::Secondary, Size::Md, false, "", Some(Msg::PasteAll)))
             })
             .kid(word_grid::view(&Grid { words: &st.words, cols: None, pick: true, active: None, bad: &bad, def_index: Some(first_empty) }, Msg::Word));
         let msg = if !st.flash.is_empty() {
@@ -110,13 +113,13 @@ pub fn view(what: ImportWhat, st: &State, chk: &Check) -> El<Msg> {
         if !msg.is_empty() {
             d = d.kid(p("text-sm text-negative").text(msg));
         }
-        let label = if what == ImportWhat::Restore { "Continue" } else if st.busy { "Adding" } else { "Import" };
+        let label = if what == ImportWhat::Restore { tr().common.continue_ } else if st.busy { tr().wallet_setup.adding } else { tr().wallet_setup.import };
         d.kid(btn(label, Variant::Primary, &format!("w-full {}", if off { "pointer-events-none opacity-40" } else { "" }), Some(Msg::Import)))
     };
     let mut kids = vec![body];
     if let Some((i, options)) = &st.pick {
         kids.push(sheet(
-            SheetSpec { title: format!("Word {}", i + 1), subtitle: Some("Pick the word".into()), icon: None, footer: None, close: Some(Msg::ClosePick), width: "34rem" },
+            SheetSpec { title: trf!(tr().wallet_setup.word_n, n = i + 1), subtitle: Some(tr().wallet_setup.pick_the_word.into()), icon: None, footer: None, close: Some(Msg::ClosePick), width: "34rem" },
             vec![div("grid grid-cols-2 gap-2").kids(options.iter().enumerate().map(|(n, w)| btn(w, Variant::Secondary, "w-full font-mono", Some(Msg::PickWord(*i, w.clone()))).def(n == 0).key(w)))],
         ));
     }
@@ -124,11 +127,11 @@ pub fn view(what: ImportWhat, st: &State, chk: &Check) -> El<Msg> {
     let (title, sub) = if st.pin_step {
         (None, None)
     } else if is_key {
-        (Some("Import a private key"), Some("Paste a key that starts with suiprivkey1. It is stored encrypted on this device."))
+        (Some(tr().wallet_setup.import_key_title), Some(tr().wallet_setup.import_key_sub))
     } else if what == ImportWhat::Restore {
-        (Some("Restore your PIN account"), Some(RESTORE_SUB))
+        (Some(tr().wallet_setup.restore_title), Some(restore_sub()))
     } else {
-        (Some("Import a recovery phrase"), Some("Type the first letters of each word and pick it from the list."))
+        (Some(tr().wallet_setup.import_phrase_title), Some(tr().wallet_setup.import_phrase_sub))
     };
     let mut pg = page(title, sub.map(text), None, is_key || st.count == 12, if wide { "mx-auto max-w-[64rem]" } else { "" }, kids);
     if st.pin_step {
@@ -147,7 +150,7 @@ pub fn hints(st: &State) -> Vec<Hint> {
 
 fn fill_all(st: &mut State, list: Vec<String>) {
     if list.len() != 12 && list.len() != 24 {
-        st.flash = format!("That is {} words. A recovery phrase has 12 or 24.", list.len());
+        st.flash = trf!(tr().wallet_setup.wrong_count, n = list.len());
         return;
     }
     st.count = list.len();
@@ -177,7 +180,7 @@ pub fn update(what: ImportWhat, st: &mut State, msg: Msg, wordlist: &[&str]) -> 
             }
             let options: Vec<String> = if wordlist.contains(&t.as_str()) { vec![t.clone()] } else { wordlist.iter().filter(|w| w.starts_with(&t)).map(|w| w.to_string()).collect() };
             match options.len() {
-                0 => st.flash = format!("\"{t}\" is not a recovery word. Check the spelling."),
+                0 => st.flash = trf!(tr().wallet_setup.not_a_word, word = t),
                 1 => return accept(st, i, options[0].clone()),
                 _ => st.pick = Some((i, options.into_iter().take(12).collect())),
             }
@@ -242,7 +245,7 @@ pub fn added(st: &mut State, res: Result<(), Failure>) {
             st.key.clear();
         }
         Err(e) => {
-            st.error = plain_error(&e, "Could not add the wallet");
+            st.error = plain_error(&e, tr().wallet_setup.add_wallet_failed);
             st.busy = false;
             st.pin_step = false;
         }

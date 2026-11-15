@@ -6,6 +6,7 @@
 use super::review::Account;
 use crate::screens::wallet::kit::{addr, list_button, wallet_avatar};
 use crate::screens::wallet::markup::*;
+use rare_i18n::{tr, trf};
 
 /// tx/recipient.ts `RecipientState`.
 #[derive(Clone, Debug, PartialEq)]
@@ -40,19 +41,22 @@ pub fn short_address(a: &str) -> String {
     }
 }
 
-const MONTHS: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+fn month(i: usize) -> &'static str {
+    let t = &tr().wallet_sign;
+    [t.month_jan, t.month_feb, t.month_mar, t.month_apr, t.month_may, t.month_jun, t.month_jul, t.month_aug, t.month_sep, t.month_oct, t.month_nov, t.month_dec][i]
+}
 
 /// `since`: "Today", "3d ago", "Mar 4" (UTC date; the device runs in UTC unless set).
 pub fn since(ts: i64, now: i64) -> String {
     let days = (now - ts).div_euclid(86_400_000);
     if days < 1 {
-        return "Today".into();
+        return tr().wallet_sign.since_today.into();
     }
     if days < 7 {
-        return format!("{days}d ago");
+        return trf!(tr().wallet_sign.since_days_ago, n = days);
     }
     let (_, m, d) = crate::screens::wallet::fmt::civil(ts.div_euclid(86_400_000));
-    format!("{} {d}", MONTHS[(m - 1) as usize])
+    trf!(tr().wallet_sign.since_date, month = month((m - 1) as usize), day = d)
 }
 
 /// `RecipientPicks`: your other accounts, then up to four recent recipients matching the filter.
@@ -65,13 +69,13 @@ pub fn recipient_picks<M>(accounts: &[Account], current: Option<&str>, recents: 
     }
     let mut d = div("min-h-0");
     if !picks.is_empty() {
-        d = d.kid(h3("mb-1 text-sm text-secondary").text("Your accounts"));
+        d = d.kid(h3("mb-1 text-sm text-secondary").text(tr().wallet_sign.your_accounts));
         for a in picks {
             d = d.kid(list_button(Some(crate::screens::wallet::kit::account_avatar(&a.address, "2rem")), &a.label, Some(addr(&a.address, false, "")), None, on(&a.address), false, "").key(&a.address));
         }
     }
     if !list.is_empty() {
-        d = d.kid(h3("mb-1 mt-3 text-sm text-secondary").text("Recent"));
+        d = d.kid(h3("mb-1 mt-3 text-sm text-secondary").text(tr().wallet_sign.recent));
         for r in list.into_iter().take(4) {
             let title = r.suins.clone().unwrap_or_else(|| short_address(&r.address));
             let body = r.suins.as_ref().map(|_| addr(&r.address, false, ""));
@@ -87,13 +91,13 @@ pub fn recipient_line<M>(rs: &RecipientState, self_: bool) -> Option<El<M>> {
         RecipientState::Ready { address, suins } => {
             let mut l = p(cn(&["mt-1.5 flex items-center gap-2 text-sm", if self_ { "text-negative" } else { "text-secondary" }]));
             if self_ {
-                l = l.text("Pick an address other than this account");
+                l = l.text(tr().wallet_sign.pick_other_address);
             } else {
                 l = l.kid(wallet_avatar(address, "1.25rem")).kid_opt(suins.as_ref().map(|s| span("text-primary").text(s))).kid(addr(address, false, ""));
             }
             Some(l)
         }
-        RecipientState::Loading { name } => Some(p("mt-1.5 text-sm text-secondary").text(format!("Looking up {name}"))),
+        RecipientState::Loading { name } => Some(p("mt-1.5 text-sm text-secondary").text(trf!(tr().wallet_sign.looking_up, name = name))),
         RecipientState::Invalid(m) | RecipientState::Missing(m) | RecipientState::Error(m) => Some(p("mt-1.5 text-sm text-negative").role("alert").text(m)),
         RecipientState::Empty | RecipientState::Typing => None,
     }

@@ -8,6 +8,7 @@
 //! exercised by the attestor e2e. Fixture runs read RR_DEVICE_PASS (none|idle|checking|signing|
 //! error|held|moved) instead of the chain.
 
+use rare_i18n::tr;
 use rare_sui::grpc::{ChainRead, Include};
 use rare_sui::network::{device_pass_deployment, TrophyConfig};
 use rare_sui::Network;
@@ -191,7 +192,7 @@ pub fn load(force: bool) {
         let live = crate::screens::wallet::live::sui();
         let r = match live {
             Some(sui) => crate::screens::wallet::live::rt().block_on(read_pass(sui, &cfg, &acct.address)),
-            None => Err("No network".into()),
+            None => Err(tr().features.pass_no_network.into()),
         };
         with(|s| {
             s.loading = false;
@@ -208,12 +209,12 @@ pub fn load(force: bool) {
 /// `device_pass::claim(registry, device, model, first_seen_ms, seq, expires_ms, signature, clock)`.
 pub fn build_claim_tx(v: &rare_attest::Voucher, sender: &str) -> Result<rare_sui::ptb::Tx, String> {
     use rare_sui::ptb::{bcs, Tx};
-    let dev = hex_bytes(&Value::String(v.device.clone())).filter(|d| d.len() == 32).ok_or("The attestor sent a bad device id")?;
-    let sig: Vec<u8> = (0..v.signature.len() / 2).map(|i| u8::from_str_radix(v.signature.get(2 * i..2 * i + 2).unwrap_or("zz"), 16)).collect::<Result<_, _>>().map_err(|_| "The attestor sent a bad signature")?;
+    let dev = hex_bytes(&Value::String(v.device.clone())).filter(|d| d.len() == 32).ok_or_else(|| tr().features.pass_bad_device.to_string())?;
+    let sig: Vec<u8> = (0..v.signature.len() / 2).map(|i| u8::from_str_radix(v.signature.get(2 * i..2 * i + 2).unwrap_or("zz"), 16)).collect::<Result<_, _>>().map_err(|_| tr().features.pass_bad_signature.to_string())?;
     if sig.len() != 64 {
-        return Err("The attestor sent a bad signature".into());
+        return Err(tr().features.pass_bad_signature.into());
     }
-    let seq: u64 = v.seq.parse().map_err(|_| "The attestor sent a bad sequence")?;
+    let seq: u64 = v.seq.parse().map_err(|_| tr().features.pass_bad_sequence.to_string())?;
     let mut tx = Tx::new();
     tx.set_sender(sender);
     let reg = tx.object(&v.registry);
@@ -246,7 +247,7 @@ pub fn claim() {
     }
     let Some(cfg) = deployment() else { return };
     let Some(acct) = crate::sign::account().filter(|a| a.signer) else {
-        set_phase(Phase::Error(crate::sign::NO_SIGNER.into()));
+        set_phase(Phase::Error(crate::sign::no_signer().into()));
         return;
     };
     set_phase(Phase::Checking);
@@ -255,7 +256,7 @@ pub fn claim() {
         match r {
             Ok(()) => {
                 set_phase(Phase::Idle);
-                super::bus::note("Rare Pass claimed", false);
+                super::bus::note(tr().features.pass_claimed, false);
                 load(true);
             }
             Err(e) if e == rare_market::inventory::notice::SIGN_REJECTED => set_phase(Phase::Idle),
@@ -268,19 +269,19 @@ fn claim_blocking(cfg: &TrophyConfig, address: &str) -> Result<(), String> {
     let ep = rare_attest::Endpoint { base: rare_sui::network::MARKET.into(), testnet: cfg.network == Network::Testnet };
     let a = rare_attest::attest(&ep, &rare_attest::Request { address: address.to_string(), aud: None }).map_err(|e| e.message())?;
     let (v, title) = match a.pass {
-        rare_attest::PassOffer::New(v) => (v, "Claim Rare Pass"),
-        rare_attest::PassOffer::Rebind(v) => (v, "Move this device's Rare Pass here"),
+        rare_attest::PassOffer::New(v) => (v, tr().features.pass_claim_title),
+        rare_attest::PassOffer::Rebind(v) => (v, tr().features.pass_move_title),
         rare_attest::PassOffer::Held { .. } => return Ok(()),
         rare_attest::PassOffer::Unavailable { reason } => {
             return Err(match reason.as_str() {
-                "level" => "This device isn't running a verified Rare OS build.".into(),
-                "paused" => "Rare Pass claims are paused right now.".into(),
-                _ => "Rare Pass isn't open on this network yet.".into(),
+                "level" => tr().features.pass_unverified.into(),
+                "paused" => tr().features.pass_paused.into(),
+                _ => tr().features.pass_not_open.into(),
             })
         }
     };
     if rare_sui::ptb::norm_addr(&v.registry) != rare_sui::ptb::norm_addr(&cfg.registry) || rare_sui::ptb::norm_addr(&v.package) != rare_sui::ptb::norm_addr(&cfg.package) {
-        return Err("The attestor answered for a different Rare Pass deployment.".into());
+        return Err(tr().features.pass_wrong_deployment.into());
     }
     let tx = build_claim_tx(&v, address)?;
     set_phase(Phase::Signing);

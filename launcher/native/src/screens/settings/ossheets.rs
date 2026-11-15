@@ -4,6 +4,7 @@
 use super::update::OsUpdate;
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
+use rare_i18n::{tr, trf};
 use rare_render::input::Pad;
 use rare_render::theme::tok;
 use rare_render::{Id, Node};
@@ -33,22 +34,23 @@ impl OsSheet {
     pub fn restart(cx: &mut Cx, update: &OsUpdate, running: bool, busy: bool, now: f64) -> OsSheet {
         let r = cx.r();
         let root = cx.scene.root;
-        let (title, sub) = if update.staged { ("Restart to update", update.staged_version.as_ref().map(|v| format!("Version {v}"))) } else { ("Nothing to install", Some("Rare OS is up to date.".to_string())) };
+        let t = &tr().settings_more;
+        let (title, sub) = if update.staged { (t.os_restart_title, update.staged_version.as_ref().map(|v| trf!(t.os_version, version = v))) } else { (t.os_nothing_title, Some(t.os_up_to_date.to_string())) };
         let sh = sheet(cx, root, title, sub.as_deref(), true, false, now);
         let mut nav = Nav::default();
         let f = sh.footer.unwrap();
         if update.staged {
             let col = cx.scene.add(sh.body, s().col().gap(0.6 * r).done(), Node::default());
-            para(cx, col, "The update is downloaded and installs while the device restarts. It takes a minute or two. Your games and files stay as they are.", false);
+            para(cx, col, t.os_restart_body, false);
             if let Some(notes) = &update.notes {
-                para(cx, col, &format!("What's new\n{notes}"), false);
+                para(cx, col, &trf!(t.os_whats_new, notes = notes), false);
             }
-            para(cx, col, if running { "A game is running. Close it first so nothing is lost." } else { "Later keeps the update waiting. It installs the next time the device restarts, and the launcher reminds you again next time it opens." }, false);
-            para(cx, col, "Hold the power button to switch off only if you have to. A forced power-off can lose a waiting update, though it downloads again by itself.", true);
-            nav.add(button(cx, f, if busy { "Restarting" } else { "Restart now" }, if busy { Variant::Dimmed } else { Variant::Primary }, Sz::Md, false).hint("Restart now").tag(1).group(1));
-            nav.add(button(cx, f, "Later", Variant::Secondary, Sz::Md, false).hint("Later").tag(2).group(1));
+            para(cx, col, if running { t.os_game_running } else { t.os_later_body }, false);
+            para(cx, col, t.os_power_off_warn, true);
+            nav.add(button(cx, f, if busy { t.os_restarting } else { t.os_restart_now }, if busy { Variant::Dimmed } else { Variant::Primary }, Sz::Md, false).hint(t.os_restart_now).tag(1).group(1));
+            nav.add(button(cx, f, t.os_later, Variant::Secondary, Sz::Md, false).hint(t.os_later).tag(2).group(1));
         } else {
-            nav.add(button(cx, f, "Close", Variant::Secondary, Sz::Md, false).hint("Close").tag(2).group(1));
+            nav.add(button(cx, f, tr().common.close, Variant::Secondary, Sz::Md, false).hint(tr().common.close).tag(2).group(1));
         }
         let first = nav.items[0].id;
         nav.focus(cx.scene, first, now, false);
@@ -57,7 +59,7 @@ impl OsSheet {
 
     /// A plain question (remove an SSH key, add keys from GitHub): `body` lines split on \n.
     pub fn confirm(cx: &mut Cx, title: &str, sub: &str, body: &str, yes: &str, act: &str, now: f64) -> OsSheet {
-        OsSheet::confirm_with(cx, title, sub, body, yes, "Cancel", act, now)
+        OsSheet::confirm_with(cx, title, sub, body, yes, tr().common.cancel, act, now)
     }
 
     /// `confirm` with its own words on the button that leaves things as they are.
@@ -90,16 +92,17 @@ impl OsSheet {
     pub fn restore(cx: &mut Cx, busy: bool, now: f64) -> OsSheet {
         let r = cx.r();
         let root = cx.scene.root;
-        let sh = sheet(cx, root, "Restore previous system", Some("Go back to the system this device ran before Rare OS."), true, false, now);
+        let t = &tr().settings_more;
+        let sh = sheet(cx, root, t.os_restore_title, Some(t.os_restore_sub), true, false, now);
         let col = cx.scene.add(sh.body, s().col().gap(0.6 * r).done(), Node::default());
-        para(cx, col, "The next start is the previous system. Rare OS stays installed, and your files and games are shared by both.", false);
-        para(cx, col, "To come back to Rare OS, pick it in the boot menu.", false);
+        para(cx, col, t.os_restore_body, false);
+        para(cx, col, t.os_restore_back, false);
         let f = sh.footer.unwrap();
         let mut nav = Nav::default();
         let v = if busy { Variant::Dimmed } else { Variant::Primary };
-        nav.add(button(cx, f, "Restore and restart", v, Sz::Md, false).hint("Restore and restart").tag(1).group(1));
-        nav.add(button(cx, f, "Restore, restart later", if busy { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).hint("Restore, restart later").tag(3).group(1));
-        nav.add(button(cx, f, "Cancel", Variant::Secondary, Sz::Md, false).hint("Cancel").tag(2).group(1));
+        nav.add(button(cx, f, t.os_restore_restart, v, Sz::Md, false).hint(t.os_restore_restart).tag(1).group(1));
+        nav.add(button(cx, f, t.os_restore_later, if busy { Variant::Dimmed } else { Variant::Secondary }, Sz::Md, false).hint(t.os_restore_later).tag(3).group(1));
+        nav.add(button(cx, f, tr().common.cancel, Variant::Secondary, Sz::Md, false).hint(tr().common.cancel).tag(2).group(1));
         let first = nav.items[0].id;
         nav.focus(cx.scene, first, now, false);
         OsSheet { nav, kind: Kind2::Restore, yes_act: String::new() }

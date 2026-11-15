@@ -5,6 +5,7 @@
 //! bottom, in a box of fixed height so nothing under it moves while they load. Profile: what
 //! rare.market's /u/<address> shows (games, trophies by game, items held).
 
+use rare_i18n::{tr, trf, trn};
 use super::bits::*;
 use super::model::{FriendProfile, FriendsData};
 use super::screen::{hair_top, T_DM_PANEL, T_PROFILE, T_RECENT, T_SEND_CANCEL, T_SEND_PICK};
@@ -32,9 +33,14 @@ pub fn count_text(n: u32) -> String {
 pub fn when(at: i64, now: i64) -> String {
     let days = (now - at).max(0) / 86_400_000;
     match days {
-        0 => "today".into(),
-        1 => "yesterday".into(),
-        2..=13 => format!("{days} days ago"),
+        0 => tr().friends.today.into(),
+        1 => tr().friends.yesterday.into(),
+        // Mid-line here ("..., hace 3 días"): the shared phrase starts with a capital in es/pt.
+        2..=13 => {
+            let s = trn!(tr().common.days_ago, days);
+            let mut c = s.chars();
+            c.next().map(|f| f.to_lowercase().chain(c).collect()).unwrap_or(s)
+        }
         _ => date_short(at),
     }
 }
@@ -42,7 +48,7 @@ pub fn when(at: i64, now: i64) -> String {
 /// One message's words: the text, or what was sent when it is only a capture.
 pub fn message_text(m: &DirectMessage) -> String {
     match (&m.attach, m.text.trim()) {
-        (Some(a), "") => format!("Sent a {}: {}", if a.kind == "clip" { "clip" } else { "screenshot" }, a.url.trim_start_matches("https://")),
+        (Some(a), "") => trf!(if a.kind == "clip" { tr().friends.sent_a_clip } else { tr().friends.sent_a_screenshot }, url = a.url.trim_start_matches("https://")),
         (Some(a), t) => format!("{t} {}", a.url.trim_start_matches("https://")),
         (None, t) => t.to_string(),
     }
@@ -55,10 +61,10 @@ pub fn messages_panel(ui: &mut Ui, d: &FriendsData, f: &Friend, back: usize) -> 
     let head = baseline_row(
         ui,
         s().mb(0.6).gap(0.75),
-        vec![(T::new(Ty::Body).w(600), "Messages".into()), (T::new(Ty::Meta).c(tok::MUTED), match (back, d.st.dms.get(&f.address).map(|v| v.len()).unwrap_or(0)) {
-            (0, n) if n > 5 => "Kept for 30 days. Up for older".into(),
-            (0, _) => "Kept for 30 days".into(),
-            _ => "Older messages. Down for newer".into(),
+        vec![(T::new(Ty::Body).w(600), tr().friends.messages.into()), (T::new(Ty::Meta).c(tok::MUTED), match (back, d.st.dms.get(&f.address).map(|v| v.len()).unwrap_or(0)) {
+            (0, n) if n > 5 => tr().friends.kept_30_up.into(),
+            (0, _) => tr().friends.kept_30.into(),
+            _ => tr().friends.older_down.into(),
         })],
     );
     let msgs = d.st.dms.get(&f.address);
@@ -70,11 +76,11 @@ pub fn messages_panel(ui: &mut Ui, d: &FriendsData, f: &Friend, back: usize) -> 
     // and the start line sits just over the first one.
     let at_start = back > 0 && end <= SHOWN && d.st.dm_full.contains(&f.address);
     if at_start && !all.is_empty() {
-        list = list.child(ui.text("Start of your messages", T::new(Ty::Label).c(tok::MUTED)));
+        list = list.child(ui.text(tr().friends.start_of_messages, T::new(Ty::Label).c(tok::MUTED)));
     }
     for m in &all[end.saturating_sub(SHOWN)..end] {
         let mine = m.from == me;
-        let name = if mine { "You".to_string() } else { label(Some(f)) };
+        let name = if mine { tr().friends.you.to_string() } else { label(Some(f)) };
         let av = if mine {
             match d.st.person_of(me) {
                 Some(p) => friend_avatar(ui, s(), &p.clone(), 1.75),
@@ -89,11 +95,11 @@ pub fn messages_panel(ui: &mut Ui, d: &FriendsData, f: &Friend, back: usize) -> 
     }
     if all.is_empty() {
         let loading = msgs.is_none() && d.st.convos.iter().any(|c| c.address == f.address);
-        let t = if loading { "Loading messages" } else { "No messages yet. Write one, or send a screenshot or clip." };
+        let t = if loading { tr().friends.loading_messages } else { tr().friends.no_messages_dm };
         list = ui.bx(s().col().h(12.0)).child(ui.text(t, T::new(Ty::Small).c(tok::MUTED)));
     }
     let panel = crate::kit::panel(ui, s().col().px(1.6).py(1.2)).child(head).child(list);
-    fill_nav(panel, T_DM_PANEL, Some("Write a message"), Some("Remove or block"), false)
+    fill_nav(panel, T_DM_PANEL, Some(tr().friends.write_a_message), Some(tr().friends.remove_or_block), false)
 }
 
 /// What rare.market shows of `f`: counts, played together, games, trophies and items.
@@ -105,27 +111,27 @@ pub fn profile_panel(ui: &mut Ui, d: &FriendsData, f: &Friend) -> El {
 fn profile_body(ui: &mut Ui, d: &FriendsData, f: &Friend) -> El {
     // ("*": a fixture's profile shown on every friend)
     let prof: Option<&FriendProfile> = d.profile.as_ref().filter(|(a, _)| *a == f.address || a == "*").and_then(|(_, p)| p.as_ref());
-    let mut col = crate::kit::panel(ui, s().col().gap(1.1).px(1.6).py(1.3).min_h(14.0)).child(banner(ui, f, prof)).child(ui.text("Profile", T::new(Ty::Body).w(600)));
+    let mut col = crate::kit::panel(ui, s().col().gap(1.1).px(1.6).py(1.3).min_h(14.0)).child(banner(ui, f, prof)).child(ui.text(tr().friends.profile, T::new(Ty::Body).w(600)));
     if let Some(pw) = d.st.played_with.iter().find(|p| p.address == f.address) {
-        col = col.child(ui.text(format!("You played {} together {}", pw.game.title, when(pw.at, d.now_ms)), T::new(Ty::Small).c(tok::fg(0.85))));
+        col = col.child(ui.text(trf!(tr().friends.you_played_together, game = pw.game.title.clone(), when = when(pw.at, d.now_ms)), T::new(Ty::Small).c(tok::fg(0.85))));
     }
     let Some(p) = prof else {
-        return col.child(ui.text("Loading their games, trophies and items", T::new(Ty::Small).c(tok::MUTED)));
+        return col.child(ui.text(tr().friends.loading_profile, T::new(Ty::Small).c(tok::MUTED)));
     };
     let items = p.items.as_deref().unwrap_or_default();
     let stats = vec![
-        StatItem { label: "Games".into(), value: p.counts.games.to_string() },
-        StatItem { label: "Trophies".into(), value: p.counts.trophies.to_string() },
-        StatItem { label: "Points".into(), value: p.counts.trophy_points.to_string() },
-        StatItem { label: "Items".into(), value: if items.len() >= 24 { "24+".into() } else { items.len().to_string() } },
+        StatItem { label: tr().common.games.into(), value: p.counts.games.to_string() },
+        StatItem { label: tr().common.trophies.into(), value: p.counts.trophies.to_string() },
+        StatItem { label: tr().friends.points.into(), value: p.counts.trophy_points.to_string() },
+        StatItem { label: tr().friends.items.into(), value: if items.len() >= 24 { "24+".into() } else { items.len().to_string() } },
     ];
     col = col.maybe(stat_line(ui, s(), &stats, true, false));
     if !p.games.is_empty() {
-        let mut g = ui.bx(s().col().gap(0.35).pt(1.0)).child(hair_top(ui)).child(ui.text("Games", T::new(Ty::Label).w(500).c(tok::MUTED)));
+        let mut g = ui.bx(s().col().gap(0.35).pt(1.0)).child(hair_top(ui)).child(ui.text(tr().common.games, T::new(Ty::Label).w(500).c(tok::MUTED)));
         for x in p.games.iter().take(6) {
             let mut runs = vec![(T::new(Ty::Small).w(500).trunc(), x.name.clone())];
             if x.trophies > 0 {
-                runs.push((T::new(Ty::Meta).c(tok::MUTED), format!("{} trophies", x.trophies)));
+                runs.push((T::new(Ty::Meta).c(tok::MUTED), trn!(tr().friends.trophies_n, x.trophies)));
             }
             g = g.child(baseline_row(ui, s().gap(0.6).min0(), runs).key(key(&x.name)));
         }
@@ -133,9 +139,9 @@ fn profile_body(ui: &mut Ui, d: &FriendsData, f: &Friend) -> El {
     }
     let trophies: Vec<(&str, &str, &str)> = p.trophies.iter().flat_map(|g| g.data.iter().map(move |t| (t.name.as_str(), t.tier.as_str(), g.game_name.as_str()))).take(6).collect();
     if !trophies.is_empty() {
-        let mut t = ui.bx(s().col().gap(0.35).pt(1.0)).child(hair_top(ui)).child(ui.text("Rarest trophies", T::new(Ty::Label).w(500).c(tok::MUTED)));
+        let mut t = ui.bx(s().col().gap(0.35).pt(1.0)).child(hair_top(ui)).child(ui.text(tr().friends.rarest_trophies, T::new(Ty::Label).w(500).c(tok::MUTED)));
         for (i, (name, tier, game)) in trophies.into_iter().enumerate() {
-            let runs = vec![(T::new(Ty::Small).w(500).trunc(), name.to_string()), (T::new(Ty::Meta).c(tok::MUTED).trunc(), format!("{}, {game}", cap(tier)))];
+            let runs = vec![(T::new(Ty::Small).w(500).trunc(), name.to_string()), (T::new(Ty::Meta).c(tok::MUTED).trunc(), trf!(tr().friends.tier_and_game, tier = tier_name(tier), game = game))];
             t = t.child(baseline_row(ui, s().gap(0.6).min0(), runs).key(key(&(i, name))));
         }
         col = col.child(t);
@@ -152,10 +158,10 @@ fn profile_body(ui: &mut Ui, d: &FriendsData, f: &Friend) -> El {
             let pic = art(ui, s().fill(), &chain, size, size, ArtFit::Cover(0.5), Some(fb));
             row = row.child(ui.bx(s().size(size)).bg(tok::L3).radius(ui.r(0.4)).border(1.0, tok::HAIR).clip().child(pic).key(key(&it.id)));
         }
-        col = col.child(ui.bx(s().col().gap(0.5).pt(1.0)).child(hair_top(ui)).child(ui.text("Items", T::new(Ty::Label).w(500).c(tok::MUTED))).child(row));
+        col = col.child(ui.bx(s().col().gap(0.5).pt(1.0)).child(hair_top(ui)).child(ui.text(tr().friends.items, T::new(Ty::Label).w(500).c(tok::MUTED))).child(row));
     }
     if p.games.is_empty() && p.trophies.is_empty() && items.is_empty() {
-        col = col.child(ui.text("No games, trophies or items on rare.market yet.", T::new(Ty::Small).c(tok::MUTED)));
+        col = col.child(ui.text(tr().friends.profile_empty, T::new(Ty::Small).c(tok::MUTED)));
     }
     col
 }
@@ -177,6 +183,16 @@ pub fn banner(ui: &mut Ui, f: &Friend, prof: Option<&FriendProfile>) -> El {
 /// The friend profile banner's height (rem).
 pub const BANNER_H: f32 = 7.5;
 
+fn tier_name(t: &str) -> String {
+    match t {
+        "bronze" => tr().friends.tier_bronze.into(),
+        "silver" => tr().friends.tier_silver.into(),
+        "gold" => tr().friends.tier_gold.into(),
+        "platinum" => tr().friends.tier_platinum.into(),
+        other => cap(other),
+    }
+}
+
 fn cap(s: &str) -> String {
     let mut c = s.chars();
     c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default()
@@ -190,7 +206,7 @@ pub fn recent_list(d: &FriendsData) -> Vec<(&PlayedWith, &Friend)> {
 pub fn recent_pane(ui: &mut Ui, d: &FriendsData) -> El {
     let mut panel = crate::kit::panel(ui, s().col()).child(ui.text_s(
         s().px(1.4).pb(0.4).pt(1.2),
-        "Friends who were in the same game as you, last 90 days.",
+        tr().friends.recent_note,
         T::new(Ty::Small).c(tok::MUTED).wrap(),
     ));
     for (i, (p, f)) in recent_list(d).into_iter().enumerate() {
@@ -200,7 +216,7 @@ pub fn recent_pane(ui: &mut Ui, d: &FriendsData) -> El {
             .child(ui.text(label(Some(f)), T::new(Ty::Body).w(500).trunc()))
             .child(ui.text(format!("{}, {}", p.game.title, when(p.at, d.now_ms)), T::new(Ty::Meta).c(tok::MUTED).trunc()));
         let row = ui.bx(s().row().items_center().min_h(4.25).wp(1.0).gap(1.0).px(1.4).py(0.6)).child(hair_top(ui)).child(av).child(words);
-        panel = panel.child(fill_nav(row, T_RECENT + i as u32, Some("Open"), None, false).key(key(&f.address)));
+        panel = panel.child(fill_nav(row, T_RECENT + i as u32, Some(tr().common.open), None, false).key(key(&f.address)));
     }
     panel
 }
@@ -211,8 +227,8 @@ pub fn send_picker(ui: &mut Ui, d: &FriendsData, kind: &str) -> El {
         ui,
         s().mb(0.9).gap(0.75),
         vec![
-            (T::new(Ty::Row).w(600), format!("Send your {} to a friend", if kind == "clip" { "clip" } else { "screenshot" })),
-            (T::new(Ty::Small).c(tok::MUTED), "It goes to your messages with them".into()),
+            (T::new(Ty::Row).w(600), trf!(if kind == "clip" { tr().friends.send_your_clip } else { tr().friends.send_your_screenshot })),
+            (T::new(Ty::Small).c(tok::MUTED), tr().friends.send_pick_sub.into()),
         ],
     );
     let mut panel = crate::kit::panel(ui, s().col());
@@ -224,12 +240,12 @@ pub fn send_picker(ui: &mut Ui, d: &FriendsData, kind: &str) -> El {
         if i > 0 {
             row = row.child(hair_top(ui));
         }
-        panel = panel.child(fill_nav(row.child(av).child(words), T_SEND_PICK + i as u32, Some("Send"), None, false).key(key(&f.address)));
+        panel = panel.child(fill_nav(row.child(av).child(words), T_SEND_PICK + i as u32, Some(tr().common.send), None, false).key(key(&f.address)));
     }
     if d.st.friends.is_empty() {
-        panel = panel.child(ui.text_s(s().px(1.4).py(1.2), "No friends yet. Add one first.", T::new(Ty::Small).c(tok::MUTED)));
+        panel = panel.child(ui.text_s(s().px(1.4).py(1.2), tr().friends.no_friends_first, T::new(Ty::Small).c(tok::MUTED)));
     }
-    let cancel = button(ui, Btn::new("Cancel", T_SEND_CANCEL).ghost());
+    let cancel = button(ui, Btn::new(tr().common.cancel, T_SEND_CANCEL).ghost());
     ui.bx(s().col()).child(head).child(panel).child(ui.bx(s().row().mt(1.0).gap(0.75)).child(cancel))
 }
 

@@ -18,6 +18,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
+use rare_i18n::{tr, trf};
 
 /// Moves on every store change (jobs, accounts, owned lists, updates); pages put it in their stamp.
 pub fn ver() -> u64 {
@@ -64,11 +65,11 @@ pub fn boot() {
         match r {
             Ok(()) => {
                 let line = match job.kind {
-                    Kind::Install { .. } => format!("{} finished downloading", job.title),
-                    Kind::Update => format!("{} is up to date", job.title),
-                    Kind::Repair => format!("{} files are checked and fixed", job.title),
-                    Kind::Saves => format!("{} saves are synced", job.title),
-                    Kind::Setup => format!("{} is set up", job.title),
+                    Kind::Install { .. } => trf!(tr().features_more.stores_finished_downloading, title = job.title),
+                    Kind::Update => trf!(tr().features_more.stores_up_to_date, title = job.title),
+                    Kind::Repair => trf!(tr().features_more.stores_files_fixed, title = job.title),
+                    Kind::Saves => trf!(tr().features_more.stores_saves_synced, title = job.title),
+                    Kind::Setup => trf!(tr().features_more.stores_is_set_up, title = job.title),
                 };
                 if matches!(job.kind, Kind::Update | Kind::Repair) {
                     known().lock().unwrap().updates.remove(&job.id);
@@ -206,15 +207,15 @@ pub fn job_line(j: &Job) -> String {
     }];
     if j.setup {
         // Installers run one by one; there are no bytes or times to show.
-        parts.push("Installing what the game needs".into());
+        parts.push(tr().features_more.stores_installing_needs.into());
         return parts.join(" \u{b7} ");
     }
     if matches!(j.phase, Phase::Running | Phase::Paused) && j.total > 0 && !j.verifying {
-        parts.push(format!("{} of {}", rare_stores::fmt_bytes(j.done), rare_stores::fmt_bytes(j.total)));
+        parts.push(trf!(tr().features_more.stores_bytes_of, done = rare_stores::fmt_bytes(j.done), total = rare_stores::fmt_bytes(j.total)));
     }
     if j.phase == Phase::Running {
         if let Some(eta) = j.eta.filter(|e| *e > 0) {
-            parts.push(if eta >= 3600 { format!("{} h {} min left", eta / 3600, (eta % 3600) / 60) } else { format!("{} min left", (eta / 60).max(1)) });
+            parts.push(if eta >= 3600 { trf!(tr().features_more.stores_eta_hours, h = eta / 3600, m = (eta % 3600) / 60) } else { trf!(tr().features_more.stores_eta_min, n = (eta / 60).max(1)) });
         }
     }
     parts.join(" \u{b7} ")
@@ -231,7 +232,7 @@ pub fn before_launch(id: &str, title: &str) {
     if let Some((Store::Gog, gid)) = Store::of(id) {
         let deps = rare_stores::redist::deps_of(gid);
         if !rare_stores::redist::needed(gid, &deps).is_empty() {
-            super::bus::note(format!("Setting up {title} for its first start. This happens once."), false);
+            super::bus::note(trf!(tr().features_more.stores_first_start, title = title), false);
             if let Err(e) = jobs::run_now(id, title, Kind::Setup) {
                 log::warn!("setup before {id}: {e}");
             }
@@ -245,7 +246,7 @@ pub fn before_launch(id: &str, title: &str) {
     match rx.recv_timeout(Duration::from_secs(25)) {
         Ok(Err(e)) => {
             log::warn!("saves before {id}: {e}");
-            super::bus::note("Couldn't fetch cloud saves. Playing with the saves on this device.", true);
+            super::bus::note(tr().features_more.stores_cloud_fetch_failed, true);
         }
         Err(_) => log::warn!("saves before {id}: still syncing, starting anyway"),
         Ok(Ok(())) => {}
@@ -268,7 +269,7 @@ pub fn on_event(ev: &rare_core::Event) {
             std::thread::sleep(Duration::from_secs(3));
             if let Err(e) = saves::after_exit(&id) {
                 log::warn!("saves after {id}: {e}");
-                super::bus::note("Couldn't send your saves to the cloud. They are safe on this device.", true);
+                super::bus::note(tr().features_more.stores_cloud_send_failed, true);
             }
         });
     }
@@ -325,14 +326,14 @@ fn install_sheet(st: &mut State, id: &str) {
         .into_iter()
         .map(|d| {
             let short = need.is_some_and(|n| n > d.free);
-            let label = format!("{}, {} free{}", d.label, rare_stores::fmt_bytes(d.free), if short { ", not enough space" } else { "" });
+            let label = if short { trf!(tr().features_more.stores_drive_short, drive = d.label, free = rare_stores::fmt_bytes(d.free)) } else { trf!(tr().features_more.stores_drive_free, drive = d.label, free = rare_stores::fmt_bytes(d.free)) };
             let root = if d.kind == DriveKind::Internal { home.clone() } else { d.mount.clone() };
             OptionItem { label, on: None, act: Act::Legacy(format!("stores:install-to:{id}|{}", drives::games_dir(&root, store).display())) }
         })
         .collect();
     let sub = match need {
-        Some(n) => format!("Install where? It needs {}.", rare_stores::fmt_bytes(n)),
-        None => "Install where?".into(),
+        Some(n) => trf!(tr().features_more.stores_install_where_needs, size = rare_stores::fmt_bytes(n)),
+        None => tr().features_more.stores_install_where.into(),
     };
     st.options = Some(OptionsSpec { title, sub: Some(sub), items });
 }
@@ -373,7 +374,7 @@ pub fn act(st: &mut State, a: &str, now: f64) -> bool {
             let Some((id, dir)) = arg.split_once('|') else { return true };
             let t = title(st, id);
             match jobs::add(id, &t, Kind::Install { base: dir.into() }) {
-                Ok(()) => st.toast(format!("{t} is in your downloads"), Tone::Info, now),
+                Ok(()) => st.toast(trf!(tr().features_more.stores_in_downloads, title = t), Tone::Info, now),
                 Err(e) => st.toast(e, Tone::Error, now),
             }
         }
@@ -390,12 +391,12 @@ pub fn act(st: &mut State, a: &str, now: f64) -> bool {
         "sync" => {
             let id = arg.to_string();
             let t = title(st, &id);
-            st.toast(format!("Syncing {t} saves"), Tone::Info, now);
+            st.toast(trf!(tr().features_more.stores_syncing, title = t), Tone::Info, now);
             std::thread::spawn(move || match saves::sync_now(&id) {
-                Ok(()) => super::bus::note(format!("{t} saves are synced"), false),
+                Ok(()) => super::bus::note(trf!(tr().features_more.stores_saves_synced, title = t), false),
                 Err(e) => {
                     log::warn!("sync {id}: {e}");
-                    super::bus::note("Couldn't sync saves. Try again.", true)
+                    super::bus::note(tr().features_more.stores_sync_failed, true)
                 }
             });
         }
@@ -410,8 +411,8 @@ pub fn account_rows() -> Vec<(Store, String, bool)> {
     [(Store::Epic, a.epic), (Store::Gog, a.gog)]
         .into_iter()
         .map(|(store, name)| match name {
-            Some(n) => (store, format!("Signed in as {n}. Your {} games are in the Library.", store.short()), true),
-            None => (store, format!("Sign in to see your {} games in the Library and install them.", store.short()), false),
+            Some(n) => (store, trf!(tr().features_more.stores_signed_in_as, name = n, store = store.short()), true),
+            None => (store, trf!(tr().features_more.stores_sign_in_to_see, store = store.short()), false),
         })
         .collect()
 }
@@ -443,19 +444,19 @@ pub fn download_row(ui: &mut crate::kit::Ui, st: &State, acts: &mut crate::page:
         .child(super::downloads::bar(ui, None, j.pct / 100.0, !live))
         .child(ui.text(line, T::new(Ty::Small).c(tok::MUTED).tab().trunc()));
     let el = ui.bx(s().row().items_center().gap(1.1).h(5.5).wp(1.0).px(0.85)).radius(ui.r(0.5)).child(art).child(col);
-    kit::nav(kit::row_look(el), acts.game(Act::Legacy(format!("stores:menu:{}", j.id)), &j.id), Some("Options"), None, def).key(rare_render::view::key(&j.id))
+    kit::nav(kit::row_look(el), acts.game(Act::Legacy(format!("stores:menu:{}", j.id)), &j.id), Some(tr().common.options), None, def).key(rare_render::view::key(&j.id))
 }
 
 /// The sheet behind a download row.
 fn row_sheet(st: &mut State, id: &str) {
     let Some(j) = jobs::get(id) else { return };
     let mut items = vec![match j.phase {
-        Phase::Running | Phase::Queued => OptionItem { label: "Pause".into(), on: None, act: Act::Legacy(format!("stores:pause:{id}")) },
-        _ => OptionItem { label: "Resume".into(), on: None, act: Act::Legacy(format!("stores:resume:{id}")) },
+        Phase::Running | Phase::Queued => OptionItem { label: tr().features_more.stores_pause.into(), on: None, act: Act::Legacy(format!("stores:pause:{id}")) },
+        _ => OptionItem { label: tr().common.resume.into(), on: None, act: Act::Legacy(format!("stores:resume:{id}")) },
     }];
-    items.push(OptionItem { label: if matches!(j.kind, Kind::Install { .. }) { "Cancel the install".into() } else { "Cancel".into() }, on: None, act: Act::Legacy(format!("stores:cancel:{id}")) });
+    items.push(OptionItem { label: if matches!(j.kind, Kind::Install { .. }) { tr().features_more.stores_cancel_install.into() } else { tr().common.cancel.into() }, on: None, act: Act::Legacy(format!("stores:cancel:{id}")) });
     if st.game(id).is_some() {
-        items.push(OptionItem { label: "Game page".into(), on: None, act: Act::OpenGame(id.to_string()) });
+        items.push(OptionItem { label: tr().features_more.stores_game_page.into(), on: None, act: Act::OpenGame(id.to_string()) });
     }
     st.options = Some(OptionsSpec { title: j.title.clone(), sub: Some(j.status()), items });
 }
@@ -464,11 +465,11 @@ fn row_sheet(st: &mut State, id: &str) {
 pub fn menu_line() -> Option<String> {
     let list: Vec<Job> = jobs::list().into_iter().filter(|j| matches!(j.phase, Phase::Running | Phase::Queued)).collect();
     let first = list.first()?;
-    Some(if list.len() == 1 { format!("{}, {:.0}%", first.status(), first.pct) } else { format!("{} downloading, {:.0}%", list.len(), first.pct) })
+    Some(if list.len() == 1 { format!("{}, {:.0}%", first.status(), first.pct) } else { trf!(tr().features_more.stores_n_downloading, n = list.len(), pct = format!("{:.0}", first.pct)) })
 }
 
 /// A finished Epic or GOG install: the "finished downloading" notice Steam's installs post.
 pub fn on_installed(st: &mut State, payload: &serde_json::Value) {
-    let title = payload.get("title").and_then(|t| t.as_str()).unwrap_or("A game");
-    st.feat.downloads.notices.push(rare_notify::LocalNotice::new(rare_notify::types::NoticeKind::DownloadDone, format!("{title} finished downloading"), rare_notify::types::NoticeAction::Downloads));
+    let title = payload.get("title").and_then(|t| t.as_str()).unwrap_or(tr().features_more.stores_a_game);
+    st.feat.downloads.notices.push(rare_notify::LocalNotice::new(rare_notify::types::NoticeKind::DownloadDone, trf!(tr().features_more.stores_finished_downloading, title = title), rare_notify::types::NoticeAction::Downloads));
 }

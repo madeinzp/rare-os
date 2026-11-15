@@ -14,6 +14,7 @@ pub mod live;
 pub mod media;
 pub mod model;
 
+use rare_i18n::{tr, trf};
 use super::common::*;
 use super::fixtures::{self, FRAME};
 use super::lay::s;
@@ -203,14 +204,14 @@ impl RareMenu {
             }
             let names = cx.scene.add(head, s().col().shrink().done(), Node::default());
             text_tr(cx, names, ty::TITLE, 600, tok::FG, &d.game.title);
-            text(cx, names, ty::SMALL, 400, tok::FG.alpha(0.75), if kind == Some(GameKind::App) { "Open under Rare" } else { "Running under Rare" });
+            text(cx, names, ty::SMALL, 400, tok::FG.alpha(0.75), if kind == Some(GameKind::App) { tr().overlay.open_under_rare } else { tr().overlay.running_under_rare });
         }
         if d.session {
             let hints = cx.scene.add(left, s().row().items_center().gap(1.25 * r).mt(1.0 * r).done(), Node::default());
             let back = if d.over_game {
-                if kind == Some(GameKind::App) { "Back to the app" } else { "Back to game" }
+                if kind == Some(GameKind::App) { tr().overlay.back_to_app } else { tr().overlay.back_to_game }
             } else {
-                "Close"
+                tr().common.close
             };
             let dim = tok::FG.alpha(0.8);
             let item = |cx: &mut Cx, label_a: Option<&str>, g: G, label_b: Option<&str>| {
@@ -225,8 +226,8 @@ impl RareMenu {
             };
             item(cx, None, G::B, Some(back));
             if !d.guest {
-                item(cx, None, G::Rare, Some("Home"));
-                item(cx, Some("Hold"), G::Rare, Some("to switch games"));
+                item(cx, None, G::Rare, Some(tr().common.home));
+                item(cx, Some(tr().overlay.hold_before), G::Rare, Some(tr().overlay.hold_after));
             }
         }
 
@@ -236,9 +237,9 @@ impl RareMenu {
         cx.scene.n(aside).tx.restart(32.0 * r, 0.0, now, 0.2);
         let header = cx.scene.add(aside, s().col().gap(0.9 * r).pad(1.4 * r, 1.3 * r, 1.4 * r, 0.0).done(), Node::default());
         let top = cx.scene.add(header, s().row().items_center().gap(0.6 * r).done(), Node::default());
-        text(cx, top, ty::ROW, 600, tok::FG, "Rare");
+        text(cx, top, ty::ROW, 600, tok::FG, tr().overlay.tab_rare);
         if d.over_game {
-            text_tr(cx, top, ty::SMALL, 400, tok::MUTED, &format!("in {}", d.game.title));
+            text_tr(cx, top, ty::SMALL, 400, tok::MUTED, &trf!(tr().overlay.menu_in_game, game = d.game.title));
         }
         if let Some(a) = &d.address {
             let w = cx.scene.add(top, s().row().items_center().gap(0.4 * r).ml_auto().no_shrink_().done(), Node::default());
@@ -319,7 +320,7 @@ impl RareMenu {
         if self.tab == MenuTab::Items && self.detail.is_none() && self.d.address.is_some() && !items.is_empty() {
             let worth: u128 = items.iter().map(|x| x.floor_mist.unwrap_or(0)).sum();
             let offers: u128 = items.iter().map(|x| x.top_offer_mist.unwrap_or(0)).sum();
-            let cells = [("Items", Some(items.len().to_string()), false), ("At floor", (worth > 0).then(|| fmt_sui2(worth)), true), ("Best offers", (offers > 0).then(|| fmt_sui2(offers)), true)];
+            let cells = [(tr().overlay.strip_items, Some(items.len().to_string()), false), (tr().overlay.strip_floor, (worth > 0).then(|| fmt_sui2(worth)), true), (tr().overlay.strip_offers, (offers > 0).then(|| fmt_sui2(offers)), true)];
             let dl = cx.scene.add(self.strip, s().row().done(), Node::default());
             for (i, (l, v, sui)) in cells.iter().enumerate() {
                 let pr = if i < 2 { 1.0 * r } else { 0.0 };
@@ -374,22 +375,22 @@ impl RareMenu {
         if self.detail.is_none() && !shortcuts {
             let h = cx.scene.add(self.footer, s().row().items_center().gap(0.45 * r).done(), Node::default());
             glyph_pair(cx, h, G::Lt, G::Rt, false);
-            text(cx, h, ty::SMALL, 400, tok::FG.alpha(0.75), "Tabs");
+            text(cx, h, ty::SMALL, 400, tok::FG.alpha(0.75), tr().common.tabs);
         }
-        hint(cx, self.footer, G::A, "Select");
+        hint(cx, self.footer, G::A, tr().common.select);
         if self.tab == MenuTab::Ask && self.detail.is_none() && ask::info().voice {
-            hint(cx, self.footer, G::X, "Hold to talk");
+            hint(cx, self.footer, G::X, tr().overlay.hold_to_talk);
         }
         if shortcuts {
             hint(cx, self.footer, G::X, "Steam");
-            hint(cx, self.footer, G::Y, "Search settings");
+            hint(cx, self.footer, G::Y, tr().overlay.search_settings);
         }
         let back = if self.detail.is_some() {
-            "Back"
+            tr().common.back
         } else if self.d.over_game {
-            if kind == Some(GameKind::App) { "Back to the app" } else { "Back to game" }
+            if kind == Some(GameKind::App) { tr().overlay.back_to_app } else { tr().overlay.back_to_game }
         } else {
-            "Close"
+            tr().common.close
         };
         let bw = cx.scene.add(self.footer, s().ml_auto().done(), Node::default());
         hint(cx, bw, G::B, back);
@@ -405,9 +406,9 @@ impl RareMenu {
         let signed_out = self.d.signed_out && matches!(self.tab, MenuTab::Items | MenuTab::Market);
         if signed_out {
             let c = cx.scene.add(body, s().col().items_start().gap(0.75 * r).pad(0.75 * r, 0.4 * r, 0.75 * r, 0.0).done(), Node::default());
-            let t = cx.scene.add_text(cx.t, c, s().done(), "Sign in with a passkey to see your items.", ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
+            let t = cx.scene.add_text(cx.t, c, s().done(), tr().overlay.sign_in_passkey, ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
             let _ = t;
-            let b = button(cx, c, "Sign in", Variant::Primary, Sz::Md, false).tag(1).hint("Sign in");
+            let b = button(cx, c, tr().common.sign_in, Variant::Primary, Sz::Md, false).tag(1).hint(tr().common.sign_in);
             self.nav.add(b);
         } else {
             match (self.tab, self.detail) {
@@ -527,13 +528,13 @@ impl RareMenu {
                     std::thread::spawn(move || {
                         let _ = tx.send(deal::sell(&id, &addr, &q));
                     });
-                    self.set_view(|_, p| *p = panels::Phase::Building("Getting the sale ready...".into()));
+                    self.set_view(|_, p| *p = panels::Phase::Building(tr().overlay.building_sale.into()));
                 } else {
                     let Some(price) = panels::data().detail.price else { return Some(Out::None) };
                     std::thread::spawn(move || {
                         let _ = tx.send(deal::list(&id, &addr, price));
                     });
-                    self.set_view(|_, p| *p = panels::Phase::Building("Getting the listing ready...".into()));
+                    self.set_view(|_, p| *p = panels::Phase::Building(tr().overlay.building_listing.into()));
                 }
                 self.deal = Some(rx);
                 self.dealt_at = now;
@@ -594,11 +595,11 @@ impl RareMenu {
                 let phase = match r {
                     Ok(deal::Did::Sold(net)) => {
                         self.reload_at = Some(now + 4.0);
-                        panels::Phase::Done(format!("Sold for {} SUI. It can take a minute to show.", panels::money::fmt_sui(Some(net), panels::money::Fmt::trim(3))))
+                        panels::Phase::Done(trf!(tr().overlay.sold_for, amount = panels::money::fmt_sui(Some(net), panels::money::Fmt::trim(3))))
                     }
                     Ok(deal::Did::Listed(p)) => {
                         self.reload_at = Some(now + 4.0);
-                        panels::Phase::Done(format!("Listed for {} SUI.", panels::money::fmt_sui(Some(p), panels::money::Fmt::trim(3))))
+                        panels::Phase::Done(trf!(tr().overlay.listed_for, amount = panels::money::fmt_sui(Some(p), panels::money::Fmt::trim(3))))
                     }
                     Err(e) if e == rare_market::inventory::notice::SIGN_REJECTED => panels::Phase::Idle,
                     Err(e) => panels::Phase::Error(panels::trade::plain_error(&e)),
@@ -725,8 +726,8 @@ impl RareMenu {
 
     fn arm(&mut self, cx: &mut Cx, now: f64) {
         self.armed = Some(now + 4.0);
-        self.quit_texts(cx, "Quit now", "Unsaved progress is lost. Press A again to quit.");
-        self.set_quit_hint("Quit now");
+        self.quit_texts(cx, tr().overlay.quit_now, tr().overlay.quit_armed_sub);
+        self.set_quit_hint(tr().overlay.quit_now);
     }
 
     fn disarm(&mut self, cx: &mut Cx) {
@@ -814,10 +815,10 @@ impl RareMenu {
                 }
                 self.armed = None;
                 self.quitting = true;
-                self.quit_texts(cx, "Quitting...", "");
+                self.quit_texts(cx, tr().overlay.quitting, "");
                 Out::Act("quit".into())
             }
-            t if (game::T_STEAM_PAGE..game::T_STEAM_PAGE + 4).contains(&t) => Out::Act(format!("steam-page:{}", game::STEAM_PAGES[(t - game::T_STEAM_PAGE) as usize].0)),
+            t if (game::T_STEAM_PAGE..game::T_STEAM_PAGE + 4).contains(&t) => Out::Act(format!("steam-page:{}", game::STEAM_PAGES[(t - game::T_STEAM_PAGE) as usize])),
             t if t >= game::T_EMU => match self.d.emu.get((t - game::T_EMU) as usize) {
                 Some(a) if a.ready => Out::Act(a.act_name()),
                 _ => Out::None,

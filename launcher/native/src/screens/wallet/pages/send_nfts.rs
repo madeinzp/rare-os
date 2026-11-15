@@ -5,6 +5,7 @@
 use crate::screens::wallet::home::lib::{hint, Hint};
 use crate::screens::wallet::kit::{btn, field, mimg, page, panel, FieldSpec, Variant};
 use crate::screens::wallet::markup::*;
+use rare_i18n::{tr, trf, trn};
 use crate::screens::wallet::sign::recipient::{recipient_line, recipient_picks, Recent, RecipientState};
 use crate::screens::wallet::types::{ItemCard, RareAccount};
 use std::collections::BTreeMap;
@@ -67,19 +68,19 @@ fn cta(pr: &Props, st: &State) -> (String, bool) {
     let checking = pr.can.is_none();
     let n = sendable(pr).len();
     let cta = if checking {
-        "Checking items"
+        tr().wallet.cta_checking_items
     } else if n == 0 {
-        "Nothing here can be sent"
+        tr().wallet.cta_nothing_sendable
     } else if !ready {
         match pr.rs {
-            RecipientState::Empty => "Enter a recipient",
-            RecipientState::Loading { .. } => "Looking up name",
-            _ => "Check the recipient",
+            RecipientState::Empty => tr().wallet.cta_enter_recipient,
+            RecipientState::Loading { .. } => tr().wallet.cta_looking_up,
+            _ => tr().wallet.cta_check_recipient,
         }
     } else if self_ {
-        "Pick another address"
+        tr().wallet.cta_pick_another
     } else {
-        "Review"
+        tr().wallet.cta_review
     };
     (cta.into(), pr.can_sign && !checking && n > 0 && ready && !self_ && !st.busy)
 }
@@ -94,7 +95,7 @@ pub fn view(pr: &Props, st: &State) -> Option<El<Msg>> {
     };
     let mut body = Vec::new();
     if !pr.can_sign {
-        body.push(panel(None, None, "mx-auto mb-6 max-w-[64rem] px-5 py-4", vec![p("text-base font-semibold").text("This account is watch only"), p("mt-1 text-sm text-secondary").text("Add an account that can sign to send from this wallet.")]));
+        body.push(panel(None, None, "mx-auto mb-6 max-w-[64rem] px-5 py-4", vec![p("text-base font-semibold").text(tr().wallet.watch_only_title), p("mt-1 text-sm text-secondary").text(tr().wallet.watch_only_body)]));
     }
     let mut left = div("").kid(div("grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-3").kids(pr.cards.unwrap_or(&[]).iter().map(|c| {
         let blocked = pr.can.and_then(|m| m.get(&c.id)).and_then(|s| match s {
@@ -108,11 +109,11 @@ pub fn view(pr: &Props, st: &State) -> Option<El<Msg>> {
             .kid(p(cn(&["truncate text-xs", if blocked.is_some() { "text-negative" } else { "text-secondary" }])).text(blocked.unwrap_or_else(|| c.collection.as_ref().map(|x| x.name.clone()).unwrap_or_default())))
     })));
     if pr.cards.is_some_and(|c| c.is_empty()) {
-        left = left.kid(p("py-10 text-center text-sm text-secondary").text("These items could not be loaded."));
+        left = left.kid(p("py-10 text-center text-sm text-secondary").text(tr().wallet.items_load_failed));
     }
     let mut right = div("flex min-w-0 flex-col gap-4").kid(
         div("")
-            .kid(field(FieldSpec { label: Some("To"), value: &st.to, placeholder: Some("0x address or name.sui"), def: true, ..Default::default() }, Msg::TypeTo))
+            .kid(field(FieldSpec { label: Some(tr().wallet.to), value: &st.to, placeholder: Some(tr().wallet.recipient_placeholder), def: true, ..Default::default() }, Msg::TypeTo))
             .kid_opt(recipient_line(pr.rs, self_)),
     );
     if !matches!(pr.rs, RecipientState::Ready { .. }) {
@@ -122,17 +123,17 @@ pub fn view(pr: &Props, st: &State) -> Option<El<Msg>> {
     if let Some(e) = &st.error {
         foot = foot.kid(p("mb-2 text-sm text-negative").role("alert").text(e));
     }
-    foot = foot.kid(btn(if st.busy { "Opening review" } else { &cta }, if can_review { Variant::Primary } else { Variant::Dimmed }, "w-full", can_review.then_some(Msg::Review)));
+    foot = foot.kid(btn(if st.busy { tr().wallet.opening_review } else { &cta }, if can_review { Variant::Primary } else { Variant::Dimmed }, "w-full", can_review.then_some(Msg::Review)));
     right = right.kid(foot);
     body.push(div("mx-auto grid max-w-[64rem] grid-cols-[minmax(0,1fr)_minmax(0,22rem)] gap-10").kid(left).kid(right));
     Some(
-        page(Some("Send collectibles"), Some(text(format!("{n} {} from {}", if n == 1 { "item" } else { "items" }, account.label))), None, false, "", body)
+        page(Some(tr().wallet.send_collectibles), Some(text(trn!(tr().wallet.items_from, n, name = account.label))), None, false, "", body)
             .attr("data-ready", format!("{}{}", account.address, if pr.cards.is_some() { 1 } else { 0 })),
     )
 }
 
 pub fn hints() -> Vec<Hint> {
-    vec![hint("a", "Select"), hint("b", "Back")]
+    vec![hint("a", tr().common.select), hint("b", tr().common.back)]
 }
 
 pub fn update(pr: &Props, st: &mut State, msg: Msg) -> Option<Effect> {
@@ -158,9 +159,13 @@ pub fn update(pr: &Props, st: &mut State, msg: Msg) -> Option<Effect> {
 /// `planNftSend` batch titles: one item by name, else a count and the batch number.
 pub fn batch_title(names: &[String], batch: usize, batches: usize) -> String {
     if names.len() == 1 {
-        return format!("Send {}", names[0]);
+        return trf!(tr().wallet.send_named, name = names[0]);
     }
-    format!("Send {} collectibles{}", names.len(), if batches > 1 { format!(" ({} of {batches})", batch + 1) } else { String::new() })
+    if batches > 1 {
+        trf!(tr().wallet.send_collectibles_batch, n = names.len(), batch = batch + 1, batches = batches)
+    } else {
+        trf!(tr().wallet.send_collectibles_n, n = names.len())
+    }
 }
 
 #[cfg(test)]

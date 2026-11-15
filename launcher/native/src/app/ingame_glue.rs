@@ -316,7 +316,7 @@ impl App {
                         st.set_running(running);
                         if let Err(e) = r {
                             log::warn!("quit {rid}: {e}");
-                            st.toast(format!("Couldn't close {name}."), Tone::Error, now);
+                            st.toast(trf!(tr().app.close_failed, name = name), Tone::Error, now);
                         }
                     })
                 });
@@ -368,9 +368,9 @@ impl App {
                     Box::new(move |st: &mut State, now| match r {
                         Ok(()) => {
                             let done = match action.id.split(':').next().unwrap_or("") {
-                                "save" => Some("State saved"),
-                                "load" => Some("State loaded"),
-                                "disc" => Some("Next disc in"),
+                                "save" => Some(tr().app.state_saved),
+                                "load" => Some(tr().app.state_loaded),
+                                "disc" => Some(tr().app.next_disc_in),
                                 _ => None,
                             };
                             if let Some(t) = done {
@@ -379,7 +379,7 @@ impl App {
                         }
                         Err(e) => {
                             log::warn!("emu {}: {e}", action.id);
-                            st.toast(crate::screens::settings::live::failed("Couldn't do that.", &e, None), Tone::Error, now);
+                            st.toast(crate::screens::settings::live::failed(tr().app.couldnt_do_that, &e, None), Tone::Error, now);
                         }
                     })
                 });
@@ -391,7 +391,7 @@ impl App {
                 std::thread::spawn(|| {
                     if let Err(e) = rare_overlay::steam_menu() {
                         log::warn!("steam menu: {e}");
-                        crate::screens::settings::live::toast_pub(crate::screens::settings::live::failed("Couldn't open Steam's overlay.", &e, None), true);
+                        crate::screens::settings::live::toast_pub(crate::screens::settings::live::failed(tr().app.steam_overlay_failed, &e, None), true);
                     }
                 });
             }
@@ -400,7 +400,7 @@ impl App {
                 std::thread::spawn(move || {
                     if let Err(e) = rare_overlay::steampages::open_page(&page) {
                         log::warn!("steam page {page}: {e}");
-                        crate::screens::settings::live::toast_pub(crate::screens::settings::live::failed("Couldn't open that Steam page.", &e, None), true);
+                        crate::screens::settings::live::toast_pub(crate::screens::settings::live::failed(tr().app.steam_page_failed, &e, None), true);
                     }
                 });
             }
@@ -434,7 +434,7 @@ impl App {
                     Box::new(move |st: &mut State, now| {
                         if let Err(e) = r {
                             log::warn!("switch: {e}");
-                            st.toast("Couldn't switch to it. Try again.", Tone::Error, now);
+                            st.toast(tr().app.switch_failed, Tone::Error, now);
                         }
                     })
                 });
@@ -532,21 +532,21 @@ impl App {
     pub(super) fn menu_buy(&mut self, id: String) {
         use rare_market::api::{self, ItemDetail};
         let Some((address, _)) = (!self.fixture).then(crate::data::account::current).flatten() else {
-            self.st.toast(crate::sign::NO_SIGNER, Tone::Info, clock::secs());
+            self.st.toast(crate::sign::no_signer(), Tone::Info, clock::secs());
             return;
         };
-        self.st.toast("Preparing the purchase...", Tone::Info, clock::secs());
+        self.st.toast(tr().app.preparing_purchase, Tone::Info, clock::secs());
         self.fx.spawn(move |_| {
             let net = crate::screens::wallet::live::market_net();
             let r: Result<String, String> = (|| {
-                let d = api::get::<ItemDetail>(net, &api::paths::item(&id)).map_err(|_| "Couldn't read that item. Try again.".to_string())?;
-                let listing = d.card.listing.clone().ok_or_else(|| "This item is not listed anymore.".to_string())?;
-                let tx = rare_market::buy::build_buy_transaction(net, &Default::default(), &d.card, &listing, &address, None, None).map_err(|e| if e.0.is_empty() { "This item can't be bought here.".to_string() } else { e.0 })?;
-                crate::sign::sign_and_execute(tx, &address, &format!("Buy {}", d.card.name)).map(|_| d.card.name)
+                let d = api::get::<ItemDetail>(net, &api::paths::item(&id)).map_err(|_| tr().app.item_read_failed.to_string())?;
+                let listing = d.card.listing.clone().ok_or_else(|| tr().app.item_not_listed.to_string())?;
+                let tx = rare_market::buy::build_buy_transaction(net, &Default::default(), &d.card, &listing, &address, None, None).map_err(|e| if e.0.is_empty() { tr().app.item_not_buyable.to_string() } else { e.0 })?;
+                crate::sign::sign_and_execute(tx, &address, &trf!(tr().app.buy_title, name = d.card.name)).map(|_| d.card.name)
             })();
             Box::new(move |st: &mut State, now| match r {
                 Ok(name) => {
-                    st.toast(format!("Bought {name}."), Tone::Info, now);
+                    st.toast(trf!(tr().app.bought, name = name), Tone::Info, now);
                     crate::screens::overlay::menu::live::request_reload();
                 }
                 Err(e) if e == rare_market::inventory::notice::SIGN_REJECTED => {}
@@ -582,9 +582,9 @@ impl App {
             .filter(|a| a.app_id == rid)
             .map(|a| EmuAction {
                 id: a.id.clone(),
-                label: a.label.clone(),
+                label: emu_label(&a.id, &a.label),
                 ready: a.ready,
-                note: a.note.clone(),
+                note: a.note.as_deref().map(emu_note),
                 thumb: a.thumb.as_ref().map(|t| rare_render::Src::File(t.into())),
                 sub: a.saved.map(crate::features::emulation::ago),
             })
@@ -693,5 +693,36 @@ impl App {
                 self.legacy = Some((Box::new(screen), nodes));
             }
         }
+    }
+}
+
+/// rare-emu names its rows in English; the menu shows them in the player's language (by id).
+fn emu_label(id: &str, label: &str) -> String {
+    let o = &tr().overlay;
+    let (kind, n) = id.split_once(':').unwrap_or((id, ""));
+    match kind {
+        "save" => o.emu_save_state.into(),
+        "load" if !n.is_empty() && label.starts_with("Slot ") => trf!(o.emu_slot, n = n),
+        "load" => o.emu_load_state.into(),
+        "ff" => o.emu_fast_forward.into(),
+        "rewind" => o.emu_rewind.into(),
+        "disc" => o.emu_next_disc.into(),
+        "menu" if label == "Emulator menu" => o.emu_menu.into(),
+        "menu" => o.emu_settings.into(),
+        _ => label.into(),
+    }
+}
+
+/// rare-emu's notes, translated when known (others show as they come).
+fn emu_note(note: &str) -> String {
+    let o = &tr().overlay;
+    match note {
+        "Off in hardcore" => o.emu_off_hardcore.into(),
+        "The emulator has no settings file yet. Start it once from Rare first." => o.emu_no_settings.into(),
+        "Rare adds this binding the next time it starts the game." => o.emu_binding_next.into(),
+        _ => match note.strip_prefix("Bind ").and_then(|r| r.strip_suffix(" once in PPSSPP, Settings, Controls.")).and_then(|r| r.rsplit_once(" to ")) {
+            Some((action, key)) => trf!(o.emu_bind_ppsspp, action = action, key = key),
+            None => note.into(),
+        },
     }
 }

@@ -20,6 +20,7 @@ use rare_trophies::{badge, case as cs, milestones as ms};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Mutex;
+use rare_i18n::{tr, trf};
 
 /// Case ids at or above this are games keyed by a hash of their library id (below: Steam appids).
 pub const EXT_BASE: u32 = 0x8000_0000;
@@ -258,7 +259,7 @@ pub fn apply_case(rows: &mut [TrophyRow], game: &str) {
                 if !r.hardcore {
                     r.trust = match v.t.as_str() {
                         "verified" => Trust::Verified,
-                        "flagged" => Trust::Flagged(v.why.clone().unwrap_or_else(|| "Didn't pass Rare's checks".into())),
+                        "flagged" => Trust::Flagged(v.why.clone().unwrap_or_else(|| tr().features_more.trophies_failed_checks.into())),
                         _ => Trust::Unverified,
                     };
                 }
@@ -560,16 +561,16 @@ pub fn pin_to_chain(p: cs::Pin) {
                 cs::save();
                 super::trophies::push_popup_any(Popup { minted: true, name: p.name.clone(), game: Some(p.game_name.clone()), tier: Some(p.tier), points: Some(rare_trophies::score::points(p.tier)), source: Some(1), icon_url: p.icon_url.clone(), more: 0 });
             }
-            Err(e) if e == rare_market::inventory::notice::SIGN_REJECTED => super::bus::note("Pin cancelled", false),
-            Err(e) => super::bus::note(format!("Couldn't pin it to chain. {e}"), true),
+            Err(e) if e == rare_market::inventory::notice::SIGN_REJECTED => super::bus::note(tr().features_more.trophies_pin_cancelled, false),
+            Err(e) => super::bus::note(trf!(tr().features_more.trophies_pin_failed, error = e), true),
         }
         changed();
     });
 }
 
 fn pin_blocking(p: &cs::Pin) -> Result<String, String> {
-    let cfg = rare_sui::network::trophy_config().ok_or("Pin to chain isn't set up in this build.")?;
-    let acct = crate::sign::account().filter(|a| a.signer).ok_or(crate::sign::NO_SIGNER)?;
+    let cfg = rare_sui::network::trophy_config().ok_or(tr().features_more.trophies_pin_not_set_up)?;
+    let acct = crate::sign::account().filter(|a| a.signer).ok_or(crate::sign::no_signer())?;
     let image = match ms::Kind::from_key(&p.key).filter(|_| p.source == "rare") {
         Some(k) => badge::url(k, &p.game),
         None => p.icon_url.clone().filter(|u| u.starts_with("https://")).unwrap_or_default(),
@@ -579,20 +580,20 @@ fn pin_blocking(p: &cs::Pin) -> Result<String, String> {
         Some(r) => r?,
         None => {
             crate::social::link_device_key()?;
-            crate::social::signed_send(Method::Post, "/v1/trophies/pin", Some(&body)).ok_or("Turn on friends to pin trophies")??
+            crate::social::signed_send(Method::Post, "/v1/trophies/pin", Some(&body)).ok_or(tr().features_more.trophies_pin_need_friends)??
         }
     };
     let n = |k: &str| v.get(k).and_then(|x| x.as_str().map(String::from).or_else(|| x.as_u64().map(|n| n.to_string()))).and_then(|s| s.parse::<u64>().ok()).ok_or_else(|| format!("rare.market sent no {k}"));
     use base64::Engine;
-    let signature = base64::engine::general_purpose::STANDARD.decode(v.get("signature").and_then(Value::as_str).unwrap_or_default()).map_err(|_| "The attestation signature is not readable".to_string())?;
+    let signature = base64::engine::general_purpose::STANDARD.decode(v.get("signature").and_then(Value::as_str).unwrap_or_default()).map_err(|_| tr().features_more.trophies_att_signature.to_string())?;
     let game = v.get("game").and_then(Value::as_str).ok_or("rare.market sent no game")?.to_string();
     if rare_sui::ptb::norm_addr(v.get("registry").and_then(Value::as_str).unwrap_or_default()) != rare_sui::ptb::norm_addr(&cfg.registry) {
-        return Err("The attestation is for a different registry".into());
+        return Err(tr().features_more.trophies_att_registry.into());
     }
     let att = super::trophies::Attestation { trophy_id: n("trophyId")?, nonce: n("nonce")?, expires_ms: n("expiresMs")?, signature };
     let profile = super::trophies::profile_id_of(&acct.address)?;
     let tx = super::trophies::build_claim_tx(&cfg.package, &cfg.registry, &game, &acct.address, profile.as_deref(), &[att]);
-    crate::sign::sign_for_game(tx, &acct.address, None, "Rare Trophies", &format!("Pin {} to chain", p.name), true)
+    crate::sign::sign_for_game(tx, &acct.address, None, "Rare Trophies", &trf!(tr().features_more.trophies_pin_title, name = p.name), true)
 }
 
 // ---------------------------------------------------------------- fixture

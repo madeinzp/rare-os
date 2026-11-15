@@ -4,6 +4,7 @@
 
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
+use rare_i18n::tr;
 use rare_render::theme::tok;
 use rare_render::{Id, Node};
 
@@ -45,7 +46,7 @@ pub struct SwitchRow {
 pub fn switch_row(cx: &mut Cx, nav: &mut Nav, parent: Id, sid: &str, title: &str, body: &str, on: bool, first: bool, group: u32) -> SwitchRow {
     let row = shell(cx, parent, title, Some(body), first, true);
     let (track, knob) = toggle(cx, row.right, on);
-    nav.add(Focusable { id: row.row, kind: Kind::Row, group, hint: if on { "Turn off".into() } else { "Turn on".into() }, tag: 0, sid: sid.into() });
+    nav.add(Focusable { id: row.row, kind: Kind::Row, group, hint: if on { tr().common.turn_off.into() } else { tr().common.turn_on.into() }, tag: 0, sid: sid.into() });
     SwitchRow { row, track, knob, on }
 }
 
@@ -53,7 +54,7 @@ pub fn set_switch(cx: &mut Cx, nav: &mut Nav, sw: &mut SwitchRow, on: bool, now:
     sw.on = on;
     set_toggle(cx, sw.track, sw.knob, on, now);
     if let Some(f) = nav.items.iter_mut().find(|f| f.id == sw.row.row) {
-        f.hint = if on { "Turn off".into() } else { "Turn on".into() };
+        f.hint = if on { tr().common.turn_off.into() } else { tr().common.turn_on.into() };
     }
 }
 
@@ -76,7 +77,7 @@ pub fn choice_row(cx: &mut Cx, nav: &mut Nav, parent: Id, sid: &str, title: &str
         let chip = cx.scene.add(row.right, s().row().items_center().justify_center().h(2.25 * r).min_w(3.3 * r).px(0.8 * r).done(), Node::bg(if on { tok::FG } else { tok::L2 }).radius(0.25 * r));
         let tid = cx.scene.add_text(cx.t, chip, s().done(), l, ts(r, ty::SMALL.0, ty::SMALL.1, 500).tabular(), if on { tok::BG } else { tok::FG });
         // A choice button is a .btn: its focus look is the white fill.
-        nav.add(Focusable { id: chip, kind: Kind::Btn { base: if on { tok::FG } else { tok::L2 }, fg: if on { tok::BG } else { tok::FG }, text: tid }, group, hint: "Choose".into(), tag: i as u32, sid: sid.into() });
+        nav.add(Focusable { id: chip, kind: Kind::Btn { base: if on { tok::FG } else { tok::L2 }, fg: if on { tok::BG } else { tok::FG }, text: tid }, group, hint: tr().settings.choose.into(), tag: i as u32, sid: sid.into() });
         chips.push(chip);
         labels.push(tid);
     }

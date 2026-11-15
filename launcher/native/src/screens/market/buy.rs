@@ -4,6 +4,7 @@
 //! a QR of the rare.market item page to finish on a phone. Watch accounts and no account get the QR
 //! straight away, with AddPasskey under it.
 
+use rare_i18n::{tr, trf};
 use super::host::*;
 use super::parts::*;
 use crate::kit::{button, Btn};
@@ -93,7 +94,7 @@ pub fn buy_sheet(ui: &mut Ui, item: &ItemCard, listing: &Listing, st: &BuyState,
     let thumb = ui.bx(s().size(3.0)).bg(tok::L3).radius(ui.r(0.375)).clip().child(art);
     let words = ui
         .bx(s().col().min0().shrink())
-        .child(ui.text(if done { "Bought".to_string() } else { format!("Buy {name}") }, t(XL).w(700).lead(1.9375)))
+        .child(ui.text(if done { tr().market.bought.to_string() } else { trf!(tr().market.buy_title, name = name) }, t(XL).w(700).lead(1.9375)))
         .child(ui.text(coll.unwrap_or("").to_string(), t(SM).c(tok::MUTED).trunc()));
     let x = kit::focus_icon(ui, "x", 1.25, false, tok::FG, tok::FG);
     let close = fill_nav(ui.bx(s().row().items_center().justify_center().size(2.5).mt(0.25).mr(-0.25)).radius(ui.r(0.25)).child(x), T_CLOSE, None, None, false);
@@ -109,44 +110,44 @@ pub fn buy_sheet(ui: &mut Ui, item: &ItemCard, listing: &Listing, st: &BuyState,
     if let Phase::Done(digest) = &st.phase {
         let ic = kit::icon(ui, "check", 1.75, tok::FG);
         let mark = ui.bx(s().row().items_center().justify_center().size(3.5)).bg(tok::L3).radius(ui.r(1.75)).child(ic);
-        let tx = baseline_row(ui, s().mt(0.75).gap(0.25), vec![(t(XS).c(tok::MUTED), "Transaction".into()), (t(XS).mono(), short_digest(digest))]);
+        let tx = baseline_row(ui, s().mt(0.75).gap(0.25), vec![(t(XS).c(tok::MUTED), tr().market.transaction.into()), (t(XS).mono(), short_digest(digest))]);
         let txt = ui
             .bx(s().col().min0().shrink())
-            .child(ui.text(format!("{} is yours for {total}", item.name), t(LG).w(600).wrap()))
-            .child(ui.text_s(s().mt(0.25), "It's in your Rare Wallet. It can take a minute to show on rare.market.", t(SM).c(tok::MUTED).wrap()))
+            .child(ui.text(trf!(tr().market.is_yours_for, name = item.name, total = total), t(LG).w(600).wrap()))
+            .child(ui.text_s(s().mt(0.25), tr().market.in_your_wallet, t(SM).c(tok::MUTED).wrap()))
             .child(tx);
         card = card.child(ui.bx(s().row().items_center().gap(1.25).px(2.0).py(2.0)).child(mark).child(txt));
-        let d = btn(ui, s().grow(), "Done", T_DONE, V::Primary, Sz::Lg, true, false);
+        let d = btn(ui, s().grow(), tr().common.done, T_DONE, V::Primary, Sz::Lg, true, false);
         card = card.child(ui.bx(bw_top(s().row().gap(0.5).px(2.0).py(1.0), 1.0)).child(hair(ui, true)).child(d));
     } else {
         // ---- the price and its split
         let big = baseline_row(ui, s().mt(0.25).gap(0.375), vec![(t(XL4).w(700).tab(), mf::fmt_sui_num(total_n, SuiOpts { dp: 4, ..Default::default() })), (t(XL).w(600), "SUI".into())]);
         let usd = format!("({})", mf::fmt_usd(sui_usd.map(|u| total_n * u)));
-        let mut split = ui.bx(bw(s().col().mt(1.0).gap(0.375).px(0.75).py(0.75), 1.0)).radius(ui.r(0.25)).border(1.0, BORDER).child(mono_line(ui, "List price", q.price_mist, false));
+        let mut split = ui.bx(bw(s().col().mt(1.0).gap(0.375).px(0.75).py(0.75), 1.0)).radius(ui.r(0.25)).border(1.0, BORDER).child(mono_line(ui, tr().market.list_price, q.price_mist, false));
         if q.fee_mist > 0 {
-            split = split.child(mono_line(ui, &format!("{} fee", mf::venue_name(Some(&q.venue))), q.fee_mist, false));
+            split = split.child(mono_line(ui, &trf!(tr().market.venue_fee, venue = mf::venue_name(Some(&q.venue))), q.fee_mist, false));
         }
         if q.royalty_mist > 0 {
-            split = split.child(mono_line(ui, "Creator royalty", q.royalty_mist, true));
+            split = split.child(mono_line(ui, tr().market.creator_royalty, q.royalty_mist, true));
         }
         if q.commission_mist > 0 {
-            split = split.child(mono_line(ui, "Rare fee", q.commission_mist, false));
+            split = split.child(mono_line(ui, tr().market.rare_fee, q.commission_mist, false));
         }
         let tv = format!("{} SUI", mf::fmt_sui_num(total_n, SuiOpts { dp: 4, ..Default::default() }));
-        split = split.child(ui.bx(bw_top(s().row().justify_between().pt(0.375), 1.0)).child(hair(ui, true)).child(ui.text("Total", t(SM).w(600))).child(ui.text(tv, t(SM).w(600).mono())));
+        split = split.child(ui.bx(bw_top(s().row().justify_between().pt(0.375), 1.0)).child(hair(ui, true)).child(ui.text(tr().market.total, t(SM).w(600))).child(ui.text(tv, t(SM).w(600).mono())));
         let mut venue = ui.bx(s().row().items_center().gap(0.375));
         if let Some(v) = venue_mark(ui, &q.venue, 0.875) {
             venue = venue.child(v);
         }
         venue = venue.child(ui.text(mf::venue_name(Some(&q.venue)), t(SM)));
-        split = split.child(ui.bx(s().row().justify_between()).child(ui.text("Listed on", t(SM).c(tok::MUTED))).child(venue));
+        split = split.child(ui.bx(s().row().justify_between()).child(ui.text(tr().market.listed_on, t(SM).c(tok::MUTED))).child(venue));
         let left = ui
             .bx(s().col().min0())
-            .child(ui.text("Total price", t(BASE)))
+            .child(ui.text(tr().market.total_price, t(BASE)))
             .child(big)
             .child(ui.text(usd, t(BASE).c(tok::MUTED).tab()))
             .child(split)
-            .child(ui.text_s(s().mt(0.5), "Network gas is extra.", t(XS).c(tok::MUTED)));
+            .child(ui.text_s(s().mt(0.5), tr().market.gas_extra, t(XS).c(tok::MUTED)));
         let cols: Vec<Track> = if st.qr() { vec![Track::Fr(1.0), Track::Auto] } else { vec![Track::Fr(1.0)] };
         let mut grid = ui.bx(s().grid(&cols).gap(2.0).px(2.0).py(1.5)).child(left);
         if st.qr() {
@@ -156,10 +157,10 @@ pub fn buy_sheet(ui: &mut Ui, item: &ItemCard, listing: &Listing, st: &BuyState,
             let mut right = ui
                 .bx(s().col().items_center().w(14.0))
                 .child(qr)
-                .child(center_text(ui, s().wp(1.0).mt(0.75), if st.in_app { "Buy on your phone" } else { "Finish on your phone" }, t(SM).w(600)))
-                .child(center_text(ui, s().wp(1.0).mt(0.25), "Scan to buy on rare.market.", t(XS).c(tok::MUTED)));
+                .child(center_text(ui, s().wp(1.0).mt(0.75), if st.in_app { tr().market.buy_on_phone } else { tr().market.finish_on_phone }, t(SM).w(600)))
+                .child(center_text(ui, s().wp(1.0).mt(0.25), tr().market.scan_to_buy, t(XS).c(tok::MUTED)));
             if !st.in_app {
-                let (line, label) = if st.signed_in { ("Add a passkey to buy.", "Add a passkey") } else { ("Sign in with a passkey to buy.", "Sign in") };
+                let (line, label) = if st.signed_in { (tr().market.add_passkey_line, tr().market.add_passkey) } else { (tr().market.sign_in_line, tr().common.sign_in) };
                 let b = button(ui, Btn { hint: Some(label.into()), ..Btn::new(label, T_PASSKEY).primary() });
                 right = right.child(ui.bx(s().col().items_start().gap(0.75).mt(0.75)).child(ui.text(line, T::new(Ty::Small).c(tok::MUTED))).child(b));
             }
@@ -168,8 +169,8 @@ pub fn buy_sheet(ui: &mut Ui, item: &ItemCard, listing: &Listing, st: &BuyState,
         card = card.child(grid);
         if st.in_app && st.phase != Phase::Idle {
             let (msg, bad) = match &st.phase {
-                Phase::Building => ("Getting the purchase ready...".to_string(), false),
-                Phase::Signing => ("Review and approve in Rare Wallet.".to_string(), false),
+                Phase::Building => (tr().market.getting_purchase_ready.to_string(), false),
+                Phase::Signing => (tr().market.review_in_wallet.to_string(), false),
                 Phase::Error(m) => (m.clone(), true),
                 _ => (String::new(), false),
             };
@@ -178,17 +179,17 @@ pub fn buy_sheet(ui: &mut Ui, item: &ItemCard, listing: &Listing, st: &BuyState,
         let mut foot = ui.bx(bw_top(s().row().gap(0.5).px(2.0).py(1.0), 1.0)).child(hair(ui, true));
         if st.in_app {
             let label = match &st.phase {
-                Phase::Building => "Getting ready...".to_string(),
-                Phase::Signing => "Waiting for approval".into(),
-                Phase::Error(_) => "Try again".into(),
-                _ => format!("Buy for {total}"),
+                Phase::Building => tr().market.getting_ready.to_string(),
+                Phase::Signing => tr().market.waiting_approval.into(),
+                Phase::Error(_) => tr().common.try_again.into(),
+                _ => trf!(tr().market.buy_for, total = total),
             };
             let main = btn(ui, s().grow(), &label, T_BUY, V::Primary, Sz::Lg, true, false);
-            let second = btn(ui, s(), if st.qr() { "Open on rare.market" } else { "Buy on your phone" }, T_SECOND, V::Secondary, Sz::Lg, false, false);
+            let second = btn(ui, s(), if st.qr() { tr().market.open_on_rare_market } else { tr().market.buy_on_phone }, T_SECOND, V::Secondary, Sz::Lg, false, false);
             foot = foot.child(main).child(second);
         } else {
-            let main = btn(ui, s().grow(), "Done", T_DONE, V::Primary, Sz::Lg, true, false);
-            let second = btn(ui, s(), "Open on rare.market", T_SECOND, V::Secondary, Sz::Lg, false, false);
+            let main = btn(ui, s().grow(), tr().common.done, T_DONE, V::Primary, Sz::Lg, true, false);
+            let second = btn(ui, s(), tr().market.open_on_rare_market, T_SECOND, V::Secondary, Sz::Lg, false, false);
             foot = foot.child(main).child(second);
         }
         card = card.child(foot);

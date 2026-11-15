@@ -3,6 +3,7 @@
 //! signed through Rare Wallet's executor: Rare covers the fee when the wallet is short), and sending
 //! items (rare-wallet's sendability check, batches that fit Sui's limits, one review each).
 
+use rare_i18n::tr;
 use crate::screens::inventory::sheet as inv_sheet;
 use crate::screens::wallet::flows::send::{recipient_of, typed_state};
 use crate::screens::wallet::home::stack::WalletView;
@@ -128,18 +129,18 @@ impl WalletTab {
         let Some(q) = self.item_quote(&id).map(|q| q.cloned()) else { return };
         let Some(announced) = pending_accept(&id) else { return };
         if self.signer().is_none() {
-            st.toast("Add an account that can sign to accept offers", Tone::Info, now);
+            st.toast(tr().wallet_setup.toast_add_signer, Tone::Info, now);
             return;
         }
         let Some(q) = q else {
-            st.toast("That offer is no longer open", Tone::Info, now);
+            st.toast(tr().wallet_setup.toast_offer_closed, Tone::Info, now);
             return;
         };
         let differs = announced.as_deref().and_then(|a| a.trim().parse::<i128>().ok()).is_some_and(|a| a != 0 && q.offer.price_mist.trim().parse::<i128>().ok() != Some(a));
         if let Some(why) = &q.blocked {
             st.toast(why.clone(), Tone::Info, now);
         } else if differs {
-            st.toast("A better offer is open now. Check it before selling", Tone::Info, now);
+            st.toast(tr().wallet_setup.toast_better_offer, Tone::Info, now);
         } else {
             self.items_sheet(st, inv_sheet::Msg::Sell);
         }
@@ -170,7 +171,7 @@ impl WalletTab {
             }
             Some(inv_sheet::Effect::AskPrice(cur)) => {
                 let start = if cur > 0 { crate::screens::wallet::fmt::fmt_sui(Some(cur), 9, false, true).replace(',', "") } else { String::new() };
-                st.ask_text(ASK_PRICE, "Price in SUI", start, Some("e.g. 12.5"));
+                st.ask_text(ASK_PRICE, tr().wallet_setup.ask_price, start, Some(tr().wallet_setup.price_example));
             }
             Some(inv_sheet::Effect::Sell { done }) => {
                 if let (Some(item), Some(sender), Some(q)) = (item, sender, quote) {
@@ -243,7 +244,7 @@ impl WalletTab {
         let eff = page::update(&self.nft_props(&ids, &rs), &mut ps, m);
         self.flows.items.st = Some(ps);
         match eff {
-            Some(page::Effect::AskTo(v)) => st.ask_text(ASK_TO, "Send to", v, Some("0x address or name.sui")),
+            Some(page::Effect::AskTo(v)) => st.ask_text(ASK_TO, tr().wallet_setup.ask_send_to, v, Some(tr().wallet_setup.send_to_example)),
             Some(page::Effect::Resolve(t)) => self.nft_resolve(t),
             Some(page::Effect::Send { to, ids, .. }) => {
                 let Some(sender) = self.signer() else { return };
@@ -258,7 +259,7 @@ impl WalletTab {
                         let tx = rare_wallet::nft::build_nft_send(&rare_wallet::nft::NftSendParams { items: b, ..p.clone() }).map_err(|e| Some(e.to_string()))?;
                         let r = service::send(TxInput::Ptb(tx), &sender, &page::batch_title(&bn, i, n)).map_err(send_error)?;
                         if r.status.as_deref() == Some("failure") {
-                            return Err(Some("The network rejected this transaction.".into()));
+                            return Err(Some(tr().wallet_setup.network_rejected.into()));
                         }
                     }
                     Ok(n)
@@ -367,7 +368,7 @@ impl WalletTab {
                 Ok(Err(e)) | Err(e) => {
                     log::warn!("nft sendability: {e}");
                     for c in f.cards.iter().flatten() {
-                        can.insert(c.id.clone(), page::Sendability::Blocked("Couldn't check this item. Try again.".into()));
+                        can.insert(c.id.clone(), page::Sendability::Blocked(tr().wallet_setup.item_check_failed.into()));
                     }
                 }
             }
@@ -386,7 +387,7 @@ impl WalletTab {
         if let Some(r) = poll(&mut self.flows.items.rx_send) {
             match r.unwrap_or_else(|e| Err(Some(e))) {
                 Ok(n) => {
-                    st.toast(if n > 1 { "Collectibles sent" } else { "Sent" }, Tone::Info, now);
+                    st.toast(if n > 1 { tr().wallet_setup.toast_collectibles_sent } else { tr().wallet_setup.toast_sent }, Tone::Info, now);
                     self.stack.reset(Vec::new());
                     // Balances, activity and items refresh now and again shortly (keep::nudge).
                     crate::data::keep::nudge();

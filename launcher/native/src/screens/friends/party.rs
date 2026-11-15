@@ -2,6 +2,7 @@
 //! presence, and the text chat (short messages over the notify stream, kept 24 hours). An invite
 //! shows Join party and Decline.
 
+use rare_i18n::{tr, trf};
 use super::bits::*;
 use super::model::FriendsData;
 use super::screen::{
@@ -25,26 +26,22 @@ pub fn party_kicker(p: &Party, me: Option<&str>) -> String {
         .iter()
         .any(|m| Some(m.address.as_str()) == me && m.state == MemberState::Invited);
     if invited {
-        format!("{} invited you", label(host))
+        trf!(tr().friends.party_invited_you, name = label(host))
     } else if Some(p.host.as_str()) == me {
-        "Your party".into()
+        tr().friends.your_party.into()
     } else {
-        format!("{}'s party", label(host))
+        trf!(tr().friends.party_of, name = label(host))
     }
 }
 
 /// "2 in the party, 1 invited"
 pub fn party_count(p: &Party) -> String {
     let inv = p.invited();
-    format!(
-        "{} in the party{}",
-        p.joined(),
-        if inv > 0 {
-            format!(", {inv} invited")
-        } else {
-            String::new()
-        }
-    )
+    if inv > 0 {
+        trf!(tr().friends.party_count_invited, n = p.joined(), invited = inv)
+    } else {
+        trf!(tr().friends.party_count, n = p.joined())
+    }
 }
 
 pub fn party_pane(ui: &mut Ui, d: &FriendsData, p: &Party) -> El {
@@ -74,7 +71,7 @@ pub fn party_pane(ui: &mut Ui, d: &FriendsData, p: &Party) -> El {
             .child(
                 ui.text(
                     g.map(|g| g.title.clone())
-                        .unwrap_or_else(|| "No game picked yet".into()),
+                        .unwrap_or_else(|| tr().friends.no_game_picked.into()),
                     T::new(Ty::Title).w(600).trunc(),
                 ),
             )
@@ -86,35 +83,35 @@ pub fn party_pane(ui: &mut Ui, d: &FriendsData, p: &Party) -> El {
     if invited {
         acts.push(button(
             ui,
-            Btn::new("Join party", T_JOIN_PARTY).primary().def(true),
+            Btn::new(tr().friends.join_party, T_JOIN_PARTY).primary().def(true),
         ));
-        acts.push(button(ui, Btn::new("Decline", T_DECLINE_PARTY)));
+        acts.push(button(ui, Btn::new(tr().friends.decline, T_DECLINE_PARTY)));
     } else {
         if g.is_some() && !playing_it {
             acts.push(button(
                 ui,
-                Btn::new("Join game", T_PARTY_JOIN_GAME).primary().def(true),
+                Btn::new(tr().friends.join_game, T_PARTY_JOIN_GAME).primary().def(true),
             ));
         }
         acts.push(button(
             ui,
-            Btn::new("Write a message", T_WRITE).def(g.is_none() || playing_it),
+            Btn::new(tr().friends.write_a_message, T_WRITE).def(g.is_none() || playing_it),
         ));
-        acts.push(button(ui, Btn::new("Invite friends", T_PARTY_INVITE)));
+        acts.push(button(ui, Btn::new(tr().friends.invite_friends, T_PARTY_INVITE)));
         if is_host {
             acts.push(button(
                 ui,
                 Btn::new(
                     if g.is_some() {
-                        "Change game"
+                        tr().friends.change_game
                     } else {
-                        "Pick a game"
+                        tr().friends.pick_a_game
                     },
                     T_PICK_GAME,
                 ),
             ));
         }
-        acts.push(button(ui, Btn::new("Leave party", T_LEAVE).ghost()));
+        acts.push(button(ui, Btn::new(tr().friends.leave_party, T_LEAVE).ghost()));
     }
     let actions = ui
         .bx(s().row().wrap().gap(0.75))
@@ -127,17 +124,17 @@ pub fn party_pane(ui: &mut Ui, d: &FriendsData, p: &Party) -> El {
         .child(hair_top(ui));
     for m in &p.members {
         let name = if Some(m.address.as_str()) == me {
-            "You".to_string()
+            tr().friends.you.to_string()
         } else {
             label(Some(&m.person))
         };
         let mut runs = vec![(T::new(Ty::Body).w(500).trunc(), name)];
         if m.address == p.host {
-            runs.push((T::new(Ty::Meta).c(tok::MUTED), "Host".into()));
+            runs.push((T::new(Ty::Meta).c(tok::MUTED), tr().friends.host.into()));
         }
         let top = baseline_row(ui, s().gap(0.5).min0(), runs);
         let second = if m.state == MemberState::Invited {
-            ui.text("Invited", T::new(Ty::Meta).c(tok::MUTED))
+            ui.text(tr().friends.invited, T::new(Ty::Meta).c(tok::MUTED))
         } else {
             presence_line(ui, s(), &m.presence, false, d.now_ms, Ty::Meta)
         };
@@ -161,8 +158,8 @@ pub fn party_pane(ui: &mut Ui, d: &FriendsData, p: &Party) -> El {
             ui,
             s().mb(0.6).gap(0.75),
             vec![
-                (T::new(Ty::Body).w(600), "Party chat".into()),
-                (T::new(Ty::Meta).c(tok::MUTED), "Kept for 24 hours".into()),
+                (T::new(Ty::Body).w(600), tr().friends.party_chat.into()),
+                (T::new(Ty::Meta).c(tok::MUTED), tr().friends.kept_24h.into()),
             ],
         );
         let msgs = d.st.messages.get(&p.id);
@@ -177,7 +174,7 @@ pub fn party_pane(ui: &mut Ui, d: &FriendsData, p: &Party) -> El {
                 .map(|x| x.person.clone())
                 .or_else(|| d.st.person_of(&m.from).cloned());
             let name = if Some(m.from.as_str()) == me {
-                "You".to_string()
+                tr().friends.you.to_string()
             } else {
                 label(who.as_ref())
             };
@@ -205,7 +202,7 @@ pub fn party_pane(ui: &mut Ui, d: &FriendsData, p: &Party) -> El {
             );
         }
         if msgs.is_some_and(|v| v.is_empty()) {
-            list = list.child(ui.text("No messages yet.", T::new(Ty::Small).c(tok::MUTED)).key(key("party-chat-empty")));
+            list = list.child(ui.text(tr().friends.no_messages_yet, T::new(Ty::Small).c(tok::MUTED)).key(key("party-chat-empty")));
         }
         col = col.child(
             crate::kit::panel(ui, s().col().px(1.6).py(1.2))

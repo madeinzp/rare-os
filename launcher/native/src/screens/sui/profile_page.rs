@@ -3,6 +3,7 @@
 //! inventory), the SUI price from the shell's live numbers.
 
 use super::catalog::{seed, SuiGame};
+use rare_i18n::{tr, trf};
 use super::profile::{self, Msg, Profile};
 use crate::act::Act;
 use crate::kit::Ui;
@@ -195,10 +196,10 @@ impl Page for ProfilePage {
                 let id = id.or_else(|| self.prof.address.as_deref().map(|a| crate::avatars::starter(a).to_string()));
                 if let Some(d) = id.as_deref().and_then(crate::avatars::get) {
                     crate::data::live::pick_default(d.id);
-                    st.toast(&format!("{} is your picture", d.name), crate::state::Tone::Info, now);
+                    st.toast(&trf!(tr().sui.is_your_picture, name = d.name), crate::state::Tone::Info, now);
                 } else if let Some(it) = id.and_then(|id| self.items.as_ref()?.iter().find(|i| i.id == id).cloned()) {
                     crate::data::live::pick_avatar(&it.id, &it.name, it.image_url.as_deref().unwrap_or_default());
-                    st.toast(&format!("{} is your picture", it.name), crate::state::Tone::Info, now);
+                    st.toast(&trf!(tr().sui.is_your_picture, name = it.name), crate::state::Tone::Info, now);
                 }
                 self.close_picker(st);
             }

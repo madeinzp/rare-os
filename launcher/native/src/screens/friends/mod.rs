@@ -13,6 +13,7 @@ pub mod profile;
 pub mod screen;
 pub mod tab;
 
+use rare_i18n::tr;
 use crate::screens::market::host::s;
 use crate::screens::market::host::{Cx, Host, Out, Page, Screen, Ui};
 use page::FriendsPage;
@@ -143,7 +144,7 @@ impl Page for HomePage {
         let mut v = vec![(
             "a",
             it.and_then(|f| f.hint_a.clone())
-                .unwrap_or_else(|| "Select".into()),
+                .unwrap_or_else(|| tr().common.select.into()),
         )];
         if let Some(x) = it.and_then(|f| f.hint_x.clone()) {
             v.push(("x", x));

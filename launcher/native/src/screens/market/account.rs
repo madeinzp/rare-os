@@ -2,6 +2,7 @@
 //! rare.market's item card grid.
 
 use super::collection::COLS;
+use rare_i18n::{tr, trn};
 use super::data::{near_end, Answers};
 use super::host::*;
 use super::parts::*;
@@ -42,11 +43,11 @@ pub fn view(ui: &mut Ui, a: &Answers, address: &str, label: &str, frame: u64) ->
     let av = wallet_avatar(ui, s(), address, 3.5);
     let mut runs = vec![(t(SM).mono().c(tok::MUTED), short_addr(Some(address)))];
     if let Some(n) = items.total {
-        runs.push((t(SM).c(tok::MUTED), format!(", {} items", fmt_int(Some(n as f64), false))));
+        runs.push((t(SM).c(tok::MUTED), trn!(tr().market.items_suffix, n, n = fmt_int(Some(n as f64), false))));
     }
     let sub = baseline_row(ui, s(), runs);
     let names = ui.bx(s().col().min0().shrink()).child(ui.text(label, t(XL).w(600).trunc())).child(sub);
-    let open = btn(ui, s(), "Open on rare.market", T_OPEN, V::Secondary, Sz::Md, false, false);
+    let open = btn(ui, s(), tr().market.open_on_rare_market, T_OPEN, V::Secondary, Sz::Md, false, false);
     let head = ui.bx(s().row().items_center().gap(0.75).mb(1.5)).child(av).child(names).child(ui.bx(s().ml_auto()).child(open));
     let cw = (ui.w / ui.rem - 5.0 - 0.75 * (COLS as f32 - 1.0)) / COLS as f32;
     let mut g = ui.bx(s().grid(&[Track::Fr(1.0); COLS]).gap(0.75)).group(kit::group(&format!("mk-acct-{frame}"), false));
@@ -56,9 +57,9 @@ pub fn view(ui: &mut Ui, a: &Answers, address: &str, label: &str, frame: u64) ->
     }
     let mut page = page.child(head).child(g);
     if items.ready && list.is_empty() {
-        page = page.child(empty(ui, "No NFTs in this wallet", None, None, false));
+        page = page.child(empty(ui, tr().market.no_nfts_wallet, None, None, false));
     } else if list.is_empty() && a.failed(&paths::account_items(address)) {
-        page = page.child(empty(ui, "Could not load this wallet", None, None, false));
+        page = page.child(empty(ui, tr().market.wallet_failed, None, None, false));
     }
     page
 }
@@ -100,6 +101,6 @@ impl MkPage for AccountPage {
     }
 
     fn hints(&self) -> Vec<(&'static str, String)> {
-        vec![("a", "Open".into()), ("y", "Search".into()), ("b", "Back".into())]
+        vec![("a", tr().common.open.into()), ("y", tr().common.search.into()), ("b", tr().common.back.into())]
     }
 }

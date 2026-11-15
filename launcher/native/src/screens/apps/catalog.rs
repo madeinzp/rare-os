@@ -5,6 +5,8 @@ use rare_render::Src;
 use serde::Deserialize;
 use std::sync::OnceLock;
 
+use rare_i18n::tr;
+
 static CATALOG_JSON: &str = include_str!("catalog.json");
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
@@ -60,6 +62,54 @@ pub struct AppEntry {
     #[serde(default)]
     pub steps: Vec<String>,
     pub ways: Vec<Way>,
+}
+
+impl AppEntry {
+    /// What the app is, in the player's language (the JSON text is English and the fallback for
+    /// an app the catalog doesn't know).
+    pub fn about_text(&self) -> &str {
+        let a = tr().apps;
+        match self.id.as_str() {
+            "steam" => a.about_steam,
+            "battlenet" => a.about_battlenet,
+            "telegram" => a.about_telegram,
+            "x" => a.about_x,
+            "netflix" => a.about_netflix,
+            "youtube" => a.about_youtube,
+            "spotify" => a.about_spotify,
+            "twitch" => a.about_twitch,
+            "discord" => a.about_discord,
+            "xcloud" => a.about_xcloud,
+            "geforcenow" => a.about_geforcenow,
+            "chiaki" => a.about_chiaki,
+            "steamlink" => a.about_steamlink,
+            "chrome" => a.about_chrome,
+            _ => &self.about,
+        }
+    }
+
+    /// What playing needs, in the player's language.
+    pub fn plan_text(&self) -> Option<&str> {
+        let a = tr().apps;
+        match self.id.as_str() {
+            "battlenet" => Some(a.plan_battlenet),
+            "xcloud" => Some(a.plan_xcloud),
+            "geforcenow" => Some(a.plan_geforcenow),
+            "chiaki" => Some(a.plan_chiaki),
+            "steamlink" => Some(a.plan_steamlink),
+            _ => self.plan.as_deref(),
+        }
+    }
+
+    /// The setup steps, in the player's language.
+    pub fn step_texts(&self) -> Vec<&str> {
+        let a = tr().apps;
+        match self.id.as_str() {
+            "chiaki" => vec![a.chiaki_step_1, a.chiaki_step_2, a.chiaki_step_3],
+            "steamlink" => vec![a.steamlink_step_1, a.steamlink_step_2, a.steamlink_step_3, a.steamlink_step_4],
+            _ => self.steps.iter().map(|s| s.as_str()).collect(),
+        }
+    }
 }
 
 /// The cloud app a Library cloud tile opens (`cloud:xbox:<id>`, `cloud:gfn:<id>`).
@@ -118,6 +168,15 @@ pub fn run_id(id: &str) -> String {
 
 pub fn app_by_run_id(rid: &str) -> Option<&'static AppEntry> {
     rid.strip_prefix("app:").and_then(app_by_id)
+}
+
+/// A way's name for the player: brands stay as written.
+pub fn way_label(w: &Way) -> String {
+    if w.steam.as_deref() == Some("steam://open/games") {
+        tr().apps.steam_library.to_string()
+    } else {
+        w.label.clone()
+    }
 }
 
 pub fn way_kind(w: &Way) -> Option<WayKind> {
@@ -228,7 +287,7 @@ pub fn status_for(app: &AppEntry, installed: &[&str], user_flathub: bool) -> App
                 .iter()
                 .find(|b| b.flatpak == f)
                 .map(|b| b.name.to_string())
-                .or_else(|| app.ways.iter().find(|w| w.flatpak.as_deref() == Some(f.as_str())).map(|w| w.label.clone()))
+                .or_else(|| app.ways.iter().find(|w| w.flatpak.as_deref() == Some(f.as_str())).map(way_label))
                 .unwrap_or_else(|| f.clone());
             Some(Offer { command: install_command(&f, user_flathub), flatpak: f, name })
         }
@@ -241,7 +300,7 @@ pub fn status_for(app: &AppEntry, installed: &[&str], user_flathub: bool) -> App
         way,
         opens_in: w.map(|w| match (k, browser) {
             (Some(WayKind::ChromeApp) | Some(WayKind::Chrome), Some(b)) => b.name.to_string(),
-            _ => w.label.clone(),
+            _ => way_label(w),
         }),
         other_ways: ready.iter().skip(1).copied().collect(),
         offer,
@@ -261,6 +320,7 @@ const fn cr(b: &'static str, does: &'static str) -> ControlRow {
 }
 
 pub fn controls_for(controller: Controller, way: Option<&Way>) -> Vec<ControlRow> {
+    let a = tr().apps;
     let k = way.and_then(way_kind);
     let back = way
         .and_then(|w| w.back.as_deref())
@@ -268,38 +328,38 @@ pub fn controls_for(controller: Controller, way: Option<&Way>) -> Vec<ControlRow
     match controller {
         // Chrome itself (the Browser, with tabs): rare_launch apps::pointer's browser layout.
         Controller::Pointer if k == Some(WayKind::Chrome) => vec![
-            cr("Right stick", "Moves the pointer"),
-            cr("a", "Click (RT too)"),
-            cr("lt", "Right click"),
-            cr("Left stick", "Scrolls"),
-            cr("b", "Back a page"),
-            cr("D-pad", "Left and right: back and forward"),
-            cr("lb", "Previous tab"),
-            cr("rb", "Next tab"),
-            cr("start", "New tab"),
-            cr("select", "Address bar"),
-            cr("x", "Close tab"),
-            cr("y", "On-screen keyboard"),
+            cr("Right stick", a.ctl_pointer),
+            cr("a", a.ctl_click),
+            cr("lt", a.ctl_right_click),
+            cr("Left stick", a.ctl_scrolls),
+            cr("b", a.ctl_back_page),
+            cr("D-pad", a.ctl_dpad_back_forward),
+            cr("lb", a.ctl_prev_tab),
+            cr("rb", a.ctl_next_tab),
+            cr("start", a.ctl_new_tab),
+            cr("select", a.ctl_address_bar),
+            cr("x", a.ctl_close_tab),
+            cr("y", a.ctl_keyboard),
         ],
         Controller::Pointer => vec![
-            cr("Right stick", "Moves the pointer"),
-            cr("a", "Click (RT too)"),
-            cr("lt", "Right click"),
-            cr("Left stick", "Scrolls"),
-            cr("D-pad", "Arrow keys"),
-            cr("b", if back == "alt+left" { "Back a page" } else { "Back (Escape)" }),
-            cr("x", "Space: play or pause"),
-            cr("y", "On-screen keyboard"),
-            cr("start", "Enter"),
+            cr("Right stick", a.ctl_pointer),
+            cr("a", a.ctl_click),
+            cr("lt", a.ctl_right_click),
+            cr("Left stick", a.ctl_scrolls),
+            cr("D-pad", a.ctl_arrow_keys),
+            cr("b", if back == "alt+left" { a.ctl_back_page } else { a.ctl_back_escape }),
+            cr("x", a.ctl_space),
+            cr("y", a.ctl_keyboard),
+            cr("start", a.ctl_enter),
         ],
         Controller::Focus => vec![
-            cr("D-pad", "Moves between buttons"),
-            cr("a", "Select"),
-            cr("b", "Back (Escape)"),
-            cr("select", "On-screen keyboard"),
-            cr("Right stick", "Moves a pointer"),
+            cr("D-pad", a.ctl_moves_buttons),
+            cr("a", a.ctl_select),
+            cr("b", a.ctl_back_escape),
+            cr("select", a.ctl_keyboard),
+            cr("Right stick", a.ctl_moves_a_pointer),
         ],
-        Controller::Gamepad => vec![cr("D-pad", "The app reads your controller itself")],
+        Controller::Gamepad => vec![cr("D-pad", a.ctl_app_reads)],
     }
 }
 

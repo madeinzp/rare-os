@@ -5,6 +5,7 @@
 //! (public keys at m/44'/784'/i'/0'/0'), verify an address on the Ledger, and add the picks with
 //! `add_ledger` / `add_keystone`. Nothing here signs.
 
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::home::lib::Hint;
 use crate::screens::wallet::home::stack::WalletView;
 use crate::screens::wallet::markup::El as M;
@@ -180,7 +181,7 @@ pub fn verify_receive(address: String, path: String, device: Option<String>) -> 
             None => {
                 let all = w.rt.block_on(LedgerState::list(true, 3000)).map_err(|e| ledger_err(LedgerError::from_native(&e)))?;
                 let ble: Vec<_> = all.into_iter().filter(|d| d.transport == "ble").collect();
-                pick(&ble).ok_or_else(|| plain_err("No Ledger found. Connect it with USB or turn on its Bluetooth, unlock it and open the Sui app."))?
+                pick(&ble).ok_or_else(|| plain_err(tr().wallet_setup.ledger_not_found_long))?
             }
         };
         let prompt = Arc::new(Mutex::new(None));
@@ -294,7 +295,7 @@ impl WalletTab {
         if let hw::Msg::Rows(hw_parts::Msg::Name(a, n)) = &m {
             // the name field: the keyboard answers in tick
             let cur = f.st.pick.names.get(a).cloned().unwrap_or_default();
-            st.ask_text(format!("hw-name:{a}"), format!("Name for account {n}"), cur, None);
+            st.ask_text(format!("hw-name:{a}"), trf!(tr().wallet_setup.name_for_account, n = n), cur, None);
             f.asking = Some(a.clone());
         }
         let eff = {
@@ -396,7 +397,7 @@ impl WalletTab {
                         .map_err(|e| plain_err(e.to_string()))?;
                         first.get_or_insert(acc.address);
                     }
-                    let first = first.ok_or_else(|| plain_err("Pick an account to add."))?;
+                    let first = first.ok_or_else(|| plain_err(tr().wallet_setup.pick_account_to_add))?;
                     w.keystore.select(&first).map_err(|e| plain_err(e.to_string()))?;
                     w.bump();
                     Ok(first)
@@ -404,7 +405,7 @@ impl WalletTab {
             }
             hw::Effect::Copy(text) => {
                 copy_text(&text);
-                st.toast("Copied", crate::state::Tone::Info, rare_render::clock::secs());
+                st.toast(tr().wallet_setup.copied, crate::state::Tone::Info, rare_render::clock::secs());
             }
             hw::Effect::PowerOnBluetooth => {
                 if fixture {
@@ -415,7 +416,7 @@ impl WalletTab {
                 f.power = Some(service::work(|w| -> Result<(), HwErr> {
                     match w.rt.block_on(rare_wallet::bluetooth::power_on()) {
                         Ok(s) if s.powered => Ok(()),
-                        Ok(s) => Err(plain_err(if s.blocked { "Bluetooth is blocked by a switch on this device." } else { "Could not turn Bluetooth on. Try again." })),
+                        Ok(s) => Err(plain_err(if s.blocked { tr().wallet_setup.bluetooth_blocked } else { tr().wallet_setup.bluetooth_failed })),
                         Err(e) => Err(plain_err(rare_wallet::WalletError::parse(&e).message)),
                     }
                 }));
@@ -484,7 +485,7 @@ impl WalletTab {
         let verify_done = match f.verify.as_mut() {
             Some((a, rx)) => match rx.try_recv() {
                 Ok(r) => Some((a.clone(), flat(r))),
-                Err(std::sync::mpsc::TryRecvError::Disconnected) => Some((a.clone(), Err(plain_err("The wallet stopped. Try again.")))),
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => Some((a.clone(), Err(plain_err(tr().wallet_setup.wallet_stopped)))),
                 Err(_) => None,
             },
             None => None,

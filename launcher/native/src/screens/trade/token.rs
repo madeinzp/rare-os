@@ -3,6 +3,7 @@
 //! the Buy/Sell panel on the right. LT/RT step the amount while the panel has focus, X flips Buy
 //! and Sell, A on the panel's button opens the review.
 
+use rare_i18n::{tr, trf, trn};
 use super::chart_area::{self, ChartArea, ChartOut};
 use super::fmt::*;
 use super::model::*;
@@ -127,7 +128,7 @@ pub fn amount_label(value: f64, side: Side, from: Option<&Coin>) -> String {
     match side {
         Side::Sell => {
             if value >= 100.0 {
-                "All".into()
+                tr().trade.all_amount.into()
             } else {
                 num_text(NumKind::Share, Some(value), NumOptions { decimals: Some(0), ..Default::default() })
             }
@@ -155,40 +156,42 @@ pub fn panel_view(d: &TokenData, st: &TokenState) -> PanelView {
     let nothing = st.side == Side::Sell && t.balance == Some(0);
     let blocked = from.is_none() || to.is_none() || amount_in == 0 || t.short(fr) || nothing || t.quote.is_none();
     let why = if d.wallet.is_none() {
-        Some("Add a wallet first".to_string())
+        Some(tr().trade.add_wallet_first.to_string())
     } else if nothing {
-        Some(format!("No {} to sell", fr.map(|c| c.symbol.as_str()).unwrap_or("")))
+        Some(trf!(tr().trade.no_coin_to_sell, symbol = fr.map(|c| c.symbol.as_str()).unwrap_or("")))
     } else if t.short(fr) {
-        Some("Not enough balance".into())
+        Some(tr().trade.not_enough_balance.into())
     } else {
         t.quote_error.clone()
     };
-    let mut under = String::new();
-    if st.side == Side::Sell {
-        if let Some(c) = fr {
-            under = if amount_in > 0 { format!("{} {}", num_text(NumKind::Amount, Some(coin_in), NumOptions::default()), c.symbol) } else { format!("of your {}", c.symbol) };
-        }
-        if usd_in.is_some() && amount_in > 0 {
-            under.push_str(", ");
-        }
-    }
-    if let (Some(u), true) = (usd_in, amount_in > 0) {
-        under.push_str(&format!("about {}", num_text(NumKind::Money, Some(u), NumOptions::default())));
-    }
+    let coin_part = match (st.side == Side::Sell, fr) {
+        (true, Some(c)) => Some(if amount_in > 0 { format!("{} {}", num_text(NumKind::Amount, Some(coin_in), NumOptions::default()), c.symbol) } else { trf!(tr().trade.of_your, symbol = c.symbol) }),
+        _ => None,
+    };
+    let usd_part = match (usd_in, amount_in > 0) {
+        (Some(u), true) => Some(num_text(NumKind::Money, Some(u), NumOptions::default())),
+        _ => None,
+    };
+    let under = match (coin_part, usd_part) {
+        (Some(c), Some(u)) => trf!(tr().trade.under_coin_usd, coin = c, usd = u),
+        (Some(c), None) => c,
+        (None, Some(u)) => trf!(tr().trade.about_usd, usd = u),
+        (None, None) => String::new(),
+    };
     let get = match (out, &to) {
         (Some(o), Some(c)) => format!("{} {}", num_text(NumKind::Amount, Some(o), NumOptions::default()), c.symbol),
-        _ if t.quoting => "Getting a quote".into(),
-        _ if t.quote_error.is_some() => "No route for this amount".into(),
+        _ if t.quoting => tr().trade.getting_quote.into(),
+        _ if t.quote_error.is_some() => tr().trade.no_route.into(),
         _ => String::new(),
     };
     let balance = match (fr, t.balance) {
         (Some(c), Some(b)) => format!("{} {}", num_text(NumKind::Amount, Some(base_to_number(b, c.decimals)), NumOptions::default()), c.symbol),
         _ if d.wallet.is_some() => String::new(),
-        _ => "No wallet".into(),
+        _ => tr().trade.no_wallet.into(),
     };
     let button = match st.side {
-        Side::Buy => format!("Review buy{}", to.as_ref().map(|c| format!(" {}", c.symbol)).unwrap_or_default()),
-        Side::Sell => format!("Review sell{}", from.as_ref().map(|c| format!(" {}", c.symbol)).unwrap_or_default()),
+        Side::Buy => match &to { Some(c) => trf!(tr().trade.review_buy_coin, symbol = c.symbol), None => tr().trade.review_buy.to_string() },
+        Side::Sell => match &from { Some(c) => trf!(tr().trade.review_sell_coin, symbol = c.symbol), None => tr().trade.review_sell.to_string() },
     };
     PanelView { amount_label: amount_label(t.value, st.side, fr), under, out, get, balance, blocked, why, button }
 }
@@ -281,17 +284,17 @@ impl TokenPage {
 
     pub fn page_hints(&self) -> Vec<(&'static str, String)> {
         if self.st.reviewing {
-            return vec![("a", "Select".into()), ("b", "Cancel".into())];
+            return vec![("a", tr().common.select.into()), ("b", tr().common.cancel.into())];
         }
         if self.chart.mode.on {
-            return chart_area::HINTS.iter().map(|(b, l)| (*b, l.to_string())).collect();
+            return chart_area::hints().iter().map(|(b, l)| (*b, l.to_string())).collect();
         }
-        let flip = ("x", if self.st.side == Side::Buy { "Sell" } else { "Buy" }.to_string());
-        let other = ("ltrt", if self.st.tab == Tab::Trades { "Holders" } else { "Trades" }.to_string());
+        let flip = ("x", if self.st.side == Side::Buy { tr().common.sell } else { tr().common.buy }.to_string());
+        let other = ("ltrt", if self.st.tab == Tab::Trades { tr().trade.holders } else { tr().trade.trades }.to_string());
         match self.area() {
-            "order" => vec![("a", "Select".into()), ("lt", "Less".into()), ("rt", "More".into()), flip, ("y", "Search".into()), ("b", "Back".into())],
-            "chart" => vec![("a", "Control chart".into()), ("select", "Chart mode".into()), flip, ("y", "Search".into()), other, ("b", "Back".into())],
-            _ => vec![("a", "Select".into()), flip, ("y", "Search".into()), other, ("b", "Back".into())],
+            "order" => vec![("a", tr().common.select.into()), ("lt", tr().trade.less.into()), ("rt", tr().common.more.into()), flip, ("y", tr().common.search.into()), ("b", tr().common.back.into())],
+            "chart" => vec![("a", tr().trade.control_chart.into()), ("select", tr().trade.chart_mode.into()), flip, ("y", tr().common.search.into()), other, ("b", tr().common.back.into())],
+            _ => vec![("a", tr().common.select.into()), flip, ("y", tr().common.search.into()), other, ("b", tr().common.back.into())],
         }
     }
 
@@ -425,8 +428,8 @@ pub fn view(ui: &mut Ui, d: &TokenData, st: &TokenState, chart: &ChartArea, focu
     let page = ui.bx(s().fill().col().pt(1.0).pb(2.5)).scrolls_y(rare_render::view::key("tr-token-scroll"));
     let Some(t) = d.token.as_ref() else {
         let msg = match d.token_error.as_deref() {
-            Some("Token not indexed yet") => "This coin is not in the market data yet.",
-            Some(_) => "Could not load this coin.",
+            Some("Token not indexed yet") => tr().trade.coin_not_indexed,
+            Some(_) => tr().trade.coin_load_failed,
             None => "",
         };
         if msg.is_empty() {
@@ -441,12 +444,12 @@ pub fn view(ui: &mut Ui, d: &TokenData, st: &TokenState, chart: &ChartArea, focu
     let ch = num_parts(NumKind::Change, t.change24(), NumOptions::default());
     let ch_col = ch.as_ref().map(|p| crate::kit::num::tone_color(p.tone, tok::FG)).unwrap_or(tok::FG);
     let title = baseline_row(ui, s().gap(0.5), vec![(T::new(Ty::Title).w(600).trunc(), t.name.clone()), (T::new(Ty::Body).w(500).c(tok::MUTED), t.symbol.clone())]);
-    let pr = baseline_row(ui, s().gap(0.75), vec![(T::new(Ty::Display).w(600).tab(), price), (T::new(Ty::Body).tab().c(ch_col), ch.map(|p| p.text()).unwrap_or_default()), (T::new(Ty::Small).c(tok::MUTED), "24h".into())]);
+    let pr = baseline_row(ui, s().gap(0.75), vec![(T::new(Ty::Display).w(600).tab(), price), (T::new(Ty::Body).tab().c(ch_col), ch.map(|p| p.text()).unwrap_or_default()), (T::new(Ty::Small).c(tok::MUTED), tr().trade.h24.into())]);
     let pr = roll_first(ui, pr, t.price_usd);
     let names = ui.bx(s().col().shrink().min0()).child(title).child(pr);
     let mut right = ui.bx(s().row().items_center().gap(0.75).ml_auto());
     if t.price_usd.is_some_and(|p| p > 0.0) {
-        right = right.child(button(ui, Btn { hint: Some("Set a price alert".into()), ..Btn::new("Price alert", T_ALERT).sm() }));
+        right = right.child(button(ui, Btn { hint: Some(tr().trade.set_price_alert.into()), ..Btn::new(tr().trade.price_alert, T_ALERT).sm() }));
     }
     right = right.child(tf_chips(ui, &TIMEFRAMES, st.tf, "tr-tf", T_TF));
     let logo_el = coin_logo(ui, logo.as_deref(), &t.symbol, 3.5);
@@ -463,12 +466,12 @@ pub fn view(ui: &mut Ui, d: &TokenData, st: &TokenState, chart: &ChartArea, focu
         ui,
         s(),
         vec![
-            ("Market cap", Stat::Num(NumKind::Market, nz(t.mcap), o)),
-            ("24h volume", Stat::Num(NumKind::Market, nz(t.volume24h), o)),
-            ("Liquidity", Stat::Num(NumKind::Market, nz(t.liquidity), o)),
-            ("Holders", Stat::Num(NumKind::Count, nz(t.holders), o)),
-            ("Buys / sells 24h", Stat::Text(bs)),
-            ("Age", Stat::Text(if t.created_ms.is_some_and(|c| c != 0.0) { age(t.created_ms, d.now_ms) } else { String::new() })),
+            (tr().trade.market_cap, Stat::Num(NumKind::Market, nz(t.mcap), o)),
+            (tr().trade.volume_24h, Stat::Num(NumKind::Market, nz(t.volume24h), o)),
+            (tr().trade.liquidity, Stat::Num(NumKind::Market, nz(t.liquidity), o)),
+            (tr().trade.holders, Stat::Num(NumKind::Count, nz(t.holders), o)),
+            (tr().trade.buys_sells_24h, Stat::Text(bs)),
+            (tr().trade.age_label, Stat::Text(if t.created_ms.is_some_and(|c| c != 0.0) { age(t.created_ms, d.now_ms) } else { String::new() })),
         ],
         true,
         false,
@@ -476,7 +479,7 @@ pub fn view(ui: &mut Ui, d: &TokenData, st: &TokenState, chart: &ChartArea, focu
     let stats_panel = panel(ui, s().col().mt(1.0).px(1.25).py(0.75)).maybe(stats);
 
     // ---- trades / holders
-    let items = [TabItem::new("Trades"), TabItem::new("Holders")];
+    let items = [TabItem::new(tr().trade.trades), TabItem::new(tr().trade.holders)];
     let lt = glyph(ui, Pb::Lt, GSize::Sm);
     let rt = glyph(ui, Pb::Rt, GSize::Sm);
     let tabs_el = tabs(ui, s(), &items, if st.tab == Tab::Trades { 0 } else { 1 }, true);
@@ -506,19 +509,19 @@ pub fn review_for(d: &TokenData, st: &TokenState) -> Option<Review> {
     let (from, to) = sides(d, st.side);
     let (from, to) = (from?, to?);
     let amt = base_to_number(st.ticket.amount_in(Some(&from)), from.decimals);
-    let mut lines = vec![(if st.side == Side::Buy { "You pay" } else { "You sell" }.to_string(), Val::t(format!("{} {}", num_text(NumKind::Amount, Some(amt), NumOptions::default()), from.symbol)), false)];
+    let mut lines = vec![(if st.side == Side::Buy { tr().trade.you_pay } else { tr().trade.you_sell }.to_string(), Val::t(format!("{} {}", num_text(NumKind::Amount, Some(amt), NumOptions::default()), from.symbol)), false)];
     if let Some(q) = &st.ticket.quote {
-        lines.push(("You get about".into(), Val::t(format!("{} {}", num_text(NumKind::Amount, Some(base_to_number(q.amount_out, to.decimals)), NumOptions::default()), to.symbol)), true));
-        lines.push(("Minimum received".into(), Val::t(format!("{} {}", num_text(NumKind::Amount, Some(base_to_number(min_out(q.amount_out), to.decimals)), NumOptions::default()), to.symbol)), false));
-        lines.push(("Price".into(), Val::t(t.price_usd.map(usd_price).unwrap_or_default()), false));
-        lines.push(("Route".into(), Val::t(route_text(q)), false));
-        lines.push(("Fee".into(), Val::t(format!("{:.2}%", q.fee_bps as f64 / 100.0)), false));
-        lines.push(("Slippage".into(), Val::t("1%"), false));
+        lines.push((tr().trade.you_get_about.into(), Val::t(format!("{} {}", num_text(NumKind::Amount, Some(base_to_number(q.amount_out, to.decimals)), NumOptions::default()), to.symbol)), true));
+        lines.push((tr().trade.minimum_received.into(), Val::t(format!("{} {}", num_text(NumKind::Amount, Some(base_to_number(min_out(q.amount_out), to.decimals)), NumOptions::default()), to.symbol)), false));
+        lines.push((tr().trade.price.into(), Val::t(t.price_usd.map(usd_price).unwrap_or_default()), false));
+        lines.push((tr().trade.route.into(), Val::t(route_text(q)), false));
+        lines.push((tr().trade.fee.into(), Val::t(format!("{:.2}%", q.fee_bps as f64 / 100.0)), false));
+        lines.push((tr().trade.slippage.into(), Val::t("1%"), false));
     }
     Some(Review {
-        title: format!("{} {}", if st.side == Side::Buy { "Buy" } else { "Sell" }, t.symbol),
+        title: trf!(if st.side == Side::Buy { tr().trade.buy_title } else { tr().trade.sell_title }, symbol = t.symbol),
         sub: Some(t.name.clone()),
-        action: if st.side == Side::Buy { "Confirm buy" } else { "Confirm sell" }.into(),
+        action: if st.side == Side::Buy { tr().trade.confirm_buy } else { tr().trade.confirm_sell }.into(),
         tone: if st.side == Side::Buy { Tone::Buy } else { Tone::Sell },
         lines,
     })
@@ -531,38 +534,38 @@ pub fn trade_panel(ui: &mut Ui, d: &TokenData, st: &TokenState) -> El {
     let t = &st.ticket;
     let switch = side_switch(ui, [("Buy", Tone::Buy), ("Sell", Tone::Sell)], if st.side == Side::Buy { 0 } else { 1 }, "tr-side", T_SIDE);
     let amount = center_text(ui, s().wp(1.0), pv.amount_label.clone(), T::new(Ty::Display).w(600).tab());
-    let stepped = stepper(ui, "amount", "tr-amount", T_MINUS, T_PLUS, amount);
+    let stepped = stepper(ui, tr().trade.less_amount, tr().trade.more_amount, "tr-amount", T_MINUS, T_PLUS, amount);
     let under = center_text(ui, s().mt(0.25).h(1.25).wp(1.0), pv.under.clone(), T::new(Ty::Small).c(tok::MUTED).tab());
-    let pay = ui.bx(s().col()).child(ui.text(if st.side == Side::Buy { "You pay" } else { "You sell" }, T::new(Ty::Small).c(tok::MUTED))).child(ui.bx(s().col().mt(0.25)).child(stepped)).child(under);
+    let pay = ui.bx(s().col()).child(ui.text(if st.side == Side::Buy { tr().trade.you_pay } else { tr().trade.you_sell }, T::new(Ty::Small).c(tok::MUTED))).child(ui.bx(s().col().mt(0.25)).child(stepped)).child(under);
 
     let mut chips = ui.bx(s().row().gap(0.5)).group(crate::kit::group("tr-presets", true));
     for (i, v) in presets_for(t.mode, from.as_ref()).iter().enumerate() {
-        let label = if st.side == Side::Sell { if *v >= 100.0 { "Max".to_string() } else { format!("{}%", trim6(*v)) } } else { trim6(*v) };
+        let label = if st.side == Side::Sell { if *v >= 100.0 { tr().trade.max.to_string() } else { format!("{}%", trim6(*v)) } } else { trim6(*v) };
         let c = chip(ui, &label, (t.value - v).abs() < 1e-9, T_PRESET + i as u32);
         chips = chips.child(c);
     }
     let max = t.max(from.as_ref());
     if st.side == Side::Buy && max.is_finite() && max > 0.0 {
-        let c = chip(ui, "Max", (t.value - max).abs() < 1e-9, T_MAX);
+        let c = chip(ui, tr().trade.max, (t.value - max).abs() < 1e-9, T_MAX);
         chips = chips.child(c);
     }
 
     let get = if pv.get.is_empty() { None } else { Some(ui.text(pv.get.clone(), T::new(Ty::Small).w(600).tab().c(if pv.out.is_some() { tok::FG } else { tok::MUTED }))) };
-    let mut lines_el = ui.bx(s().col()).child(line_el(ui, "You get about", get, false, false));
+    let mut lines_el = ui.bx(s().col()).child(line_el(ui, tr().trade.you_get_about, get, false, false));
     if let (Some(q), Some(c)) = (&t.quote, &to) {
         let min = format!("{} {}", num_text(NumKind::Amount, Some(base_to_number(min_out(q.amount_out), c.decimals)), NumOptions::default()), c.symbol);
         let v = Some(ui.text(min, T::new(Ty::Small).tab()));
-        lines_el = lines_el.child(line_el(ui, "Minimum received", v, false, false));
+        lines_el = lines_el.child(line_el(ui, tr().trade.minimum_received, v, false, false));
         let v = Some(ui.text(route_text(q), T::new(Ty::Small).tab()));
-        lines_el = lines_el.child(line_el(ui, "Route", v, false, false));
+        lines_el = lines_el.child(line_el(ui, tr().trade.route, v, false, false));
         let v = Some(ui.text(format!("{:.2}%", q.fee_bps as f64 / 100.0), T::new(Ty::Small).tab()));
-        lines_el = lines_el.child(line_el(ui, "Fee", v, false, false));
+        lines_el = lines_el.child(line_el(ui, tr().trade.fee, v, false, false));
     }
     let bal = if pv.balance.is_empty() { None } else { Some(ui.text(pv.balance.clone(), T::new(Ty::Small).tab())) };
-    lines_el = lines_el.child(line_el(ui, "Balance", bal, false, true));
+    lines_el = lines_el.child(line_el(ui, tr().trade.balance, bal, false, true));
 
     let tone = if st.side == Side::Buy { Tone::Buy } else { Tone::Sell };
-    let hint = if pv.blocked { pv.why.clone() } else { Some("Review".into()) };
+    let hint = if pv.blocked { pv.why.clone() } else { Some(tr().trade.review.into()) };
     let review = action(ui, s(), Action { def: true, full: true, disabled: pv.blocked, hint, ..Action::new(pv.button.clone(), tone, T_REVIEW) });
     let mut p = panel(ui, s().col().gap(1.0).p(1.25)).child(switch).child(pay).child(chips).child(lines_el).child(review);
     if let Some(w) = pv.why.as_ref().filter(|_| !t.quoting) {
@@ -580,9 +583,9 @@ fn ct(ui: &Ui, text: impl Into<String>, t: T, end: bool) -> El {
 /// The recent trades (TradesTable).
 pub fn trades_table(ui: &mut Ui, rows: &[TradeRow], symbol: &str, error: bool, now_ms: f64) -> El {
     if rows.is_empty() {
-        return center_text(ui, s().py(2.0).wp(1.0), if error { "Couldn't load trades." } else { "" }, T::new(Ty::Small).c(tok::MUTED));
+        return center_text(ui, s().py(2.0).wp(1.0), if error { tr().trade.trades_load_failed } else { "" }, T::new(Ty::Small).c(tok::MUTED));
     }
-    let heads: Vec<El> = ["Age", "Side", "Amount", "Value", "Price", "Trader"].iter().enumerate().map(|(i, l)| ct(ui, *l, T::new(Ty::Label).w(500).c(tok::MUTED), i > 1)).collect();
+    let heads: Vec<El> = [tr().trade.age_label, tr().trade.side, tr().trade.amount, tr().trade.value, tr().trade.price, tr().trade.trader].iter().enumerate().map(|(i, l)| ct(ui, *l, T::new(Ty::Label).w(500).c(tok::MUTED), i > 1)).collect();
     let mut out = ui.bx(s().col()).child(head_row(ui, &TRADE_COLS, heads));
     let mut list = ui.bx(s().col()).group(crate::kit::group("tr-trades", false));
     for (i, r) in rows.iter().take(30).enumerate() {
@@ -590,7 +593,7 @@ pub fn trades_table(ui: &mut Ui, rows: &[TradeRow], symbol: &str, error: bool, n
         let value = cell(ui, true).maybe(num(ui, s(), NumKind::Money, Some(r.usd), NumOptions::default(), small, true));
         let cells = vec![
             ct(ui, age(Some(r.time_ms), now_ms), small.c(tok::MUTED), false),
-            ct(ui, if r.buy { "Buy" } else { "Sell" }, small.w(500).c(if r.buy { tok::POS } else { tok::NEG }), false),
+            ct(ui, if r.buy { tr().common.buy } else { tr().common.sell }, small.w(500).c(if r.buy { tok::POS } else { tok::NEG }), false),
             ct(ui, format!("{} {}", num_text(NumKind::Amount, Some(r.amount), NumOptions::default()), symbol), small, true),
             value,
             ct(ui, usd_price(r.price_usd), small.c(tok::MUTED), true),
@@ -608,24 +611,24 @@ const HOLDER_COLS: [Track; 5] = [Track::Rem(2.5), Track::Fr(1.0), Track::Rem(8.0
 pub fn holders_table(ui: &mut Ui, page: Option<&HoldersPage>, error: bool) -> El {
     let Some(p) = page.filter(|p| !p.holders.is_empty()) else {
         let msg = if error {
-            "Couldn't load holders."
+            tr().trade.holders_load_failed
         } else if page.is_some() {
-            "No holders seen yet."
+            tr().trade.no_holders
         } else {
             ""
         };
         return center_text(ui, s().py(2.0).wp(1.0), msg, T::new(Ty::Small).c(tok::MUTED));
     };
     let head2 = match p.count.filter(|c| *c != 0.0) {
-        Some(c) => format!("{} holders", num_text(NumKind::Count, Some(c), NumOptions::default())),
-        None => "Holder".into(),
+        Some(c) => trn!(tr().trade.holders_n, c, n = num_text(NumKind::Count, Some(c), NumOptions::default())),
+        None => tr().trade.holder.into(),
     };
     let heads = vec![
         ct(ui, "#", T::new(Ty::Label).w(500).c(tok::MUTED), false),
         ct(ui, head2, T::new(Ty::Label).w(500).c(tok::MUTED), false),
-        ct(ui, "Amount", T::new(Ty::Label).w(500).c(tok::MUTED), true),
-        ct(ui, "Value", T::new(Ty::Label).w(500).c(tok::MUTED), true),
-        ct(ui, "Share", T::new(Ty::Label).w(500).c(tok::MUTED), true),
+        ct(ui, tr().trade.amount, T::new(Ty::Label).w(500).c(tok::MUTED), true),
+        ct(ui, tr().trade.value, T::new(Ty::Label).w(500).c(tok::MUTED), true),
+        ct(ui, tr().trade.share, T::new(Ty::Label).w(500).c(tok::MUTED), true),
     ];
     let out = ui.bx(s().col()).child(head_row(ui, &HOLDER_COLS, heads));
     let mut list = ui.bx(s().col()).group(crate::kit::group("tr-holders", false));
@@ -635,7 +638,7 @@ pub fn holders_table(ui: &mut Ui, page: Option<&HoldersPage>, error: bool) -> El
         if h.kind != "wallet" {
             let tag = match (&h.venue, h.kind.as_str()) {
                 (Some(v), _) => venue_name(v),
-                (None, "pool") => "Pool".into(),
+                (None, "pool") => tr().trade.pool.into(),
                 (None, k) => k.to_string(),
             };
             who = who.child(ui.text(tag, T::new(Ty::Label).c(tok::MUTED)));

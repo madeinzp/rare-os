@@ -5,9 +5,11 @@
 use super::rows::*;
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
+use rare_i18n::{tr, trf, trn};
 use rare_render::{Fit, Id, ImgReq, Node, Src};
 use rare_system::ssh::{self, SshKey, SshStatus};
 
+/// English fallback; the screen reads `tr().settings_more.rem_warning`.
 pub const WARNING: &str = "Anyone on your network with the password can control this device.";
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, Default, PartialEq)]
@@ -90,9 +92,9 @@ pub fn fixture_on() -> SshInfo {
 pub fn left_text(at: u64, now: u64) -> String {
     let m = at.saturating_sub(now).div_ceil(60);
     if m <= 1 {
-        "less than a minute left".into()
+        tr().settings_more.rem_less_than_minute.into()
     } else {
-        format!("{m} minutes left")
+        trn!(tr().settings_more.rem_minutes_left, m)
     }
 }
 
@@ -121,94 +123,96 @@ pub fn build(cx: &mut Cx, nav: &mut Nav, parent: Id, rows: &mut RowSet, info: &S
     let on = info.on();
     let st = info.status.clone().unwrap_or_default();
     let p = panel(cx, parent);
+    let t = &tr().settings_more;
     let intro = if info.busy {
-        "Working on it."
+        t.rem_working
     } else if on {
-        "Computers on your network can sign in to this device."
+        t.rem_intro_on
     } else {
-        "Sign in to this device from a computer to install things, edit files and run tools. Off until you turn it on."
+        t.rem_intro_off
     };
-    rows.switch(cx, nav, p, "ssh-toggle", "Remote access (SSH)", intro, on, true);
-    setting_row(cx, p, "Before you turn it on", Some(WARNING), false);
+    rows.switch(cx, nav, p, "ssh-toggle", t.rem_title, intro, on, true);
+    setting_row(cx, p, t.rem_before, Some(t.rem_warning), false);
     if !on {
         return vec![];
     }
     // Where to connect.
     let cmd = info.command();
     let addr = match &info.ip {
-        Some(ip) => format!("{}.local or {ip}, user {}", info.host.trim_end_matches(".local"), info.user()),
-        None => format!("{}.local, user {}", info.host.trim_end_matches(".local"), info.user()),
+        Some(ip) => trf!(t.rem_addr_ip, host = info.host.trim_end_matches(".local"), ip = ip, user = info.user()),
+        None => trf!(t.rem_addr, host = info.host.trim_end_matches(".local"), user = info.user()),
     };
     let row_ = setting_row(cx, p, &cmd, Some(&addr), false);
-    small_button(cx, nav, row_.right, "Copy", "ssh-copy", 0);
+    small_button(cx, nav, row_.right, tr().common.copy, "ssh-copy", 0);
     qr_box(cx, row_.right, &cmd, 9.0);
     if !st.active {
-        setting_row(cx, p, "Starting", Some("The SSH server is starting. Check again in a moment."), false);
+        setting_row(cx, p, t.rem_starting, Some(t.rem_starting_body), false);
     }
     // Password.
     let pw_body = if st.default_password {
-        "The password is still the default one from before Rare OS, so password sign-in is off. Set a new one to sign in with a password."
+        t.rem_pw_default
     } else if st.has_password {
-        if st.password_auth { "A password is set. Password sign-in is on." } else { "A password is set. Password sign-in is off because a key is added." }
+        if st.password_auth { t.rem_pw_on } else { t.rem_pw_off_key }
     } else {
-        "No password yet. Set one, or add a key."
+        t.rem_pw_none
     };
-    let row_ = setting_row(cx, p, "Password", Some(pw_body), false);
-    small_button(cx, nav, row_.right, if st.default_password { "Set a new password" } else if st.has_password { "Change" } else { "Set a password" }, "ssh-password", 0);
+    let row_ = setting_row(cx, p, t.rem_password, Some(pw_body), false);
+    small_button(cx, nav, row_.right, if st.default_password { t.rem_set_new_password } else if st.has_password { tr().common.change } else { t.rem_set_password }, "ssh-password", 0);
     // Keys.
-    let keys_body = if st.keys.is_empty() { "No keys yet. Keys are safer than a password: password sign-in turns off by itself once you add one.".to_string() } else { format!("{} key{}. Anyone with a matching private key can sign in.", st.keys.len(), if st.keys.len() == 1 { "" } else { "s" }) };
-    let row_ = setting_row(cx, p, "Add a key", Some(&keys_body), false);
-    small_button(cx, nav, row_.right, "Paste or type", "ssh-key-paste", 0);
-    small_button(cx, nav, row_.right, "USB stick", "ssh-key-usb", 0);
+    let keys_body = if st.keys.is_empty() { t.rem_keys_none.to_string() } else { trn!(t.rem_keys_n, st.keys.len()) };
+    let row_ = setting_row(cx, p, t.rem_add_key, Some(&keys_body), false);
+    small_button(cx, nav, row_.right, t.rem_paste_or_type, "ssh-key-paste", 0);
+    small_button(cx, nav, row_.right, t.rem_usb_stick, "ssh-key-usb", 0);
     small_button(cx, nav, row_.right, "GitHub", "ssh-key-github", 0);
     for (i, k) in st.keys.iter().enumerate() {
-        let title = if k.comment.is_empty() { format!("{} key", k.kind) } else { format!("{} ({})", k.comment, k.kind) };
+        let title = if k.comment.is_empty() { trf!(t.rem_key_kind, kind = k.kind) } else { trf!(t.rem_key_comment, comment = k.comment, kind = k.kind) };
         let row_ = setting_row(cx, p, &title, Some(&k.fingerprint), false);
-        small_button(cx, nav, row_.right, "Remove", "ssh-remove", i as u32);
+        small_button(cx, nav, row_.right, tr().common.remove, "ssh-remove", i as u32);
     }
     if !st.keys.is_empty() {
-        rows.switch(cx, nav, p, "ssh-keep-password", "Keep password sign-in on", "Off by default once a key is added.", st.keep_password, false);
+        rows.switch(cx, nav, p, "ssh-keep-password", t.rem_keep_pw, t.rem_keep_pw_body, st.keep_password, false);
     }
     let timer = match st.auto_off_at {
-        Some(at) => format!("SSH turns off by itself, {}.", left_text(at, now_secs().max(now_s))),
-        None => "Switch SSH off again an hour from now.".into(),
+        Some(at) => trf!(t.rem_auto_off_in, left = left_text(at, now_secs().max(now_s))),
+        None => t.rem_auto_off_idle.into(),
     };
-    rows.switch(cx, nav, p, "ssh-autooff", "Turn off after 1 hour", &timer, st.auto_off_at.is_some(), false);
+    rows.switch(cx, nav, p, "ssh-autooff", t.rem_auto_off, &timer, st.auto_off_at.is_some(), false);
     st.keys
 }
 
 /// The developer tools panel: where the docs are, and "Allow network apps".
 pub fn build_tools(cx: &mut Cx, nav: &mut Nav, parent: Id, rows: &mut RowSet, info: &SshInfo) {
+    let t = &tr().settings_more;
     let p = panel(cx, parent);
-    setting_row(cx, p, "Developer tools", Some("Drive this device from your own tools and agents. The Local API and the SDK are at rare.market/developers."), true);
+    setting_row(cx, p, t.rem_dev_tools, Some(t.rem_dev_tools_body), true);
     let host = info.host.trim_end_matches(".local").to_string();
     let body = if info.netapi {
-        format!("Tools on your network can call the Local API at http://{host}.local:{}. They need the token below.", ssh::NETAPI_PORT)
+        trf!(t.rem_netapi_on, host = host, port = ssh::NETAPI_PORT)
     } else {
-        "Let tools and agents on a laptop call the Local API. Off by default.".to_string()
+        t.rem_netapi_off.to_string()
     };
-    rows.switch(cx, nav, p, "netapi-toggle", "Allow network apps", &body, info.netapi, false);
+    rows.switch(cx, nav, p, "netapi-toggle", t.rem_netapi, &body, info.netapi, false);
     if info.netapi {
-        if let Some(t) = &info.net_token {
-            let row_ = setting_row(cx, p, "Token", Some(t), false);
-            small_button(cx, nav, row_.right, "Copy", "netapi-copy", 0);
-            small_button(cx, nav, row_.right, "New token", "netapi-newtoken", 0);
+        if let Some(tok) = &info.net_token {
+            let row_ = setting_row(cx, p, t.rem_token, Some(tok), false);
+            small_button(cx, nav, row_.right, tr().common.copy, "netapi-copy", 0);
+            small_button(cx, nav, row_.right, t.rem_new_token, "netapi-newtoken", 0);
         }
         // One switch per capability, all off until the owner turns them on.
         let p = panel(cx, parent);
-        setting_row(cx, p, "What network apps can do", Some("Each one is a separate switch. A request to buy or sell always opens a review sheet here, and nothing is signed until you press confirm on this device."), true);
+        setting_row(cx, p, t.rem_caps, Some(t.rem_caps_body), true);
         for (id, title, about) in rare_localapi::CAPS {
             rows.switch(cx, nav, p, &format!("netapi-cap-{id}"), title, about, info.caps.iter().any(|c| c == id), false);
         }
         let p = panel(cx, parent);
-        setting_row(cx, p, "Recent network activity", Some("The latest calls from tools on your network, also kept in the log."), true);
+        setting_row(cx, p, t.rem_activity, Some(t.rem_activity_body), true);
         if info.activity.is_empty() {
-            setting_row(cx, p, "Nothing yet", Some("Calls from network apps show up here."), false);
+            setting_row(cx, p, t.rem_activity_none, Some(t.rem_activity_none_body), false);
         }
         let now = now_secs() * 1000;
         for a in info.activity.iter().take(8) {
             let cap = rare_localapi::CAPS.iter().find(|c| c.0 == a.cap).map(|c| c.1).unwrap_or(a.cap.as_str());
-            let body = format!("{cap} - from {} - {}", a.from, if a.ok { "allowed" } else { "refused" });
+            let body = if a.ok { trf!(t.rem_call_allowed, cap = cap, from = a.from) } else { trf!(t.rem_call_refused, cap = cap, from = a.from) };
             setting_row(cx, p, &format!("{} - {}", ago_text(a.at_ms, now), a.what), Some(&body), false);
         }
     }
@@ -218,18 +222,19 @@ pub fn build_tools(cx: &mut Cx, nav: &mut Nav, parent: Id, rows: &mut RowSet, in
 pub fn ago_text(at_ms: u64, now_ms: u64) -> String {
     let s = now_ms.saturating_sub(at_ms) / 1000;
     match s {
-        0..=9 => "just now".into(),
-        10..=59 => format!("{s} s ago"),
-        60..=3599 => format!("{} min ago", s / 60),
-        _ => format!("{} h ago", s / 3600),
+        0..=9 => tr().settings_more.rem_just_now.to_string(),
+        10..=59 => trf!(tr().settings_more.rem_s_ago, n = s),
+        60..=3599 => trf!(tr().settings_more.rem_min_ago, n = s / 60),
+        _ => trf!(tr().settings_more.rem_h_ago, n = s / 3600),
     }
 }
 
 /// The short entry in System.
 pub fn build_system(cx: &mut Cx, nav: &mut Nav, parent: Id, rows: &mut RowSet, info: &SshInfo) {
     let p = panel(cx, parent);
-    let body = if info.on() { format!("On. {}. Keys and passwords are in Developer.", info.command()) } else { "Off. Turn it on to sign in from a computer. More options in Developer.".to_string() };
-    rows.switch(cx, nav, p, "ssh-system", "Remote access (SSH)", &body, info.on(), true);
+    let t = &tr().settings_more;
+    let body = if info.on() { trf!(t.rem_sys_on, command = info.command()) } else { t.rem_sys_off.to_string() };
+    rows.switch(cx, nav, p, "ssh-system", t.rem_title, &body, info.on(), true);
 }
 
 /// A on a focused row of ours: the action for the app, or None when the row is not ours.
@@ -267,17 +272,30 @@ pub fn press(rows: &mut RowSet, keys: &[SshKey], cx: &mut Cx, nav: &mut Nav, f: 
 
 /// Words for the OSK requests.
 pub mod ask {
+    use rare_i18n::tr;
+
+    /// English fallbacks; the `*_title()` functions give the player's language.
     pub const PASSWORD_TITLE: &str = "Password for remote sign-in";
     pub const KEY_TITLE: &str = "Public key (starts with ssh-ed25519 or ssh-rsa)";
     pub const GITHUB_TITLE: &str = "GitHub user name";
+
+    pub fn password_title() -> &'static str {
+        tr().settings_more.rem_ask_password
+    }
+    pub fn key_title() -> &'static str {
+        tr().settings_more.rem_ask_key
+    }
+    pub fn github_title() -> &'static str {
+        tr().settings_more.rem_ask_github
+    }
 }
 
 /// The confirm sheet for a pending key list: (title, sub, body).
 pub fn github_confirm(user: &str, n: usize) -> (String, String, String) {
     (
-        format!("Add {n} key{} from GitHub?", if n == 1 { "" } else { "s" }),
+        trn!(tr().settings_more.rem_gh_title, n),
         format!("github.com/{user}"),
-        format!("Anyone who controls the GitHub account {user} will be able to sign in to this device. Only continue if that is you."),
+        trf!(tr().settings_more.rem_gh_body, user = user),
     )
 }
 

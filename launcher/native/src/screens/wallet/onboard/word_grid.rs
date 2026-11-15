@@ -1,6 +1,7 @@
 //! A numbered grid of recovery words (launcher/src/wallet/ui/onboard/WordGrid.tsx): read-only when
 //! showing a new phrase, buttons when importing.
 
+use rare_i18n::tr;
 use crate::screens::wallet::markup::*;
 use std::collections::BTreeSet;
 
@@ -29,7 +30,7 @@ pub fn view<M>(g: &Grid, on: impl Fn(usize) -> M) -> El<M> {
             "bg-layer-01",
         ]);
         let num = span("w-6 shrink-0 text-right text-xs tabular-nums text-secondary").text((i + 1).to_string());
-        let word = span(cn(&["min-w-0 truncate font-mono text-base", when(w.is_empty(), "text-secondary")])).text(if w.is_empty() { "word" } else { w });
+        let word = span(cn(&["min-w-0 truncate font-mono text-base", when(w.is_empty(), "text-secondary")])).text(if w.is_empty() { tr().wallet_setup.word_placeholder } else { w });
         let cell = if g.pick { button(cn(&[&cls, "w-full"]), Some(on(i))).def(g.def_index == Some(i)) } else { div(cls) };
         li("min-w-0").key(i.to_string()).kid(cell.kid(num).kid(word))
     }))

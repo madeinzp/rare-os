@@ -28,6 +28,7 @@ use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Once};
+use rare_i18n::{tr, trf};
 
 /// The overlay kind of the connect sheet.
 pub const CONNECT: &str = "webconnect";
@@ -138,7 +139,6 @@ pub fn open_portal(url: &str) -> Result<(), String> {
 /// lib/webgames.ts normaliseUrl: https anywhere, http only on localhost, 127.0.0.1 and [::1]. A bare
 /// local address ("localhost:3000") is read as http, anything else without a scheme as https.
 pub fn normalise_url(input: &str) -> Result<String, String> {
-    const BAD: &str = "Web games need an https address (http works only for localhost)";
     let u = input.trim();
     let lower = u.to_ascii_lowercase();
     let local = |rest: &str| ["localhost", "127.0.0.1", "[::1]"].iter().any(|h| rest.strip_prefix(h).is_some_and(|t| t.is_empty() || t.starts_with([':', '/', '?', '#'])));
@@ -146,11 +146,11 @@ pub fn normalise_url(input: &str) -> Result<String, String> {
         format!("https://{}", &u[u.len() - rest.len()..])
     } else if let Some(rest) = lower.strip_prefix("http://") {
         if !local(rest) {
-            return Err(BAD.into());
+            return Err(tr().features_more.webgame_need_https.into());
         }
         format!("http://{}", &u[u.len() - rest.len()..])
     } else if lower.contains("://") {
-        return Err(BAD.into());
+        return Err(tr().features_more.webgame_need_https.into());
     } else if local(&lower) {
         format!("http://{u}")
     } else {
@@ -159,7 +159,7 @@ pub fn normalise_url(input: &str) -> Result<String, String> {
     let host = full.split("://").nth(1).and_then(|r| r.split(['/', '?', '#']).next()).unwrap_or("");
     let name = host.rsplit_once(':').filter(|(h, p)| !h.ends_with(']') || p.chars().all(|c| c.is_ascii_digit())).map(|(h, _)| h).unwrap_or(host);
     if name.is_empty() || name.contains(' ') || !(name.contains('.') || local(name)) {
-        return Err("That isn't a web address. Check it and try again.".into());
+        return Err(tr().features_more.webgame_not_address.into());
     }
     Ok(if full.split("://").nth(1).is_some_and(|r| r.contains('/')) { full } else { format!("{full}/") })
 }
@@ -461,7 +461,7 @@ fn site_of(u: &str) -> Option<String> {
 /// by the run id (`web:<slug>`), else by the site it plays on (a web game the player added by
 /// address, or one whose library id is not its slug), else by the profile's hosts.
 fn paying_game(st: &State, r: &Req) -> (Option<String>, String) {
-    let fallback = if r.game.is_empty() { "This game".to_string() } else { r.game.clone() };
+    let fallback = if r.game.is_empty() { tr().features_more.webgame_this_game.to_string() } else { r.game.clone() };
     let found = paying_slug(&st.sui_games, &r.game_id, &r.origin);
     match found {
         Some(slug) => {
@@ -494,7 +494,7 @@ pub fn on_event(st: &mut State, name: &str, payload: &Value, now: f64) {
         "wallet-connected" => {
             let game = payload.get("game").and_then(Value::as_str).unwrap_or("");
             if !game.is_empty() {
-                st.toast(format!("{game} connected to Rare Wallet"), crate::state::Tone::Info, now);
+                st.toast(trf!(tr().features_more.webgame_connected, game = game), crate::state::Tone::Info, now);
             }
         }
         "wallet-request" => {

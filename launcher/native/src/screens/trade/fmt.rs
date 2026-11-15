@@ -3,6 +3,8 @@
 //! `fundingPlan`) and PerpPage's `numSize` and `untilText`. When rare-trade lands with these, the
 //! screens switch to it.
 
+use rare_i18n::{tr, trf};
+
 /// The kit's `grouped` after JS rounding (ties away from zero), as toLocaleString does.
 pub fn grouped(v: f64, min: usize, max: usize) -> String {
     crate::kit::format::grouped(round_dp(v, max), min, max)
@@ -78,17 +80,17 @@ pub fn age(ms: Option<f64>, now_ms: f64) -> String {
     let Some(ms) = ms.filter(|m| *m != 0.0) else { return String::new() };
     let s = ((now_ms - ms) / 1000.0).max(0.0);
     if s < 60.0 {
-        format!("{}s", s.floor())
+        trf!(tr().trade.age_s, n = s.floor())
     } else if s < 3600.0 {
-        format!("{}m", (s / 60.0).floor())
+        trf!(tr().trade.age_m, n = (s / 60.0).floor())
     } else if s < 86400.0 {
-        format!("{}h", (s / 3600.0).floor())
+        trf!(tr().trade.age_h, n = (s / 3600.0).floor())
     } else if s < 86400.0 * 60.0 {
-        format!("{}d", (s / 86400.0).floor())
+        trf!(tr().trade.age_d, n = (s / 86400.0).floor())
     } else if s < 86400.0 * 365.0 {
-        format!("{}mo", (s / (86400.0 * 30.0)).floor())
+        trf!(tr().trade.age_mo, n = (s / (86400.0 * 30.0)).floor())
     } else {
-        format!("{}y", (s / (86400.0 * 365.0)).floor())
+        trf!(tr().trade.age_y, n = (s / (86400.0 * 365.0)).floor())
     }
 }
 
@@ -189,7 +191,7 @@ pub fn funding_pct(rate: f64, hours: f64) -> String {
 pub fn liq_text(liq: Option<f64>, entry: f64) -> String {
     match liq.filter(|l| l.is_finite()) {
         None => String::new(),
-        Some(l) if l <= entry * 1e-3 => "Near $0".into(),
+        Some(l) if l <= entry * 1e-3 => tr().trade.near_zero.into(),
         Some(l) => perp_px(Some(l)),
     }
 }
@@ -225,9 +227,9 @@ pub fn until_text(ms: f64, now_ms: f64) -> String {
     let h = s / 3600;
     let m = (s % 3600) / 60;
     if h > 0 {
-        format!("{h}h {m}m")
+        trf!(tr().trade.until_hm, h = h, m = m)
     } else {
-        format!("{m}m")
+        trf!(tr().trade.until_m, m = m)
     }
 }
 

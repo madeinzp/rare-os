@@ -2,6 +2,7 @@
 //! TrophyPopups.tsx, useCase.ts): the profile shelf, the trophy case (gamerscore, the games, a page
 //! per game with each trophy minted, unlocked (Claim) or locked) and the unlock pop-ups.
 
+use rare_i18n::{tr, trf, trn};
 use super::model::{claimable_keys, sort_rows, source_label, source_name, tier_name, CaseSummary, GameSummary, RarityFrom, RowFilter, RowState, SteamGame, Tier, TrophyRow, Trust};
 use crate::screens::sui::profile::{display_name, profile_avatar, Profile};
 use crate::screens::wallet::fmt::{date_md, local, num_locale};
@@ -13,7 +14,7 @@ pub fn tier_label<M>(tier: Tier, points: Option<u32>, class: &str) -> El<M> {
     span(cn(&["inline-flex items-center gap-[0.4rem] whitespace-nowrap text-meta text-muted", class]))
         .kid(dot(if tier == 3 { Tone::Primary } else { Tone::Muted }, false, ""))
         .kid(text(tier_name(tier)))
-        .kid_opt(points.map(|p| span("tabular-nums").text(format!("· {p} points"))))
+        .kid_opt(points.map(|p| span("tabular-nums").text(trf!(tr().trophies.dot_points, n = p))))
 }
 
 /// `TrophyArt`: colour when earned, grey when locked, a covered square when hidden.
@@ -125,15 +126,15 @@ pub struct ShowPin {
 /// `cardNote`: what to do next, else when it was last played.
 pub fn card_note(g: &CaseGame, now: i64, tz_min: i32) -> Option<String> {
     if g.sum.claimable > 0 && g.blocker.is_none() {
-        return Some(format!("{} to claim", g.sum.claimable));
+        return Some(trf!(tr().trophies.n_to_claim, n = g.sum.claimable));
     }
     if g.sum.minted > 0 {
-        return Some(format!("{} minted", g.sum.minted));
+        return Some(trf!(tr().trophies.n_minted, n = g.sum.minted));
     }
     if g.sum.score > 0 {
-        return Some(format!("{} points", n(g.sum.score as u64)));
+        return Some(trf!(tr().trophies.points_n, n = n(g.sum.score as u64)));
     }
-    g.sum.last_at.map(|t| format!("Last on {}", fmt_day(t, now, tz_min)))
+    g.sum.last_at.map(|t| trf!(tr().trophies.last_on, date = fmt_day(t, now, tz_min)))
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -171,7 +172,7 @@ pub enum Msg {
 /// `GameCard`.
 pub fn game_card(g: &CaseGame, note: Option<String>, def: bool, class: &str) -> El<Msg> {
     button(cn(&["tile tile-wide flex flex-col overflow-hidden rounded-card bg-l1 text-left", class]), Some(Msg::Open(Some(g.appid))))
-        .hint_a("Trophies")
+        .hint_a(tr().common.trophies)
         .def(def)
         .key(g.appid.to_string())
         .kid(game_art(&g.header, &g.name, ""))
@@ -179,7 +180,7 @@ pub fn game_card(g: &CaseGame, note: Option<String>, def: bool, class: &str) -> 
             span("flex flex-col gap-[0.5rem] px-[0.9rem] pb-[0.8rem] pt-[0.7rem]")
                 .kid(span("flex items-baseline gap-[0.75rem]").kid(span("focus-text min-w-0 flex-1 truncate text-body font-semibold").text(&g.name)).kid(span("tabular-nums text-small text-muted").text(format!("{}%", g.sum.pct))))
                 .kid(progress_line(g.sum.pct, ""))
-                .kid(span("flex items-center gap-[0.75rem] text-meta text-muted").kid(span("shrink-0 tabular-nums").text(format!("{} · {} of {}", g.label(), g.sum.unlocked, g.sum.total))).kid_opt(note.map(|n| span("ml-auto truncate").text(n)))),
+                .kid(span("flex items-center gap-[0.75rem] text-meta text-muted").kid(span("shrink-0 tabular-nums").text(trf!(tr().trophies.card_line, source = g.label(), unlocked = g.sum.unlocked, total = g.sum.total))).kid_opt(note.map(|n| span("ml-auto truncate").text(n)))),
         )
 }
 
@@ -193,31 +194,31 @@ pub fn profile_shelf(games: &[CaseGame], s: &CaseSummary, showcase: &[ShowPin], 
         return None;
     }
     let line = span("flex flex-wrap gap-x-[0.9rem] gap-y-[0.3rem] text-meta text-muted").kids([3u8, 2, 1, 0].iter().map(|t| {
-        span("inline-flex items-center gap-[0.35rem] tabular-nums").key(t.to_string()).kid(dot(if *t == 3 { Tone::Primary } else { Tone::Muted }, false, "")).kid(text(format!("{} {}", s.counted[*t as usize], tier_name(*t))))
+        span("inline-flex items-center gap-[0.35rem] tabular-nums").key(t.to_string()).kid(dot(if *t == 3 { Tone::Primary } else { Tone::Muted }, false, "")).kid(text(trf!(tr().trophies.count_tier, n = s.counted[*t as usize], tier = tier_name(*t))))
     }));
     let card = button("tile tile-wide flex w-[17rem] shrink-0 flex-col justify-between gap-[0.6rem] self-stretch rounded-card bg-l1 px-[1.1rem] py-[1rem] text-left", Some(Msg::Open(None)))
-        .hint_a("Trophy case")
-        .kid(span("").kid(span("block text-label text-secondary").text(format!("Level {}", s.level.0))).kid(span("block tabular-nums text-display font-semibold").text(n(s.score))))
+        .hint_a(tr().trophies.trophy_case)
+        .kid(span("").kid(span("block text-label text-secondary").text(trf!(tr().trophies.level_n, n = s.level.0))).kid(span("block tabular-nums text-display font-semibold").text(n(s.score))))
         .kid(level_line(s, ""))
         .kid(line);
     let mut tiles = vec![card];
     tiles.extend(showcase.iter().enumerate().map(|(i, p)| show_card(p, i, "w-[17rem] shrink-0 self-stretch")));
     tiles.extend(games.iter().take(10).map(|g| game_card(g, card_note(g, now, tz_min), false, "w-[17rem] shrink-0")));
-    let note = format!("{} unlocked in {} {}", n(s.unlocked_all), s.games, if s.games == 1 { "game" } else { "games" });
-    Some(rail("profile-trophies", Some(text("Trophies")), Some(text(note)), None, "", tiles))
+    let note = trn!(tr().trophies.unlocked_in_games, s.games, unlocked = n(s.unlocked_all));
+    Some(rail("profile-trophies", Some(text(tr().common.trophies)), Some(text(note)), None, "", tiles))
 }
 
 /// Progress to the next level.
 pub fn level_line<M>(s: &CaseSummary, class: &str) -> El<M> {
     let (_, into, span_) = s.level;
     let pct = if span_ > 0 { (into as f64 / span_ as f64 * 100.0).floor() as u32 } else { 0 };
-    span(cn(&["flex flex-col gap-[0.35rem]", class])).kid(progress_line(pct, "")).kid(span("text-meta tabular-nums text-muted").text(format!("{} to level {}", n(span_ - into), s.level.0 + 1)))
+    span(cn(&["flex flex-col gap-[0.35rem]", class])).kid(progress_line(pct, "")).kid(span("text-meta tabular-nums text-muted").text(trf!(tr().trophies.to_level, points = n(span_ - into), level = s.level.0 + 1)))
 }
 
 /// A showcase trophy (the profile and the case).
 pub fn show_card(p: &ShowPin, i: usize, class: &str) -> El<Msg> {
     button(cn(&["tile flex items-center gap-[0.9rem] rounded-card bg-l1 px-[0.9rem] py-[0.8rem] text-left", class]), Some(Msg::Open(p.appid)))
-        .hint_a("Open the game")
+        .hint_a(tr().trophies.open_game)
         .key(format!("show-{i}"))
         .kid(trophy_art(p.icon_url.as_deref(), None, false, &p.name, "3.5rem", ""))
         .kid(
@@ -228,8 +229,12 @@ pub fn show_card(p: &ShowPin, i: usize, class: &str) -> El<Msg> {
         )
 }
 
-pub const SORTS: [(GameSort, &str); 3] = [(GameSort::Recent, "Recent"), (GameSort::Completion, "Completion"), (GameSort::Name, "Name")];
-pub const FILTERS: [(RowFilter, &str); 3] = [(RowFilter::All, "All"), (RowFilter::Unlocked, "Unlocked"), (RowFilter::Locked, "Locked")];
+pub fn sorts() -> [(GameSort, &'static str); 3] {
+    [(GameSort::Recent, tr().trophies.sort_recent), (GameSort::Completion, tr().trophies.completion), (GameSort::Name, tr().trophies.name)]
+}
+pub fn filters() -> [(RowFilter, &'static str); 3] {
+    [(RowFilter::All, tr().common.all), (RowFilter::Unlocked, tr().trophies.unlocked), (RowFilter::Locked, tr().trophies.locked)]
+}
 
 fn next<T: PartialEq + Copy>(list: &[(T, &'static str)], cur: T) -> (T, &'static str) {
     let i = list.iter().position(|(v, _)| *v == cur).unwrap_or(0);
@@ -276,10 +281,19 @@ impl CaseState {
 /// The hint for X.
 pub fn case_hint(st: &CaseState) -> String {
     if st.view.is_some() {
-        format!("Show {}", next(&FILTERS, st.filter).1.to_lowercase())
+        match next(&filters(), st.filter).0 {
+            RowFilter::All => tr().trophies.show_all,
+            RowFilter::Unlocked => tr().trophies.show_unlocked,
+            RowFilter::Locked => tr().trophies.show_locked,
+        }
     } else {
-        format!("Sort by {}", next(&SORTS, st.sort).1.to_lowercase())
+        match next(&sorts(), st.sort).0 {
+            GameSort::Recent => tr().trophies.sort_by_recent,
+            GameSort::Completion => tr().trophies.sort_by_completion,
+            GameSort::Name => tr().trophies.sort_by_name,
+        }
     }
+    .to_string()
 }
 
 /// The trophy case. `games` are in the order of `st.sort`.
@@ -288,8 +302,8 @@ pub fn case_view(pr: &CaseProps, st: &CaseState) -> El<Msg> {
     let body = match (st.view, game) {
         (Some(_), Some(g)) => game_page(g, st.filter, pr),
         (Some(_), None) if !pr.loading => div("flex h-full items-center px-[3rem]").kid(empty(
-            "No achievements for this game here",
-            Some(text("Steam keeps achievements on this device once the game has run here at least once.")),
+            tr().trophies.no_achievements_title,
+            Some(text(tr().trophies.no_achievements_body)),
             vec![],
             "",
         )),
@@ -307,10 +321,10 @@ fn case_page(pr: &CaseProps, st: &CaseState) -> El<Msg> {
         header = header.kid_opt(profile_avatar(pr.prof, "4rem", ""));
     }
     header = header
-        .kid(div("min-w-0 flex-1").kid(div("text-label text-secondary").text("Trophies")).kid(h1("truncate text-title font-semibold tracking-[-0.02em]").text(if pr.prof.address.is_some() { display_name(pr.prof) } else { "Your trophies".into() })))
+        .kid(div("min-w-0 flex-1").kid(div("text-label text-secondary").text(tr().common.trophies)).kid(h1("truncate text-title font-semibold tracking-[-0.02em]").text(if pr.prof.address.is_some() { display_name(pr.prof) } else { tr().trophies.your_trophies.into() })))
         .kid(
             div("w-[20rem] shrink-0")
-                .kid(div("flex items-baseline justify-between gap-[1rem]").kid(span("text-label text-secondary").text(format!("Level {}", s.level.0))).kid(span("tabular-nums text-title font-semibold").text(n(s.score))))
+                .kid(div("flex items-baseline justify-between gap-[1rem]").kid(span("text-label text-secondary").text(trf!(tr().trophies.level_n, n = s.level.0))).kid(span("tabular-nums text-title font-semibold").text(n(s.score))))
                 .kid(level_line(s, "mt-[0.5rem]")),
         );
     let has_games = !pr.games.is_empty();
@@ -318,15 +332,15 @@ fn case_page(pr: &CaseProps, st: &CaseState) -> El<Msg> {
     let not_counted = s.score_all.saturating_sub(s.score);
     let mut stats = stat_line(
         vec![
-            ("Rare score".into(), Some(text(n(s.score)))),
+            (tr().trophies.rare_score.into(), Some(text(n(s.score)))),
             tier_item(3),
             tier_item(2),
             tier_item(1),
             tier_item(0),
-            ("Unlocked".into(), has_games.then(|| text(format!("{} of {}", n(s.unlocked_all), n(s.total_all))))),
-            ("Games".into(), has_games.then(|| text(s.games.to_string()))),
-            ("Not counted".into(), (not_counted > 0).then(|| text(format!("{} points", n(not_counted))))),
-            ("Minted".into(), s.points.map(|_| text(n(s.trophies)))),
+            (tr().trophies.unlocked.into(), has_games.then(|| text(trf!(tr().trophies.x_of_y, a = n(s.unlocked_all), b = n(s.total_all))))),
+            (tr().common.games.into(), has_games.then(|| text(s.games.to_string()))),
+            (tr().trophies.not_counted.into(), (not_counted > 0).then(|| text(trf!(tr().trophies.points_n, n = n(not_counted))))),
+            (tr().trophies.minted.into(), s.points.map(|_| text(n(s.trophies)))),
         ],
         true,
         true,
@@ -342,9 +356,9 @@ fn case_page(pr: &CaseProps, st: &CaseState) -> El<Msg> {
         }
     }
     let note = match (pr.checked, pr.device_note) {
-        (_, Some(d)) => format!("Every unlock shows here. The Rare score counts verified ones, and this device's aren't verified yet: {d}"),
-        (true, None) => "Every unlock shows here. The Rare score counts verified ones: unlocks on a SuiPlay that proves it runs Rare OS (its TPM) and match your play sessions, and retro trophies in hardcore.".to_string(),
-        (false, None) => "Every unlock shows here. The Rare score counts verified ones once rare.market has checked them (turn on friends to send them).".to_string(),
+        (_, Some(d)) => trf!(tr().trophies.case_note_device, reason = d),
+        (true, None) => tr().trophies.case_note_checked.to_string(),
+        (false, None) => tr().trophies.case_note_unchecked.to_string(),
     };
     let mut d = div("h-full overflow-y-auto pb-[3rem]").attr("data-scroll", "").kid(header).kid_opt(stats).kid(p("mx-[2.5rem] mt-[0.75rem] max-w-[60rem] text-small text-muted").text(note));
     // The showcase: three slots, on the profile and on rare.market.
@@ -357,20 +371,20 @@ fn case_page(pr: &CaseProps, st: &CaseState) -> El<Msg> {
             row = row.kid(
                 div("flex min-h-[6.75rem] flex-col justify-center gap-[0.25rem] rounded-card border border-border-light px-[1.1rem]")
                     .key(format!("slot-{i}"))
-                    .kid(span("text-body font-medium text-fg/70").text("Empty slot"))
-                    .kid(span("text-small text-muted").text("Press A on an unlocked trophy to show it here")),
+                    .kid(span("text-body font-medium text-fg/70").text(tr().trophies.empty_slot))
+                    .kid(span("text-small text-muted").text(tr().trophies.empty_slot_hint)),
             );
         }
-        d = d.kid(section_head(text("Showcase"), Some(text("On your profile and rare.market")), None, "mb-[0.9rem] mt-[2rem] px-[2.5rem]")).kid(row);
+        d = d.kid(section_head(text(tr().trophies.showcase), Some(text(tr().trophies.showcase_note)), None, "mb-[0.9rem] mt-[2rem] px-[2.5rem]")).kid(row);
     }
-    let right = (pr.games.len() > 1).then(|| span("flex items-center gap-[0.75rem]").kid(glyph("x")).kid(segmented(&SORTS.map(|(v, l)| (sort_key(v), l)), sort_key(st.sort), "")));
-    d = d.kid(section_head(text("Games"), has_games.then(|| text(format!("{} with trophies", pr.games.len()))), right, "mb-[0.9rem] mt-[2rem] px-[2.5rem]"));
+    let right = (pr.games.len() > 1).then(|| span("flex items-center gap-[0.75rem]").kid(glyph("x")).kid(segmented(&sorts().map(|(v, l)| (sort_key(v), l)), sort_key(st.sort), "")));
+    d = d.kid(section_head(text(tr().common.games), has_games.then(|| text(trf!(tr().trophies.n_with_trophies, n = pr.games.len()))), right, "mb-[0.9rem] mt-[2rem] px-[2.5rem]"));
     if has_games {
         d = d.kid(div("grid grid-cols-4 gap-[1.1rem] px-[2.5rem]").attr("data-nav-group", "trophy-games").kids(pr.games.iter().enumerate().map(|(i, g)| game_card(g, card_note(g, pr.now, pr.tz_min), i == def_idx, ""))));
     } else if !pr.loading {
         d = d.kid(empty(
-            "No trophies yet",
-            Some(text("Play any game and Rare's trophies start with the first launch. Steam, RetroAchievements, Epic and GOG achievements show up here too.")),
+            tr().trophies.no_trophies_title,
+            Some(text(tr().trophies.no_trophies_body)),
             vec![],
             "mx-[2.5rem]",
         ));
@@ -410,12 +424,12 @@ fn game_page(g: &CaseGame, filter: RowFilter, pr: &CaseProps) -> El<Msg> {
     let not_counted = g.sum.score_all.saturating_sub(g.sum.score);
     let stats = stat_line(
         vec![
-            ("Unlocked".into(), Some(text(format!("{} of {}", g.sum.unlocked, g.sum.total)))),
-            ("Completion".into(), Some(text(format!("{}%", g.sum.pct)))),
-            ("Rare score".into(), Some(text(n(g.sum.score as u64)))),
-            ("Not counted".into(), (not_counted > 0).then(|| text(format!("{} points", n(not_counted as u64))))),
-            ("Minted".into(), g.on_chain.then(|| text(g.sum.minted.to_string()))),
-            ("Players on Rare".into(), g.chain_players.filter(|p| *p > 0 && g.on_chain).map(|p| text(n(p)))),
+            (tr().trophies.unlocked.into(), Some(text(trf!(tr().trophies.x_of_y, a = g.sum.unlocked, b = g.sum.total)))),
+            (tr().trophies.completion.into(), Some(text(format!("{}%", g.sum.pct)))),
+            (tr().trophies.rare_score.into(), Some(text(n(g.sum.score as u64)))),
+            (tr().trophies.not_counted.into(), (not_counted > 0).then(|| text(trf!(tr().trophies.points_n, n = n(not_counted as u64))))),
+            (tr().trophies.minted.into(), g.on_chain.then(|| text(g.sum.minted.to_string()))),
+            (tr().trophies.players_on_rare.into(), g.chain_players.filter(|p| *p > 0 && g.on_chain).map(|p| text(n(p)))),
         ],
         false,
         false,
@@ -424,33 +438,31 @@ fn game_page(g: &CaseGame, filter: RowFilter, pr: &CaseProps) -> El<Msg> {
     let mut acts = div("flex shrink-0 flex-col items-end gap-[0.5rem]").attr("data-nav-group", "trophy-actions").attr("data-nav-remember", "");
     if can_claim || claiming.is_some() {
         let label = if claiming.is_some() {
-            "Claiming".to_string()
-        } else if keys.len() == 1 {
-            "Claim 1 trophy".into()
+            tr().trophies.claiming.to_string()
         } else {
-            format!("Claim {} trophies", keys.len())
+            trn!(tr().trophies.claim_n, keys.len())
         };
-        acts = acts.kid(button_el(ButtonSpec::new(&label).v(BVariant::Primary).size(BSize::Lg).def(true).hint("Claim").disabled(claiming.is_some()), Some(Msg::Claim(g.appid, keys.clone()))));
+        acts = acts.kid(button_el(ButtonSpec::new(&label).v(BVariant::Primary).size(BSize::Lg).def(true).hint(tr().trophies.claim).disabled(claiming.is_some()), Some(Msg::Claim(g.appid, keys.clone()))));
     } else if let Some(b) = g.blocker.as_ref().filter(|b| g.sum.unminted > 0 && !b.is_empty()) {
         // Why Claim isn't there: a line, not a button that can't be pressed.
         acts = acts.kid(p("max-w-[20rem] text-right text-small text-muted").text(b));
     }
     if g.lib_id.is_some() && !g.source_complete() {
-        let label = if g.marked { "Marked complete" } else { "Mark complete" };
-        acts = acts.kid(button_el(ButtonSpec::new(label).v(if g.marked { BVariant::Secondary } else { BVariant::Ghost }).size(BSize::Lg).hint(if g.marked { "Not complete" } else { "Mark complete" }), Some(Msg::Complete(g.appid))));
+        let label = if g.marked { tr().trophies.marked_complete } else { tr().trophies.mark_complete };
+        acts = acts.kid(button_el(ButtonSpec::new(label).v(if g.marked { BVariant::Secondary } else { BVariant::Ghost }).size(BSize::Lg).hint(if g.marked { tr().trophies.not_complete } else { tr().trophies.mark_complete }), Some(Msg::Complete(g.appid))));
     }
-    let label = if hardcore { format!("{} · Hardcore", g.label()) } else if g.steam.source == "librarycache" { "Steam · from your Steam library".to_string() } else { g.label().to_string() };
+    let label = if hardcore { trf!(tr().trophies.source_hardcore, source = g.label()) } else if g.steam.source == "librarycache" { tr().trophies.steam_library_source.to_string() } else { g.label().to_string() };
     let header = el(Tag::Div, "flex items-end gap-[1.5rem] px-[2.5rem] pt-[2.25rem]")
         .attr("data-tag", "header")
         .kid(div("w-[17rem] shrink-0 overflow-hidden rounded-card").kid(game_art(&g.header, &g.name, "")))
         .kid(div("min-w-0 flex-1").kid(div("text-label text-secondary").text(label)).kid(h1("truncate text-title font-semibold tracking-[-0.02em]").text(&g.name)).kid_opt(stats))
         .kid(acts);
-    let right = span("flex items-center gap-[0.75rem]").kid(glyph("x")).kid(segmented(&FILTERS.map(|(v, l)| (filter_key(v), l)), filter_key(filter), ""));
+    let right = span("flex items-center gap-[0.75rem]").kid(glyph("x")).kid(segmented(&filters().map(|(v, l)| (filter_key(v), l)), filter_key(filter), ""));
     let src = g.label();
     let mut first = !can_claim;
     let mut page = div("h-full overflow-y-auto pb-[3rem]").attr("data-scroll", "").kid(header);
-    let head = |e: El<Msg>| div("px-[2.5rem]").kid(head_row(COLS, "", vec![span(""), span("").text("Trophy"), span("").text("Tier"), span("text-right").text("Rarity"), span("text-right").text("Status")])).kid(e);
-    let empty_line = |none_yet: bool| div("px-[0.75rem] py-[1rem] text-small text-muted").text(if none_yet { "Loading the achievements." } else if filter == RowFilter::Locked { "Nothing left to unlock." } else { "Nothing unlocked yet." });
+    let head = |e: El<Msg>| div("px-[2.5rem]").kid(head_row(COLS, "", vec![span(""), span("").text(tr().trophies.col_trophy), span("").text(tr().trophies.col_tier), span("text-right").text(tr().trophies.col_rarity), span("text-right").text(tr().trophies.col_status)])).kid(e);
+    let empty_line = |none_yet: bool| div("px-[0.75rem] py-[1rem] text-small text-muted").text(if none_yet { tr().trophies.loading_achievements } else if filter == RowFilter::Locked { tr().trophies.nothing_left } else { tr().trophies.nothing_unlocked });
     // The store's achievements first (Steam-style), then Rare's own; the filter sits on the first list.
     let has_source = !g.rows.is_empty() || g.steam.total > 0;
     let mut right = Some(right);
@@ -464,7 +476,7 @@ fn game_page(g: &CaseGame, filter: RowFilter, pr: &CaseProps) -> El<Msg> {
         if rows.is_empty() {
             list = list.kid(empty_line(g.rows.is_empty()));
         }
-        page = page.kid(section_head(text(if src == "Retro trophies" { src.to_string() } else { format!("{src} achievements") }), Some(text(format!("{} shown", rows.len()))), right.take(), "mb-[0.5rem] mt-[2rem] px-[2.5rem]")).kid(head(list));
+        page = page.kid(section_head(text(if src == tr().trophies.retro_trophies { src.to_string() } else { trf!(tr().trophies.source_achievements, source = src) }), Some(text(trf!(tr().trophies.n_shown, n = rows.len()))), right.take(), "mb-[0.5rem] mt-[2rem] px-[2.5rem]")).kid(head(list));
     }
     if !g.milestones.is_empty() {
         let mut list = div("").attr("data-nav-group", format!("trophy-rare-{}", filter_key(filter)));
@@ -474,14 +486,14 @@ fn game_page(g: &CaseGame, filter: RowFilter, pr: &CaseProps) -> El<Msg> {
         if ms.is_empty() {
             list = list.kid(empty_line(false));
         }
-        page = page.kid(section_head(text("Rare trophies"), None, right.take(), "mb-[0.5rem] mt-[2rem] px-[2.5rem]")).kid(head(list));
+        page = page.kid(section_head(text(tr().trophies.rare_trophies), None, right.take(), "mb-[0.5rem] mt-[2rem] px-[2.5rem]")).kid(head(list));
     }
     page
 }
 
 fn trust_mark(r: &TrophyRow) -> Option<El<Msg>> {
     match &r.trust {
-        Trust::Verified if r.state != RowState::Locked => Some(span("inline-flex text-muted").attr("title", "Verified on SuiPlay").kid(icon("check", "").attr("size", "0.85rem").attr("stroke-width", "2.5"))),
+        Trust::Verified if r.state != RowState::Locked => Some(span("inline-flex text-muted").attr("title", tr().trophies.verified_suiplay).kid(icon("check", "").attr("size", "0.85rem").attr("stroke-width", "2.5"))),
         _ => None,
     }
 }
@@ -495,50 +507,54 @@ fn trophy_row(appid: u32, r: &TrophyRow, def: bool, claimable: bool, busy: bool,
     let status = match r.state {
         RowState::Minted if r.minted.is_some() => {
             let m = r.minted.as_ref().unwrap();
-            span("text-right").kid(span("block text-small font-medium text-fg").text("Minted")).kid(span("block truncate text-label text-muted").text(format!("{} · #{}", source_name(m.source), n(m.number))))
+            span("text-right").kid(span("block text-small font-medium text-fg").text(tr().trophies.minted)).kid(span("block truncate text-label text-muted").text(trf!(tr().trophies.source_number, source = source_name(m.source), number = n(m.number))))
         }
         RowState::Unlocked => {
             let top = if busy {
-                "Claiming".to_string()
+                tr().trophies.claiming.to_string()
             } else if claimable {
-                "Ready to claim".into()
+                tr().trophies.ready_to_claim.into()
             } else if pinning {
-                "Pinning".into()
+                tr().trophies.pinning.into()
             } else if r.pinned.is_some() {
-                "On chain".into()
+                tr().trophies.on_chain.into()
             } else {
-                "Unlocked".into()
+                tr().trophies.unlocked.into()
             };
             let bottom = match (&r.trust, r.at) {
-                (Trust::Flagged(_), _) => Some("Not counted".to_string()),
-                (_, Some(t)) => Some(format!("{}{}", fmt_day(t, now, tz_min), if r.hardcore { " · Hardcore" } else { "" })),
-                (_, None) => r.hardcore.then(|| "Hardcore".to_string()),
+                (Trust::Flagged(_), _) => Some(tr().trophies.not_counted.to_string()),
+                (_, Some(t)) => Some(if r.hardcore { trf!(tr().trophies.date_hardcore, date = fmt_day(t, now, tz_min)) } else { fmt_day(t, now, tz_min) }),
+                (_, None) => r.hardcore.then(|| tr().trophies.hardcore.to_string()),
             };
             span("text-right")
                 .kid(span("flex items-center justify-end gap-[0.35rem]").kid_opt(trust_mark(r)).kid(span(cn(&["text-small font-medium", if busy || pinning { "text-muted" } else { "text-fg" }])).text(top)))
                 .kid_opt(bottom.map(|b| sub(span("block text-label text-muted").text(b))))
         }
         _ => span("text-right")
-            .kid(span("block text-small text-muted").text("Locked"))
-            .kid_opt(r.progress.map(|(have, need)| span("block text-label tabular-nums text-muted").text(if r.key == "rare:streak7" { format!("{have} of {need} days") } else { format!("{have} of {need} hours") }))),
+            .kid(span("block text-small text-muted").text(tr().trophies.locked))
+            .kid_opt(r.progress.map(|(have, need)| span("block text-label tabular-nums text-muted").text(if r.key == "rare:streak7" { trf!(tr().trophies.progress_days, have = have, need = need) } else { trf!(tr().trophies.progress_hours, have = have, need = need) }))),
     };
     let mut rarity = span("text-right");
     if let Some(p_) = r.rarity {
         let from = match r.rarity_from {
-            Some(RarityFrom::Rare) => "on Rare".to_string(),
-            _ if src == "Steam" || src == "GOG" => format!("on {src}"),
-            _ => "of players".to_string(),
+            Some(RarityFrom::Rare) => tr().trophies.on_rare.to_string(),
+            _ if src == "Steam" || src == "GOG" => trf!(tr().trophies.on_source, source = src),
+            _ => tr().trophies.of_players.to_string(),
         };
         rarity = rarity.kid(span("block tabular-nums text-small text-fg/85").text(fmt_pct(p_))).kid(span("block text-label text-muted").text(from));
     }
-    let name = if r.masked { "Hidden trophy".to_string() } else { r.name.clone() };
-    let desc = if r.masked { "Keep playing to reveal it.".to_string() } else { r.description.clone() };
+    let name = if r.masked { tr().trophies.hidden_trophy.to_string() } else { r.name.clone() };
+    let desc = if r.masked { tr().trophies.keep_playing.to_string() } else { r.description.clone() };
     let how = {
-        let so_far = r.progress.map(|(have, need)| if r.key == "rare:streak7" { format!(" {have} of {need} days so far.") } else { format!(" {have} of {need} hours so far.") }).unwrap_or_default();
-        format!("Locked. {}{so_far}", if r.masked { "Keep playing to reveal it.".to_string() } else { r.description.clone() })
+        let desc = if r.masked { tr().trophies.keep_playing.to_string() } else { r.description.clone() };
+        match r.progress {
+            Some((have, need)) if r.key == "rare:streak7" => trf!(tr().trophies.locked_how_days, desc = desc, have = have, need = need),
+            Some((have, need)) => trf!(tr().trophies.locked_how_hours, desc = desc, have = have, need = need),
+            None => trf!(tr().trophies.locked_how, desc = desc),
+        }
     };
     let msg = if claimable && !busy { Msg::Claim(appid, vec![r.key.clone()]) } else if !locked { Msg::Row(appid, r.key.clone()) } else { Msg::Locked(how) };
-    let hint = if claimable && !busy { "Claim" } else if !locked { "Options" } else { "How to unlock" };
+    let hint = if claimable && !busy { tr().trophies.claim } else if !locked { tr().common.options } else { tr().trophies.how_to_unlock };
     button(cn(&["grid h-[4.25rem] w-full items-center gap-x-[0.9rem] rounded-card px-[0.75rem] text-left", COLS]), Some(msg))
         .def(def)
         .hint_a(hint)
@@ -546,7 +562,7 @@ fn trophy_row(appid: u32, r: &TrophyRow, def: bool, claimable: bool, busy: bool,
         .kid(trophy_art(r.icon_url.as_deref(), gray, r.masked, &r.name, "2.75rem", ""))
         .kid(
             span("min-w-0")
-                .kid(span("flex items-center gap-[0.45rem]").kid(span(cn(&["truncate text-body font-medium", if locked { "text-fg/70" } else { "text-fg" }])).text(name)).kid_if(r.showcased, || span("shrink-0 text-label text-muted").text("On profile")))
+                .kid(span("flex items-center gap-[0.45rem]").kid(span(cn(&["truncate text-body font-medium", if locked { "text-fg/70" } else { "text-fg" }])).text(name)).kid_if(r.showcased, || span("shrink-0 text-label text-muted").text(tr().trophies.on_profile)))
                 .kid(span("block truncate text-small text-muted").text(desc)),
         )
         .kid(span("").kid_opt(r.tier.map(|t| tier_label(t, None, ""))))
@@ -568,9 +584,9 @@ pub fn case_update(st: &mut CaseState, msg: &Msg) -> Option<bool> {
         }
         Msg::Next => {
             if st.view.is_some() {
-                st.filter = next(&FILTERS, st.filter).0;
+                st.filter = next(&filters(), st.filter).0;
             } else {
-                st.sort = next(&SORTS, st.sort).0;
+                st.sort = next(&sorts(), st.sort).0;
             }
             Some(false)
         }
@@ -600,13 +616,13 @@ pub struct Popup {
 pub fn popup_view<M>(p: Option<&Popup>, gaming: bool) -> Option<El<M>> {
     let p = p.filter(|_| !gaming)?;
     let label = if p.minted {
-        "Trophy minted"
+        tr().trophies.popup_minted
     } else if p.tier.is_some() {
-        "Trophy unlocked"
+        tr().trophies.popup_trophy
     } else {
-        "Achievement unlocked"
+        tr().trophies.popup_achievement
     };
-    let meta = [p.game.clone(), p.tier.map(|t| tier_name(t).to_string()), p.points.map(|x| format!("{x} points")), p.source.map(|s| source_name(s).to_string())].into_iter().flatten().collect::<Vec<_>>().join(" · ");
+    let meta = [p.game.clone(), p.tier.map(|t| tier_name(t).to_string()), p.points.map(|x| trf!(tr().trophies.points_n, n = x)), p.source.map(|s| source_name(s).to_string())].into_iter().flatten().collect::<Vec<_>>().join(" · ");
     Some(
         div("pop flex w-[28rem] items-center gap-[0.85rem] rounded-card border border-border-light bg-l3 py-[0.7rem] pl-[0.7rem] pr-[1rem] shadow-xl shadow-black/30")
             .role("status")
@@ -615,7 +631,7 @@ pub fn popup_view<M>(p: Option<&Popup>, gaming: bool) -> Option<El<M>> {
                 div("min-w-0 flex-1")
                     .kid(div("text-label text-secondary").text(label))
                     .kid(div("truncate text-body font-semibold text-fg").text(&p.name))
-                    .kid(div("truncate text-meta text-muted").text(format!("{meta}{}", if p.more > 0 { format!(" and {} more", p.more) } else { String::new() }))),
+                    .kid(div("truncate text-meta text-muted").text(if p.more > 0 { trf!(tr().trophies.meta_more, meta = meta, n = p.more) } else { meta })),
             ),
     )
 }

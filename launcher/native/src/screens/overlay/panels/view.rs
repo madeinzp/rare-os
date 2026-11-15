@@ -1,5 +1,6 @@
 //! Drawing for the panels (overlay/panels.tsx ItemList, MarketList, Trophies, ItemDetail).
 
+use rare_i18n::{tr, trf};
 use super::money::{amount, fmt_sui, short_name, venue_name, Fmt};
 use super::trade::{offer_net_mist, Offer};
 use super::trophies::{sort_rows, RowFilter, RowState};
@@ -119,26 +120,26 @@ pub fn items(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &PanelData, _now: f64) {
     let r = cx.r();
     let Some(items) = &d.items else { return };
     if items.is_empty() {
-        calm(cx, parent, "You don't hold any items from this game yet. The Market tab has some for sale.");
+        calm(cx, parent, tr().overlay.items_empty);
         return;
     }
-    head_row(cx, parent, &["Item", "Floor", "Offer", "Last"]);
+    head_row(cx, parent, &[tr().overlay.col_item, tr().overlay.col_floor, tr().overlay.col_offer, tr().overlay.col_last]);
     let group = cx.scene.add(parent, s().col().done(), Node::default());
     for (i, it) in items.iter().enumerate() {
         let row = trow(cx, group);
         thumb(cx, row, 2.6, &it.image, &it.name);
         let sub = match &it.listing {
-            Some(l) => format!("Listed for {} SUI", fmt_sui(Some(l.price_mist), Fmt::trim(2))),
+            Some(l) => trf!(tr().overlay.listed_for_row, amount = fmt_sui(Some(l.price_mist), Fmt::trim(2))),
             None => it.collection.clone().unwrap_or_default(),
         };
         name_col(cx, row, short_name(&it.name, it.collection.as_deref()), tok::FG, Some(&sub));
         price_cell(cx, row, price_text(it.floor_mist));
         price_cell(cx, row, price_text(it.top_offer_mist));
         price_cell(cx, row, price_text(it.last_sale_mist));
-        nav.add(row_focus(row, G_ITEMS, i as u32, "Sell or list"));
+        nav.add(row_focus(row, G_ITEMS, i as u32, tr().overlay.sell_or_list));
     }
     let n = cx.scene.add(parent, s().col().px(0.75 * r).pt(0.6 * r).done(), Node::default());
-    label(cx, n, ty::LABEL, 400, tok::MUTED, false, "Prices in SUI.");
+    label(cx, n, ty::LABEL, 400, tok::MUTED, false, tr().overlay.prices_in_sui);
 }
 
 /// A SUI amount: the number, then the unit muted at the same size.
@@ -154,7 +155,7 @@ fn sui_amount(cx: &mut Cx, parent: Id, mist: i128, t: (f32, f32), weight: u16, c
 pub fn market(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &PanelData, _now: f64) {
     let Some(items) = &d.market else { return };
     if items.is_empty() {
-        calm(cx, parent, "Nothing from this game is listed right now.");
+        calm(cx, parent, tr().overlay.market_empty);
         return;
     }
     let group = cx.scene.add(parent, s().col().done(), Node::default());
@@ -164,7 +165,7 @@ pub fn market(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &PanelData, _now: f64) 
         let mut sub = it.collection.clone().unwrap_or_default();
         if let Some(l) = &it.listing {
             if !l.venue.is_empty() {
-                sub.push_str(&format!(" on {}", venue_name(&l.venue)));
+                sub = if sub.is_empty() { trf!(tr().overlay.on_venue, venue = venue_name(&l.venue)) } else { trf!(tr().overlay.coll_on_venue, collection = sub, venue = venue_name(&l.venue)) };
             }
         }
         name_col(cx, row, short_name(&it.name, it.collection.as_deref()), tok::FG, Some(&sub));
@@ -177,7 +178,7 @@ pub fn market(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &PanelData, _now: f64) 
                 label(cx, row, ty::SMALL, 500, tok::MUTED, true, "--");
             }
         }
-        nav.add(row_focus(row, G_MARKET, i as u32, "Buy"));
+        nav.add(row_focus(row, G_MARKET, i as u32, tr().overlay.buy_hint));
     }
 }
 
@@ -185,7 +186,7 @@ pub fn trophies(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &PanelData, _now: f64
     let r = cx.r();
     let rows = d.rare.as_ref().map(|g| sort_rows(&g.rows, RowFilter::All)).unwrap_or_default();
     if d.trophies_ready && d.trophies.is_empty() && rows.is_empty() {
-        calm(cx, parent, &format!("No trophies from {} yet. Achievements and rewards the game gives you show up here.", d.game));
+        calm(cx, parent, &trf!(tr().overlay.trophies_empty, game = d.game));
         return;
     }
     let col = cx.scene.add(parent, s().col().gap(1.0 * r).done(), Node::default());
@@ -201,7 +202,7 @@ pub fn trophies(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &PanelData, _now: f64
             thumb(cx, row, 2.6, &art, &row_.name);
             let col_ = cx.scene.add(row, s().col().grow().done(), Node::default());
             let st = tab(cx, ty::SMALL, 500).truncate();
-            let title = if row_.masked { "Hidden trophy" } else { row_.name.as_str() };
+            let title = if row_.masked { tr().overlay.hidden_trophy } else { row_.name.as_str() };
             cx.scene.add_text(cx.t, col_, s().done(), title, st, if locked { tok::MUTED } else { tok::FG });
             if !row_.masked && !row_.description.is_empty() {
                 let st = tab(cx, ty::LABEL, 400).truncate();
@@ -215,7 +216,7 @@ pub fn trophies(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &PanelData, _now: f64
         let sec = cx.scene.add(col, s().col().done(), Node::default());
         if !rows.is_empty() {
             let h = cx.scene.add(sec, s().col().px(0.75 * r).pb(0.4 * r).done(), Node::default());
-            label(cx, h, ty::LABEL, 400, tok::MUTED, false, "From the game");
+            label(cx, h, ty::LABEL, 400, tok::MUTED, false, tr().overlay.from_the_game);
         }
         let grid = cx.scene.add(sec, s().row().wrap().gap(0.75 * r).px(0.4 * r).done(), Node::default());
         // Three columns across the body: 32rem aside, 1px rule, 0.65rem padding each side, 0.4rem inset.
@@ -234,18 +235,22 @@ pub fn trophies(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &PanelData, _now: f64
 
 /// "3 of 8 unlocked, 1 minted".
 pub fn trophy_head(unlocked: usize, total: usize, minted: usize) -> String {
-    format!("{unlocked} of {total} unlocked{}", if minted > 0 { format!(", {minted} minted") } else { String::new() })
+    if minted > 0 {
+        trf!(tr().overlay.trophy_head_minted, unlocked = unlocked, total = total, minted = minted)
+    } else {
+        trf!(tr().overlay.trophy_head, unlocked = unlocked, total = total)
+    }
 }
 
 /// The listing price choices: Floor, Floor +10%, and the current listing when it differs.
 pub fn price_choices(floor: Option<i128>, listed: Option<i128>) -> Vec<(&'static str, &'static str, i128)> {
     let mut v = Vec::new();
     if let Some(f) = floor.filter(|f| *f != 0) {
-        v.push(("Floor", "floor", f));
-        v.push(("Floor +10%", "floor+10", f * 110 / 100));
+        v.push((tr().overlay.price_floor, "floor", f));
+        v.push((tr().overlay.price_floor_plus, "floor+10", f * 110 / 100));
     }
     if let Some(l) = listed.filter(|l| *l != 0 && Some(*l) != floor) {
-        v.push(("Current", "current", l));
+        v.push((tr().overlay.price_current, "current", l));
     }
     v
 }
@@ -253,9 +258,9 @@ pub fn price_choices(floor: Option<i128>, listed: Option<i128>) -> Vec<(&'static
 /// The line under the Sell button.
 pub fn sell_note(o: &Offer, net: i128) -> String {
     if net < o.price_mist {
-        format!("Best offer {} SUI on {}. You get {} SUI after fees and royalty.", amount(o.price_mist), venue_name(&o.venue), amount(net))
+        trf!(tr().overlay.sell_note_fees, amount = amount(o.price_mist), venue = venue_name(&o.venue), net = amount(net))
     } else {
-        format!("Best offer on {}. You get the full price.", venue_name(&o.venue))
+        trf!(tr().overlay.sell_note_full, venue = venue_name(&o.venue))
     }
 }
 
@@ -312,24 +317,24 @@ pub fn detail(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &PanelData, index: usiz
         cx.scene.add_text(cx.t, names, s().done(), c, st, tok::MUTED);
     }
     if let Some(l) = &it.listing {
-        wrapped(cx, names, ty::SMALL, 400, tok::MUTED, &format!("Listed for {} SUI on {}", amount(l.price_mist), venue_name(&l.venue)));
+        wrapped(cx, names, ty::SMALL, 400, tok::MUTED, &trf!(tr().overlay.listed_for_on, amount = amount(l.price_mist), venue = venue_name(&l.venue)));
     }
     let best = match &v.offer {
         OfferState::Ready(o) | OfferState::Blocked(o, _) => Some(o.price_mist),
         _ => it.top_offer_mist,
     };
-    stat_line(cx, page, &[("Floor", floor), ("Best offer", best), ("Last sale", it.last_sale_mist)]);
+    stat_line(cx, page, &[(tr().overlay.stat_floor, floor), (tr().overlay.stat_best_offer, best), (tr().overlay.stat_last_sale, it.last_sale_mist)]);
 
     if !can_sign {
         let signed_out = v.account == Account::SignedOut;
         let c = cx.scene.add(page, s().col().items_start().gap(0.75 * r).done(), Node::default());
-        wrapped(cx, c, ty::SMALL, 400, tok::MUTED, if signed_out { "Sign in with a passkey to sell." } else { "Add a passkey to sell." });
-        let b = button(cx, c, if signed_out { "Sign in" } else { "Add a passkey" }, Variant::Primary, Sz::Md, false).tag(1).sid("add-passkey").hint(if signed_out { "Sign in" } else { "Add a passkey" });
+        wrapped(cx, c, ty::SMALL, 400, tok::MUTED, if signed_out { tr().overlay.sign_in_to_sell } else { tr().overlay.add_passkey_to_sell });
+        let b = button(cx, c, if signed_out { tr().common.sign_in } else { tr().overlay.add_passkey }, Variant::Primary, Sz::Md, false).tag(1).sid("add-passkey").hint(if signed_out { tr().common.sign_in } else { tr().overlay.add_passkey });
         nav.add(b);
     }
     if can_sign {
         if let Some(e) = &elsewhere {
-            wrapped(cx, page, ty::SMALL, 400, tok::MUTED, &format!("Listed on {e}. Delist it there to sell or relist it here."));
+            wrapped(cx, page, ty::SMALL, 400, tok::MUTED, &trf!(tr().overlay.listed_elsewhere, venue = e));
         }
     }
     if can_sign && elsewhere.is_none() {
@@ -340,17 +345,17 @@ pub fn detail(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &PanelData, index: usiz
         } else {
             // Sell now.
             let sec = cx.scene.add(page, s().col().gap(0.5 * r).done(), Node::default());
-            section_label(cx, sec, "Sell now");
+            section_label(cx, sec, tr().overlay.sell_now);
             match &v.offer {
                 OfferState::Looking => {
-                    wrapped(cx, sec, ty::SMALL, 400, tok::MUTED, "Looking for offers...");
+                    wrapped(cx, sec, ty::SMALL, 400, tok::MUTED, tr().overlay.looking_offers);
                 }
                 OfferState::Blocked(o, why) => {
-                    wrapped(cx, sec, ty::SMALL, 400, tok::MUTED, &format!("Best offer {} SUI on {}. {}", amount(o.price_mist), venue_name(&o.venue), why));
+                    wrapped(cx, sec, ty::SMALL, 400, tok::MUTED, &trf!(tr().overlay.best_offer_blocked, amount = amount(o.price_mist), venue = venue_name(&o.venue), why = why));
                 }
                 OfferState::Ready(o) => {
                     let net = offer_net_mist(o);
-                    let b = button(cx, sec, &format!("Sell for {} SUI", amount(net)), Variant::Primary, Sz::Md, true).tag(2).sid("sell").hint("Sell");
+                    let b = button(cx, sec, &trf!(tr().overlay.sell_for, amount = amount(net)), Variant::Primary, Sz::Md, true).tag(2).sid("sell").hint(tr().overlay.sell);
                     if busy {
                         disabled(cx, &b);
                     } else {
@@ -359,37 +364,37 @@ pub fn detail(cx: &mut Cx, nav: &mut Nav, parent: Id, d: &PanelData, index: usiz
                     wrapped(cx, sec, ty::LABEL, 400, tok::MUTED, &sell_note(o, net));
                 }
                 OfferState::Nothing => {
-                    wrapped(cx, sec, ty::SMALL, 400, tok::MUTED, "No offers on this item right now.");
+                    wrapped(cx, sec, ty::SMALL, 400, tok::MUTED, tr().overlay.no_offers);
                 }
             }
             // List for sale / change the price.
             let sec = cx.scene.add(page, s().col().gap(0.5 * r).done(), Node::default());
-            section_label(cx, sec, if it.listing.is_some() { "Change the price" } else { "List for sale" });
+            section_label(cx, sec, if it.listing.is_some() { tr().overlay.change_price } else { tr().overlay.list_for_sale });
             let chips = cx.scene.add(sec, s().row().wrap().gap(0.5 * r).done(), Node::default());
             for (i, (lbl, sid, mist)) in price_choices(floor, listed).into_iter().enumerate() {
                 let on = v.price == Some(mist);
                 let (base, fg) = if on { (tok::FG, tok::BG) } else { (tok::L3, tok::FG) };
-                let f = chip(cx, chips, &format!("{lbl} {}", fmt_sui(Some(mist), Fmt::trim(2))), base, fg).tag(10 + i as u32).sid(&format!("price:{sid}")).hint("Pick");
+                let f = chip(cx, chips, &trf!(tr().overlay.price_chip, label = lbl, amount = fmt_sui(Some(mist), Fmt::trim(2))), base, fg).tag(10 + i as u32).sid(&format!("price:{sid}")).hint(tr().overlay.pick);
                 nav.add(f);
             }
-            let f = chip(cx, chips, "Other price", tok::L3, tok::FG).tag(20).sid("price:other").hint("Type a price");
+            let f = chip(cx, chips, tr().overlay.other_price, tok::L3, tok::FG).tag(20).sid("price:other").hint(tr().overlay.type_price);
             nav.add(f);
             let lbl = match v.price {
-                Some(p) => format!("{} for {} SUI", if it.listing.is_some() { "Relist" } else { "List" }, amount(p)),
-                None => "Pick a price".to_string(),
+                Some(p) => trf!(if it.listing.is_some() { tr().overlay.relist_for } else { tr().overlay.list_for }, amount = amount(p)),
+                None => tr().overlay.pick_price.to_string(),
             };
-            let b = button(cx, sec, &lbl, Variant::Secondary, Sz::Md, true).tag(30).sid("list").hint("List");
+            let b = button(cx, sec, &lbl, Variant::Secondary, Sz::Md, true).tag(30).sid("list").hint(tr().overlay.list);
             if busy || v.price.is_none() {
                 disabled(cx, &b);
             } else {
                 nav.add(b);
             }
-            wrapped(cx, sec, ty::LABEL, 400, tok::MUTED, "Listed in your own kiosk. Buyers pay the creator royalty on top.");
+            wrapped(cx, sec, ty::LABEL, 400, tok::MUTED, tr().overlay.own_kiosk);
         }
     }
     let status = match &d.phase {
         Phase::Building(w) => Some((w.as_str(), false)),
-        Phase::Signing => Some(("Review and approve in Rare Wallet.", false)),
+        Phase::Signing => Some((tr().overlay.review_approve, false)),
         Phase::Error(m) => Some((m.as_str(), true)),
         _ => None,
     };

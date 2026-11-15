@@ -15,6 +15,7 @@ use rare_render::view::{key, El, Motion};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use rare_i18n::{tr, trf};
 
 const KINDS: [ArtKind; 3] = [ArtKind::Cover, ArtKind::Hero, ArtKind::Logo];
 
@@ -36,11 +37,19 @@ pub fn target() -> (String, ArtKind) {
     TARGET.lock().unwrap().clone().unwrap_or((String::new(), ArtKind::Cover))
 }
 
-fn what(kind: ArtKind) -> &'static str {
+fn kept_text(kind: ArtKind) -> &'static str {
     match kind {
-        ArtKind::Cover => "cover",
-        ArtKind::Hero => "hero image",
-        ArtKind::Logo => "logo",
+        ArtKind::Cover => tr().features_more.art_kept_cover,
+        ArtKind::Hero => tr().features_more.art_kept_hero,
+        ArtKind::Logo => tr().features_more.art_kept_logo,
+    }
+}
+
+fn back_text(kind: ArtKind) -> &'static str {
+    match kind {
+        ArtKind::Cover => tr().features_more.art_back_cover,
+        ArtKind::Hero => tr().features_more.art_back_hero,
+        ArtKind::Logo => tr().features_more.art_back_logo,
     }
 }
 
@@ -59,16 +68,16 @@ pub fn choose(st: &mut State, fx: &mut Fx, id: &str, kind: ArtKind, url: impl In
                 MINE_VER.fetch_add(1, Ordering::Relaxed);
                 if url.is_some() {
                     super::show_custom(st, &id, &c);
-                    st.toast(format!("New {} kept for this game", what(kind)), Tone::Info, now);
+                    st.toast(kept_text(kind), Tone::Info, now);
                 } else {
                     // The original comes back with the next scan.
                     st.rescan_at = Some(now);
-                    st.toast(format!("The original {} is back", what(kind)), Tone::Info, now);
+                    st.toast(back_text(kind), Tone::Info, now);
                 }
             }
             Err(e) => {
                 log::warn!("art: {e}");
-                st.toast("Couldn't keep that picture.", Tone::Error, now);
+                st.toast(tr().features_more.art_keep_failed, Tone::Error, now);
             }
         })
     });
@@ -175,15 +184,15 @@ impl Page for ArtPage {
         let lb = kit::glyph(ui, Pb::Lb, kit::GSize::Sm);
         let rb = kit::glyph(ui, Pb::Rb, kit::GSize::Sm);
         let tabs = ui.bx(s().row().items_center().gap(1.0).h(2.5).mb(0.75)).child(lb).child(kit::tabs(ui, s(), &items, value, true)).child(rb);
-        let head = ui.bx(s().col().gap(0.25).mb(1.0)).child(ui.text(format!("{title} art"), T::new(Ty::Title).w(600))).child(ui.text("Pick what shows in your library and on the game's page", T::new(Ty::Small).c(tok::MUTED)));
+        let head = ui.bx(s().col().gap(0.25).mb(1.0)).child(ui.text(trf!(tr().features_more.art_title, title = title), T::new(Ty::Title).w(600))).child(ui.text(tr().features_more.art_subtitle, T::new(Ty::Small).c(tok::MUTED)));
         let loaded = self.loaded.lock().unwrap();
         let got = loaded.by_kind.get(&kk(self.kind));
         let note = match got {
-            None => "Looking for art".to_string(),
-            Some(Err(e)) => format!("Couldn't look for art: {e}"),
-            Some(Ok((_, v))) if v.is_empty() => "Nothing found for this name. Pick a picture from this device.".into(),
-            Some(Ok((Origin::SteamGridDb, _))) => "From SteamGridDB".into(),
-            Some(Ok((Origin::Steam, _))) => "From Steam's store. Add a SteamGridDB key in Settings > Storage for more choices.".into(),
+            None => tr().features_more.art_looking.to_string(),
+            Some(Err(e)) => trf!(tr().features_more.art_lookup_failed, error = e),
+            Some(Ok((_, v))) if v.is_empty() => tr().features_more.art_none_found.into(),
+            Some(Ok((Origin::SteamGridDb, _))) => tr().features_more.art_from_sgdb.into(),
+            Some(Ok((Origin::Steam, _))) => tr().features_more.art_from_steam.into(),
         };
         let note = ui.text_s(s().h(1.5).mb(0.75), note, T::new(Ty::Small).c(tok::MUTED).trunc());
         let (w, h) = self.size();
@@ -192,11 +201,11 @@ impl Page for ArtPage {
             let mut b = ui.bx(s().wh(if self.kind == ArtKind::Cover { w } else { 11.0 }, h).col().items_center().justify_center().gap(0.6).p(0.75)).bg(tok::L2).radius(ui.r(0.5));
             b = b.child(kit::icon(ui, icon, 1.4, tok::ICON2)).child(ui.text(label, T::new(Ty::Small).w(500).center().wrap()));
             if on {
-                b = b.child(ui.text("In use", T::new(Ty::Label).c(tok::MUTED)));
+                b = b.child(ui.text(tr().features_more.in_use, T::new(Ty::Label).c(tok::MUTED)));
             }
-            kit::nav(kit::tile(b, 1.04), acts.tag(Act::Local(code)), Some("Pick"), None, code == ACT_DEVICE).key(key(&("gm-art-act", code)))
+            kit::nav(kit::tile(b, 1.04), acts.tag(Act::Local(code)), Some(tr().features_more.pick), None, code == ACT_DEVICE).key(key(&("gm-art-act", code)))
         };
-        let mut tiles = vec![action(ui, acts, ACT_DEVICE, "images", "From this device", false), action(ui, acts, ACT_ORIGINAL, "rotate-ccw", "Use the original", mine.is_none())];
+        let mut tiles = vec![action(ui, acts, ACT_DEVICE, "images", tr().features_more.art_from_device, false), action(ui, acts, ACT_ORIGINAL, "rotate-ccw", tr().features_more.art_use_original, mine.is_none())];
         if let Some(Ok((origin, v))) = got {
             for (i, c) in v.iter().enumerate() {
                 let fit = if self.kind == ArtKind::Logo { ArtFit::Contain(0.5, 0.5) } else { ArtFit::Cover(0.5) };
@@ -205,9 +214,9 @@ impl Page for ArtPage {
                 let logo = self.kind == ArtKind::Logo;
                 let mut b = ui.bx(if logo { s().wh(w, h).p(0.75) } else { s().wh(w, h) }).bg(if logo { tok::L2 } else { tok::L3 }).radius(ui.r(0.5)).clip().child(pic);
                 if mine.as_deref() == Some(c.url.as_str()) {
-                    b = b.child(ui.bx(s().abs(Some(0.5), None, None, Some(0.5)).px(0.5).py(0.15)).bg(tok::BG.alpha(0.85)).radius(ui.r(0.25)).child(ui.text("In use", T::new(Ty::Label).w(500))));
+                    b = b.child(ui.bx(s().abs(Some(0.5), None, None, Some(0.5)).px(0.5).py(0.15)).bg(tok::BG.alpha(0.85)).radius(ui.r(0.25)).child(ui.text(tr().features_more.in_use, T::new(Ty::Label).w(500))));
                 }
-                let mut col = ui.bx(s().col().gap(0.35)).child(kit::nav(kit::tile(b, 1.04), acts.tag(Act::Local(ACT_CHOICE + i as u32)), Some("Pick"), None, false));
+                let mut col = ui.bx(s().col().gap(0.35)).child(kit::nav(kit::tile(b, 1.04), acts.tag(Act::Local(ACT_CHOICE + i as u32)), Some(tr().features_more.pick), None, false));
                 if *origin == Origin::Steam {
                     col = col.child(ui.text_s(s().w(w), c.from.clone(), T::new(Ty::Label).c(tok::MUTED).trunc()));
                 }
@@ -250,6 +259,6 @@ impl Page for ArtPage {
     }
 
     fn hints(&self, _st: &State) -> Vec<Hint> {
-        vec![hint(Key::LbRb, "Cover, hero, logo"), hint(Key::B, "Back")]
+        vec![hint(Key::LbRb, tr().features_more.art_tabs_hint), hint(Key::B, tr().common.back)]
     }
 }

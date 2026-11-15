@@ -19,7 +19,7 @@ pub struct SectionHits {
 }
 
 fn words(s: &str) -> Vec<String> {
-    s.to_lowercase().split(|c: char| !c.is_ascii_alphanumeric()).filter(|w| !w.is_empty()).map(String::from).collect()
+    s.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(String::from).collect()
 }
 
 /// How well one query word fits a field's words: 3 start of a word, 2 inside a word, 0 none.
@@ -63,7 +63,8 @@ pub fn score_entry(query: &str, e: &SettingEntry) -> u32 {
 pub fn search_settings(query: &str, entries: &[SettingEntry]) -> Vec<SectionHits> {
     let scored: Vec<(&SettingEntry, u32)> = entries.iter().map(|e| (e, score_entry(query, e))).filter(|(_, s)| *s > 0).collect();
     let mut out = Vec::new();
-    for (id, label) in SECTIONS {
+    for id in SECTIONS {
+        let label = id.label();
         let mut hits: Vec<_> = scored.iter().filter(|(e, _)| e.section == id).collect();
         hits.sort_by(|a, b| b.1.cmp(&a.1));
         if !hits.is_empty() {

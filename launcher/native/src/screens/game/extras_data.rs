@@ -387,13 +387,25 @@ fn entities(s: &str) -> String {
     s.replace("&nbsp;", " ").replace("&quot;", "\"").replace("&#39;", "'").replace("&apos;", "'").replace("&lt;", "<").replace("&gt;", ">").replace("&amp;", "&")
 }
 
+/// A kept feed label for the screen: the labels Rare itself makes are English words in the kept
+/// answer, shown in the player's language; a feed's own label stays as the feed gave it.
+pub fn feed_text(feed: &str) -> String {
+    match feed {
+        "Patch notes" => rare_i18n::tr().game.feed_patch_notes.into(),
+        "Announcement" => rare_i18n::tr().game.feed_announcement.into(),
+        "News" => rare_i18n::tr().game.news.into(),
+        "Update" => rare_i18n::tr().game.feed_update.into(),
+        _ => feed.to_string(),
+    }
+}
+
 /// "Oct 21, 2026".
 pub fn date_label(t: i64) -> String {
     if t <= 0 {
         return String::new();
     }
     let (y, m, d) = crate::screens::wallet::fmt::civil(t.div_euclid(86400));
-    format!("{} {d}, {y}", crate::screens::wallet::fmt::MONTHS[(m as usize).saturating_sub(1).min(11)])
+    rare_i18n::fmt::date_ymd(y as i32, m as u32, d as u32)
 }
 
 #[cfg(test)]

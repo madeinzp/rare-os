@@ -1,8 +1,9 @@
 //! PC streaming sheets (stream/sheets.tsx): StreamSetup (get Moonlight, find PCs, add one, pair
 //! with a big PIN) and StreamAppSheet (a PC game: Play, Resume, Quit, wake, stream quality).
 
+use rare_i18n::{tr, trf};
 use super::logic::*;
-use super::state::{rare_way, StreamState};
+use super::state::StreamState;
 use super::view::*;
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
@@ -22,11 +23,11 @@ fn get_moonlight(cx: &mut Cx, parent: Id, st: &StreamState, waiting: Option<&str
     let busy = st.installing.as_ref().is_some_and(|i| i.error.is_none());
     let failed = st.installing.as_ref().and_then(|i| i.error.as_ref());
     let col = cx.scene.add(parent, s().col().gap(0.6 * r).mb(1.4 * r).done(), Node::default());
-    text(cx, col, ty::BODY, 600, tok::FG, if busy { "Getting Moonlight" } else { "Moonlight" });
+    text(cx, col, ty::BODY, 600, tok::FG, if busy { tr().stream.getting_moonlight } else { "Moonlight" });
     let why = match waiting {
-        Some(name) if busy => format!("Rare streams with Moonlight, a free open-source app. It takes a minute; pairing with {name} starts once it's in."),
-        _ if busy => "Rare streams with Moonlight, a free open-source app. It takes a minute, and you can look for your PC meanwhile.".to_string(),
-        _ => "Rare streams with Moonlight, a free open-source app. It installs from Flathub for you only, no password needed.".to_string(),
+        Some(name) if busy => trf!(tr().stream.moonlight_why_waiting, name = name),
+        _ if busy => tr().stream.moonlight_why_busy.to_string(),
+        _ => tr().stream.moonlight_why.to_string(),
     };
     wrap_text(cx, col, ty::SMALL, 400, tok::MUTED, &why);
     // The bar's row keeps its place before, during and after, so nothing below moves.
@@ -39,7 +40,7 @@ fn get_moonlight(cx: &mut Cx, parent: Id, st: &StreamState, waiting: Option<&str
     }
     if let Some(e) = failed {
         wrap_text(cx, col, ty::SMALL, 400, tok::NEG, e);
-        text(cx, col, ty::LABEL, 400, tok::MUTED, "Or in Desktop mode, in a terminal:");
+        text(cx, col, ty::LABEL, 400, tok::MUTED, tr().stream.or_desktop_terminal);
         let code = cx.scene.add(col, s().col().px(0.9 * r).py(0.6 * r).done(), Node::bg(tok::L2).radius(0.5 * r));
         let ts_ = ts(r, ty::META.0, ty::META.1, 400).mono().wrap();
         cx.scene.add_text(cx.t, code, s().done(), &offer.command, ts_, tok::FG);
@@ -59,14 +60,14 @@ fn host_row(cx: &mut Cx, layer: &mut Layer, parent: Id, st: &StreamState, host: 
     let right = cx.scene.add(id, s().row().items_center().gap(0.45 * r).no_shrink_().done(), Node::default());
     dot(cx, right, if host.online { tok::FG } else { tok::MUTED });
     let state = if host.paired {
-        "Paired"
+        tr().stream.paired
     } else if host.online {
-        "Not paired"
+        tr().stream.not_paired
     } else {
-        "Not answering"
+        tr().stream.not_answering
     };
     text(cx, right, ty::SMALL, 400, tok::MUTED, state);
-    let hint = if host.paired { "Show games" } else { "Pair" };
+    let hint = if host.paired { tr().stream.show_games } else { tr().stream.pair };
     let t = layer.reg(Focusable { id, kind: Kind::Row, group: 10, hint: hint.into(), tag: 0, sid: host.uuid.clone() }, Act::HostRow(host.uuid.clone()));
     if def {
         layer.default = Some(t);
@@ -80,14 +81,14 @@ pub fn build_setup(cx: &mut Cx, st: &StreamState, parent: Id, now: f64) -> Layer
         return build_pair(cx, st, parent, now);
     }
     let r = cx.r();
-    let (mut layer, body, footer) = sheet_layer(cx, parent, "Stream from your PC", None, now);
+    let (mut layer, body, footer) = sheet_layer(cx, parent, tr().stream.stream_from_pc, None, now);
     let busy = st.installing.as_ref().is_some_and(|i| i.error.is_none());
     let waiting = st.pending_pair.as_deref().and_then(|u| st.host(u)).map(|h| h.name.clone());
     get_moonlight(cx, body, st, waiting.as_deref());
     let list = cx.scene.add(body, s().col().done(), Node::default());
     let head = cx.scene.add(list, s().row().items_center().gap(0.75 * r).mb(0.5 * r).done(), Node::default());
-    text(cx, head, ty::BODY, 600, tok::FG, "PCs on your network");
-    text(cx, head, ty::SMALL, 400, tok::MUTED, if st.scanning { "Looking" } else { "" });
+    text(cx, head, ty::BODY, 600, tok::FG, tr().stream.pcs_on_network);
+    text(cx, head, ty::SMALL, 400, tok::MUTED, if st.scanning { tr().stream.looking } else { "" });
     load_bar(cx, list, st.scanning);
     let hosts = cx.scene.add(list, s().col().done(), Node::default());
     let unpaired = st.hosts.iter().position(|h| !h.paired && h.online);
@@ -97,29 +98,26 @@ pub fn build_setup(cx: &mut Cx, st: &StreamState, parent: Id, now: f64) -> Layer
     }
     if !st.scanning && st.hosts.is_empty() {
         let p = cx.scene.add(list, s().col().py(0.9 * r).done(), Node::default());
-        wrap_text(cx, p, ty::SMALL, 400, tok::MUTED, "No PCs found yet.");
+        wrap_text(cx, p, ty::SMALL, 400, tok::MUTED, tr().stream.no_pcs_yet);
     }
     let note = cx.scene.add(body, s().col().mt(1.1 * r).done(), Node::default());
+    let (note_a, note_b) = tr().stream.sunshine_note.split_once("{link}").unwrap_or((tr().stream.sunshine_note, ""));
     rich(
         cx,
         note,
         ty::SMALL,
         tok::MUTED,
-        &[
-            ("Your PC needs Sunshine (free, for any graphics card) or GeForce Experience, on the same network. Install Sunshine from ", false),
-            ("github.com/LizardByte/Sunshine", true),
-            (", start it, then look again.", false),
-        ],
+        &[(note_a, false), ("github.com/LizardByte/Sunshine", true), (note_b, false)],
     );
     // Footer.
     if st.offer.is_some() && !busy {
         // Only after a failed install: Rare starts it on its own when streaming opens.
-        let b = btn(cx, footer, "Try again", Variant::Primary, "Get Moonlight", false, None);
+        let b = btn(cx, footer, tr().common.try_again, Variant::Primary, tr().stream.get_moonlight, false, None);
         reg_btn(&mut layer, b, Act::GetMoonlight, 11, true, false);
     }
-    let b = btn(cx, footer, "Add by address", Variant::Secondary, "Add by address", false, Some(("plus", PLUS, 1.0)));
+    let b = btn(cx, footer, tr().stream.add_by_address, Variant::Secondary, tr().stream.add_by_address, false, Some(("plus", PLUS, 1.0)));
     reg_btn(&mut layer, b, Act::AddAddress, 11, false, false);
-    let b = btn(cx, footer, "Look again", Variant::Secondary, "Look again", st.scanning, None);
+    let b = btn(cx, footer, tr().stream.look_again, Variant::Secondary, tr().stream.look_again, st.scanning, None);
     reg_btn(&mut layer, b, Act::LookAgain, 11, false, st.scanning);
     layer
 }
@@ -128,8 +126,8 @@ pub fn build_setup(cx: &mut Cx, st: &StreamState, parent: Id, now: f64) -> Layer
 fn build_pair(cx: &mut Cx, st: &StreamState, parent: Id, now: f64) -> Layer {
     let r = cx.r();
     let p = st.pairing.clone().unwrap();
-    let title = format!("Pair with {}", p.name);
-    let (mut layer, body, footer) = sheet_layer(cx, parent, &title, Some("Pairing happens once. After that your PC's games show up in your Library."), now);
+    let title = trf!(tr().stream.pair_with, name = p.name.clone());
+    let (mut layer, body, footer) = sheet_layer(cx, parent, &title, Some(tr().stream.pairing_once), now);
     let gfe = p.software == "GeForce Experience";
     let top = cx.scene.add(body, s().row().items_center().gap(2.5 * r).done(), Node::default());
     let pin = cx.scene.add(top, s().row().gap(0.6 * r).no_shrink_().done(), Node::default());
@@ -140,15 +138,15 @@ fn build_pair(cx: &mut Cx, st: &StreamState, parent: Id, now: f64) -> Layer {
     let ol = cx.scene.add(top, s().col().grow().gap(0.7 * r).done(), Node::default());
     let steps: Vec<Vec<(String, bool)>> = if gfe {
         vec![
-            vec![(format!("GeForce Experience shows a box on {}.", p.name), false)],
-            vec![("Type this PIN in it.".into(), false)],
-            vec![("Rare finishes on its own.".into(), false)],
+            vec![(trf!(tr().stream.gfe_step1, name = p.name.clone()), false)],
+            vec![(tr().stream.gfe_step2.into(), false)],
+            vec![(tr().stream.finishes_on_own.into(), false)],
         ]
     } else {
         vec![
-            vec![(format!("On {}, open Sunshine at ", p.name), false), ("https://localhost:47990".into(), true)],
-            vec![("Go to PIN. Enter this PIN and a name for this SuiPlay.".into(), false)],
-            vec![("Select Send. Rare finishes on its own.".into(), false)],
+            sun_step1(&p.name),
+            vec![(tr().stream.sunshine_step2.into(), false)],
+            vec![(tr().stream.sunshine_step3.into(), false)],
         ]
     };
     for (i, segs) in steps.iter().enumerate() {
@@ -164,25 +162,25 @@ fn build_pair(cx: &mut Cx, st: &StreamState, parent: Id, now: f64) -> Layer {
     load_bar(cx, bottom, p.phase == PairPhase::Waiting);
     let row_ = cx.scene.add(bottom, s().row().items_center().gap(0.5 * r).done(), Node::default());
     let (tone, msg, col) = match p.phase {
-        PairPhase::Paired => (Tone::Primary, format!("Paired with {}", p.name), tok::FG.alpha(0.8)),
+        PairPhase::Paired => (Tone::Primary, trf!(tr().stream.paired_with, name = p.name.clone()), tok::FG.alpha(0.8)),
         PairPhase::Failed => (Tone::Negative, p.error.clone().unwrap_or_default(), tok::NEG),
-        PairPhase::Waiting => (Tone::Muted, format!("Waiting for {}", p.name), tok::FG.alpha(0.8)),
+        PairPhase::Waiting => (Tone::Muted, trf!(tr().stream.waiting_for, name = p.name.clone()), tok::FG.alpha(0.8)),
     };
     status_dot(cx, row_, tone);
     text(cx, row_, ty::SMALL, 400, col, &msg);
     match p.phase {
         PairPhase::Paired => {
-            let b = btn(cx, footer, "Show games", Variant::Primary, "Show games", false, None);
+            let b = btn(cx, footer, tr().stream.show_games, Variant::Primary, tr().stream.show_games, false, None);
             reg_btn(&mut layer, b, Act::ShowGames, 11, true, false);
         }
         PairPhase::Failed => {
-            let b = btn(cx, footer, "Try again", Variant::Primary, "Try again", false, None);
+            let b = btn(cx, footer, tr().common.try_again, Variant::Primary, tr().common.try_again, false, None);
             reg_btn(&mut layer, b, Act::TryAgain(p.uuid.clone()), 11, true, false);
-            let b = btn(cx, footer, "Back", Variant::Secondary, "", false, None);
+            let b = btn(cx, footer, tr().common.back, Variant::Secondary, "", false, None);
             reg_btn(&mut layer, b, Act::BackFromPair, 11, false, false);
         }
         PairPhase::Waiting => {
-            let b = btn(cx, footer, "Cancel", Variant::Secondary, "Cancel", false, None);
+            let b = btn(cx, footer, tr().common.cancel, Variant::Secondary, tr().common.cancel, false, None);
             reg_btn(&mut layer, b, Act::CancelPair, 11, true, false);
         }
     }
@@ -196,7 +194,7 @@ fn choice(cx: &mut Cx, layer: &mut Layer, parent: Id, label: &str, items: &[Stri
     let l = cx.scene.add(id, s().grow().done(), Node::default());
     text(cx, l, ty::BODY, 400, tok::FG, label);
     chips(cx, id, items, on);
-    let t = layer.reg(Focusable { id, kind: Kind::Row, group: 12, hint: "Change".into(), tag: 0, sid: label.to_lowercase() }, act);
+    let t = layer.reg(Focusable { id, kind: Kind::Row, group: 12, hint: tr().common.change.into(), tag: 0, sid: label.to_lowercase() }, act);
     if def {
         layer.default = Some(t);
     }
@@ -205,18 +203,27 @@ fn choice(cx: &mut Cx, layer: &mut Layer, parent: Id, label: &str, items: &[Stri
 /// What the sheet's status line says for each state.
 pub fn app_line(host: &Host, state: PlayState, waking: bool, other: &str) -> String {
     match state {
-        PlayState::Playing => "Streaming to this SuiPlay".into(),
-        PlayState::OnPc => format!("Running on {}. Resume picks it up where you left it.", host.name),
-        PlayState::Busy => format!("{other} is running on {}. Play quits it first.", host.name),
+        PlayState::Playing => tr().stream.streaming_here.into(),
+        PlayState::OnPc => trf!(tr().stream.line_on_pc, name = host.name.clone()),
+        PlayState::Busy => trf!(tr().stream.line_busy, game = other, name = host.name.clone()),
         PlayState::Asleep => {
             if waking {
-                format!("Waking {}", host.name)
+                trf!(tr().stream.waking_host, name = host.name.clone())
             } else {
-                format!("{} is asleep. Play wakes it first.", host.name)
+                trf!(tr().stream.line_asleep, name = host.name.clone())
             }
         }
-        PlayState::Offline => format!("{} isn't answering. Turn it on, then look again.", host.name),
-        PlayState::Ready => format!("Ready on {}", host.name),
+        PlayState::Offline => trf!(tr().stream.line_offline, name = host.name.clone()),
+        PlayState::Ready => trf!(tr().stream.line_ready, name = host.name.clone()),
+    }
+}
+
+/// Sunshine pairing, step 1: the sentence ends with the address of its web page.
+fn sun_step1(name: &str) -> Vec<(String, bool)> {
+    let line = trf!(tr().stream.sunshine_step1, name = name.to_string(), url = "\u{1}");
+    match line.split_once('\u{1}') {
+        Some((a, b)) => vec![(a.to_string(), false), ("https://localhost:47990".into(), true), (b.to_string(), false)],
+        None => vec![(line, false)],
     }
 }
 
@@ -226,9 +233,9 @@ pub fn build_app(cx: &mut Cx, st: &StreamState, uuid: &str, app_id: u32, parent:
     let app = st.apps_of(uuid).iter().find(|a| a.id == app_id)?.clone();
     let r = cx.r();
     let state = play_state(&host, &app, &st.running);
-    let other = host.current_game.map(|g| st.apps_of(uuid).iter().find(|a| a.id == g).map(|a| a.name.clone()).unwrap_or_else(|| "Another game".into())).unwrap_or_default();
+    let other = host.current_game.map(|g| st.apps_of(uuid).iter().find(|a| a.id == g).map(|a| a.name.clone()).unwrap_or_else(|| tr().stream.another_game.into())).unwrap_or_default();
     let waking = st.waking.as_deref() == Some(uuid);
-    let sub = format!("On {}{}", host.name, host.software.as_ref().map(|s| format!(" \u{b7} {s}")).unwrap_or_default());
+    let sub = trf!(tr().stream.on_host, name = host.name.clone()) + &host.software.as_ref().map(|s| format!(" \u{b7} {s}")).unwrap_or_default();
     let (mut layer, body, footer) = sheet_layer(cx, parent, &app.name, Some(&sub), now);
     let top = cx.scene.add(body, s().row().gap(1.75 * r).done(), Node::default());
     let c = cx.scene.add(top, s().wh(9.0 * r, 13.5 * r).no_shrink_().done(), Node::bg(tok::L3).radius(0.5 * r).clip());
@@ -238,16 +245,16 @@ pub fn build_app(cx: &mut Cx, st: &StreamState, uuid: &str, app_id: u32, parent:
     dot(cx, line, if matches!(state, PlayState::Playing | PlayState::OnPc) { tok::FG } else { tok::MUTED });
     text(cx, line, ty::SMALL, 400, tok::FG.alpha(0.8), &app_line(&host, state, waking, &other));
     let q = cx.scene.add(col, s().col().mt(1.2 * r).mb(0.35 * r).done(), Node::default());
-    text(cx, q, ty::BODY, 600, tok::FG, "Stream quality");
+    text(cx, q, ty::BODY, 600, tok::FG, tr().stream.stream_quality);
     let set = st.settings.clone();
     let auto = auto_codec(st.decode, host.codecs);
     let list = cx.scene.add(col, s().col().done(), Node::default());
     let res: Vec<String> = RESOLUTIONS.iter().map(|r| r.1.to_string()).collect();
-    choice(cx, &mut layer, list, "Resolution", &res, RESOLUTIONS.iter().position(|r| r.0 == set.resolution).unwrap_or(0), Act::ChooseResolution, false);
+    choice(cx, &mut layer, list, tr().stream.resolution, &res, RESOLUTIONS.iter().position(|r| r.0 == set.resolution).unwrap_or(0), Act::ChooseResolution, false);
     let br: Vec<String> = BITRATES.iter().map(|m| format!("{m} Mbps")).collect();
-    choice(cx, &mut layer, list, "Bitrate", &br, BITRATES.iter().position(|m| *m == set.bitrate_mbps).unwrap_or(0), Act::ChooseBitrate, false);
-    let codecs: Vec<String> = CODECS.iter().map(|c| if *c == Codec::Auto && auto.is_some() { format!("Auto ({})", codec_label(auto.unwrap())) } else { codec_label(*c).to_string() }).collect();
-    choice(cx, &mut layer, list, "Video", &codecs, CODECS.iter().position(|c| *c == set.codec).unwrap_or(0), Act::ChooseCodec, false);
+    choice(cx, &mut layer, list, tr().stream.bitrate, &br, BITRATES.iter().position(|m| *m == set.bitrate_mbps).unwrap_or(0), Act::ChooseBitrate, false);
+    let codecs: Vec<String> = CODECS.iter().map(|c| if *c == Codec::Auto && auto.is_some() { trf!(tr().stream.auto_codec, codec = codec_label(auto.unwrap())) } else { codec_label(*c).to_string() }).collect();
+    choice(cx, &mut layer, list, tr().stream.video, &codecs, CODECS.iter().position(|c| *c == set.codec).unwrap_or(0), Act::ChooseCodec, false);
     let note = cx.scene.add(col, s().col().mt(0.8 * r).done(), Node::default());
     wrap_text(
         cx,
@@ -255,7 +262,7 @@ pub fn build_app(cx: &mut Cx, st: &StreamState, uuid: &str, app_id: u32, parent:
         ty::SMALL,
         400,
         tok::MUTED,
-        &format!("For every PC game, at 60 fps. Lower the bitrate if the picture stutters on busy Wi-Fi. While you play, Moonlight reads your controller. {} to come back to Rare and resume or quit.", rare_way(st.guest)),
+        if st.guest { tr().stream.quality_note_guest } else { tr().stream.quality_note },
     );
     // Footer, per state.
     let add = |cx: &mut Cx, layer: &mut Layer, label: &str, v: Variant, hint: &str, act: Act, def: bool, disabled: bool| {
@@ -266,26 +273,26 @@ pub fn build_app(cx: &mut Cx, st: &StreamState, uuid: &str, app_id: u32, parent:
         add(cx, &mut layer, &b, Variant::Primary, &b, Act::Play, true, true);
     } else if st.moonlight.is_none() {
         if st.installing.as_ref().is_some_and(|i| i.error.is_none()) {
-            add(cx, &mut layer, "Getting Moonlight", Variant::Primary, "Getting Moonlight", Act::Play, true, true);
+            add(cx, &mut layer, tr().stream.getting_moonlight, Variant::Primary, tr().stream.getting_moonlight, Act::Play, true, true);
         } else {
-            add(cx, &mut layer, "Set up streaming", Variant::Primary, "Set up streaming", Act::SetupFromApp, true, false);
+            add(cx, &mut layer, tr().stream.set_up_streaming, Variant::Primary, tr().stream.set_up_streaming, Act::SetupFromApp, true, false);
         }
     } else {
         match state {
             PlayState::Playing | PlayState::OnPc => {
-                add(cx, &mut layer, "Resume", Variant::Primary, "Resume", Act::Resume, true, false);
-                add(cx, &mut layer, "Quit game", Variant::Secondary, "Quit game", Act::QuitGame, false, false);
+                add(cx, &mut layer, tr().common.resume, Variant::Primary, tr().common.resume, Act::Resume, true, false);
+                add(cx, &mut layer, tr().stream.quit_game, Variant::Secondary, tr().stream.quit_game, Act::QuitGame, false, false);
             }
             PlayState::Busy => {
-                let l = format!("Quit {other} and play");
+                let l = trf!(tr().stream.quit_and_play, game = other.clone());
                 add(cx, &mut layer, &l, Variant::Primary, &l, Act::QuitAndPlay, true, false);
             }
             PlayState::Asleep => {
-                let l = if waking { format!("Waking {}", host.name) } else { "Wake and play".to_string() };
-                add(cx, &mut layer, &l, Variant::Primary, "Wake and play", Act::WakeAndPlay, true, waking);
+                let l = if waking { trf!(tr().stream.waking_host, name = host.name.clone()) } else { tr().stream.wake_and_play.to_string() };
+                add(cx, &mut layer, &l, Variant::Primary, tr().stream.wake_and_play, Act::WakeAndPlay, true, waking);
             }
-            PlayState::Offline => add(cx, &mut layer, "Look again", Variant::Secondary, "Look again", Act::LookAgainApp, true, false),
-            PlayState::Ready => add(cx, &mut layer, "Play", Variant::Primary, "Play", Act::Play, true, false),
+            PlayState::Offline => add(cx, &mut layer, tr().stream.look_again, Variant::Secondary, tr().stream.look_again, Act::LookAgainApp, true, false),
+            PlayState::Ready => add(cx, &mut layer, tr().common.play, Variant::Primary, tr().common.play, Act::Play, true, false),
         }
     }
     // The quality rows sit above the footer in focus order only by position; default is the footer.

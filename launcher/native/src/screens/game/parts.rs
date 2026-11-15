@@ -3,6 +3,7 @@
 //! art, the logo lockup with its title fallback, and the played/playtime lines.
 
 use crate::act::Act;
+use rare_i18n::{tr, trf, trn};
 use crate::data::model::{fmt_ago, source_label, Game};
 use crate::kit::{self, s, tok, ArtFit, DotTone, Ty, Ui, S, T};
 use crate::page::Acts;
@@ -46,12 +47,38 @@ pub fn app_art(ui: &mut Ui, g: &Game) -> El {
     ui.bx(s().fill().col().items_center().justify_center().gap(0.9).p(1.0)).bg(tok::L2).child(ui.bx(s().size(4.5).row().items_center().justify_center()).child(inner))
 }
 
+/// When something happened, without a verb: "just now", "3 h ago", "yesterday", "5 days ago", "Oct 27".
+pub fn when_ago(t: i64) -> String {
+    let s = crate::data::model::now_secs() - t;
+    if s < 3600 {
+        return tr().game.ago_just_now.into();
+    }
+    if s < 86400 {
+        return trn!(tr().game.ago_hours, (s as f64 / 3600.0).round() as i64);
+    }
+    if s < 86400 * 2 {
+        return tr().game.ago_yesterday.into();
+    }
+    if s < 86400 * 30 {
+        return trn!(tr().game.ago_days, (s as f64 / 86400.0).round() as i64);
+    }
+    let mut tm: libc::tm = unsafe { std::mem::zeroed() };
+    let tt = t as libc::time_t;
+    // SAFETY: localtime_r fills tm.
+    unsafe { libc::localtime_r(&tt, &mut tm) };
+    if s > 86400 * 180 {
+        rare_i18n::fmt::date_ymd(tm.tm_year + 1900, tm.tm_mon as u32 + 1, tm.tm_mday as u32)
+    } else {
+        rare_i18n::fmt::date_md(tm.tm_mon as u32 + 1, tm.tm_mday as u32)
+    }
+}
+
 /// "49 h played" (Home.tsx fmtPlaytime).
 pub fn fmt_playtime(m: Option<i64>) -> String {
     match m.filter(|m| *m > 0) {
         None => String::new(),
-        Some(m) if m < 60 => format!("{m} min played"),
-        Some(m) => format!("{} h played", (m as f64 / 60.0).round()),
+        Some(m) if m < 60 => trf!(tr().game.min_played, n = m),
+        Some(m) => trf!(tr().game.h_played, n = (m as f64 / 60.0).round()),
     }
 }
 
@@ -89,7 +116,7 @@ pub fn game_tile(ui: &mut Ui, st: &State, acts: &mut Acts, g: &Game, def: bool, 
         None if !g.installed && !running && !busy && crate::screens::game::stores::managed(g) => Some(Act::Legacy(format!("stores:install:{}", g.id))),
         _ => None,
     };
-    let a_hint = if install.is_some() { "Install" } else { "Details" };
+    let a_hint = if install.is_some() { tr().common.install } else { tr().common.details };
     let tag = acts.game(install.or(act).unwrap_or_else(|| Act::OpenGame(g.id.clone())), &g.id);
     let btn = btn.nav(|f| {
         let f = f.tag(tag).hints(Some(a_hint), None, None).game().label(&g.title);
@@ -105,11 +132,11 @@ pub fn game_tile(ui: &mut Ui, st: &State, acts: &mut Acts, g: &Game, def: bool, 
         let name = ui.text_s(s().mt(0.85).px(0.1), g.title.clone(), T::new(Ty::Meta).w(500).c(tok::fg(0.85)).trunc());
         let name = name.clone().focus_color(tok::FG);
         let sub = if running {
-            "Playing".to_string()
+            tr().common.playing.to_string()
         } else if let Some(j) = crate::features::stores::job(&g.id) {
             j.status()
         } else if !g.installed {
-            format!("{}, not installed", source_label(&g.source))
+            trf!(tr().game.source_not_installed, source = source_label(&g.source))
         } else {
             source_label(&g.source).to_string()
         };

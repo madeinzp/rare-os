@@ -4,6 +4,7 @@
 use super::{config::Config, rows::*, SectionOut, SectionView};
 use crate::features::companion::{self, View};
 use crate::screens::overlay::common::*;
+use rare_i18n::{tr, trf, trn};
 use rare_render::Id;
 
 pub struct DevicesSection;
@@ -42,10 +43,10 @@ fn short(a: &str) -> String {
 fn ago(at: i64, now: i64) -> String {
     let s = (now - at).max(0) / 1000;
     match s {
-        0..=59 => "just now".into(),
-        60..=3599 => format!("{} min ago", s / 60),
-        3600..=86_399 => format!("{} h ago", s / 3600),
-        _ => format!("{} d ago", s / 86_400),
+        0..=59 => tr().settings.ago_now.into(),
+        60..=3599 => trf!(tr().settings.ago_min, n = s / 60),
+        3600..=86_399 => trf!(tr().settings.ago_hour, n = s / 3600),
+        _ => trf!(tr().settings.ago_day, n = s / 86_400),
     }
 }
 
@@ -64,46 +65,47 @@ impl DevicesSection {
 
     pub fn build_with(cx: &mut Cx, nav: &mut Nav, parent: Id, v: &View) {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
+        let t = &tr().settings;
         let p = panel(cx, parent);
-        setting_row(cx, p, "Phone control", Some("Use rare.market on your phone to see what this device is doing and to control it: install games, type, open links, send pictures and files, and get notified when downloads finish."), true);
+        setting_row(cx, p, t.row_phone_control, Some(t.phone_control_body), true);
         if !v.signed_in {
-            let r = setting_row(cx, p, "Sign in first", Some("Sign in with Rare Wallet here, then sign in to rare.market on your phone with the same account."), false);
-            small_button(cx, nav, r.right, "Sign in", "devices-signin", true);
+            let r = setting_row(cx, p, t.row_sign_in_first, Some(t.sign_in_first_body), false);
+            small_button(cx, nav, r.right, tr().common.sign_in, "devices-signin", true);
             return;
         }
         match (v.paired, &v.code) {
             (Some(true), _) => {
                 let who = v.account.as_deref().map(short).unwrap_or_default();
-                let r = setting_row(cx, p, "Paired", Some(&format!("Any phone signed in to {who} on rare.market/devices controls this device.")), false);
-                small_button(cx, nav, r.right, "Unpair", "devices-unpair", false);
-                let r = setting_row(cx, p, "Add another phone", Some("Sign in on rare.market with the same account. No new code needed."), false);
+                let r = setting_row(cx, p, t.row_paired, Some(&trf!(t.paired_body_phone, who = who)), false);
+                small_button(cx, nav, r.right, t.unpair, "devices-unpair", false);
+                let r = setting_row(cx, p, t.row_add_phone, Some(t.add_phone_body), false);
                 let _ = r;
             }
             (_, Some((code, url, exp))) if *exp > now => {
                 let left = ((*exp - now) / 60_000).max(1);
-                let body = format!("Scan with your phone's camera, or open rare.market/devices/pair and type {code}. Sign in with the same account. The code works for {left} more minute{}.", if left == 1 { "" } else { "s" });
-                let r = setting_row(cx, p, &format!("Code {code}"), Some(&body), false);
+                let body = trn!(t.pair_scan_body, left, code = code);
+                let r = setting_row(cx, p, &trf!(t.pair_code_title, code = code), Some(&body), false);
                 super::remote::qr_box(cx, r.right, url, 11.0);
-                let r = setting_row(cx, p, "Waiting for your phone", Some("This page updates by itself once the phone confirms."), false);
-                small_button(cx, nav, r.right, "New code", "devices-pair", false);
+                let r = setting_row(cx, p, t.row_waiting_phone, Some(t.waiting_phone_body), false);
+                small_button(cx, nav, r.right, t.new_code, "devices-pair", false);
             }
             _ => {
-                let body = if v.busy { "Working on it." } else { "Shows a code to scan with your phone. The phone needs the same account signed in at rare.market." };
-                let r = setting_row(cx, p, "Pair a phone", Some(body), false);
-                small_button(cx, nav, r.right, "Pair a phone", "devices-pair", true);
+                let body = if v.busy { t.pair_working } else { t.pair_intro };
+                let r = setting_row(cx, p, t.row_pair_phone, Some(body), false);
+                small_button(cx, nav, r.right, t.row_pair_phone, "devices-pair", true);
             }
         }
         if let Some(e) = &v.error {
-            setting_row(cx, p, "Didn't work", Some(e), false);
+            setting_row(cx, p, t.row_didnt_work, Some(e), false);
         }
         if v.paired == Some(true) {
             let p = panel(cx, parent);
-            setting_row(cx, p, "Recent from your phone", None, true);
+            setting_row(cx, p, t.row_recent_phone, None, true);
             if v.recent.is_empty() {
-                setting_row(cx, p, "Nothing yet", Some("Actions from your phone show up here."), false);
+                setting_row(cx, p, t.row_nothing_yet, Some(t.nothing_yet_body), false);
             }
             for (at, what, ok) in v.recent.iter().take(5) {
-                let body = format!("{}{}", ago(*at, now), if *ok { "" } else { ", didn't work" });
+                let body = if *ok { ago(*at, now) } else { trf!(t.recent_failed, when = ago(*at, now)) };
                 setting_row(cx, p, what, Some(&body), false);
             }
         }

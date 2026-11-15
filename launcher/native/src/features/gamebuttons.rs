@@ -9,6 +9,7 @@ use crate::state::State;
 use rare_emu::controls::{CONSOLES, STANDARD};
 use rare_render::focus::Group;
 use rare_render::view::{key, El, Motion};
+use rare_i18n::tr;
 
 pub const KIND: &str = "game-buttons";
 
@@ -39,13 +40,13 @@ impl Page for GameButtonsPage {
         let head = ui
             .bx(s().row().items_center().gap(0.75).h(2.5).mb(0.5))
             .child(kit::icon(ui, "gamepad-2", 1.5, tok::ICON2))
-            .child(ui.text("Buttons in games", T::new(Ty::Title).w(700)));
+            .child(ui.text(tr().features_more.buttons_in_games, T::new(Ty::Title).w(700)));
         let intro = ui.text_s(
             s().mb(1.25).max_w(62.0),
-            "The same in every game and emulator. Rare sets each emulator up this way and keeps your own changes.",
+            tr().features_more.buttons_in_games_intro,
             T::new(Ty::Small).c(tok::MUTED).wrap(),
         );
-        let mut cards = vec![card(ui, acts, "Every game", STANDARD, true, "standard")];
+        let mut cards = vec![card(ui, acts, tr().features_more.every_game, STANDARD, true, "standard")];
         for (system, rows) in CONSOLES {
             cards.push(card(ui, acts, system, rows, false, system));
         }

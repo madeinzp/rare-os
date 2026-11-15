@@ -3,6 +3,7 @@
 //! replaces the fixture later). Everything that waited on a timer in the web (the 1 s pairing poll,
 //! the 3 s wake poll, the 1.5 s launching flag) is driven by `tick(now)` instead.
 
+use rare_i18n::{tr, trf};
 use super::logic::*;
 
 /// The calls state.ts makes (`api` there); every one can fail with the native error text.
@@ -60,6 +61,7 @@ pub fn failed(what: &str, raw: &str, next: &str) -> String {
     }
 }
 
+#[cfg(test)]
 pub fn rare_way(guest: bool) -> &'static str {
     if guest {
         "Hold View"
@@ -231,7 +233,7 @@ impl StreamState {
         match self.api.discover() {
             Ok(h) => self.hosts = h,
             Err(e) => {
-                let t = failed("Couldn't look for PCs.", &e, "Try again.");
+                let t = failed(tr().stream.err_look, &e, tr().stream.try_again_sentence);
                 self.toast(t, true);
             }
         }
@@ -246,7 +248,7 @@ impl StreamState {
                 Some(h)
             }
             Err(e) => {
-                let t = failed("Couldn't add that PC. Check the address and try again.", &e, "");
+                let t = failed(tr().stream.err_add, &e, "");
                 self.toast(t, true);
                 None
             }
@@ -255,7 +257,7 @@ impl StreamState {
 
     pub fn pair(&mut self, host: &Host, now: f64) {
         let Some(addr) = host.address.clone() else {
-            return self.toast(format!("Rare doesn't know where {} is. Add it by address.", host.name), true);
+            return self.toast(trf!(tr().stream.unknown_address, name = host.name.clone()), true);
         };
         match self.api.pair_start(&addr) {
             Ok(p) => {
@@ -268,7 +270,7 @@ impl StreamState {
                 }
             }
             Err(e) => {
-                let t = failed("Couldn't pair with that PC.", &e, "Try again.");
+                let t = failed(tr().stream.err_pair, &e, tr().stream.try_again_sentence);
                 self.toast(t, true);
             }
         }
@@ -280,7 +282,7 @@ impl StreamState {
     }
 
     fn on_paired(&mut self, p: &PairView) {
-        self.toast(format!("{} is paired", p.name), false);
+        self.toast(trf!(tr().stream.is_paired, name = p.name.clone()), false);
         self.just_paired = Some(p.uuid.clone());
         self.load();
         self.list_apps(&p.uuid);
@@ -294,7 +296,7 @@ impl StreamState {
         match self.api.apps(uuid) {
             Ok(l) => self.set_apps(uuid, l),
             Err(e) => {
-                let t = failed("Couldn't list the games on that PC.", &e, "Try again.");
+                let t = failed(tr().stream.err_list, &e, tr().stream.try_again_sentence);
                 self.toast(t, true);
             }
         }
@@ -309,7 +311,7 @@ impl StreamState {
         }
         if !host.online {
             if !host.can_wake {
-                return self.toast(format!("{} isn't answering. Turn it on, then try again.", host.name), true);
+                return self.toast(trf!(tr().stream.host_not_answering_play, name = host.name.clone()), true);
             }
             // The launch follows when the PC answers (`tick`).
             return self.wake_start(host, Some((app.id, replace)), now);
@@ -322,10 +324,10 @@ impl StreamState {
         self.launching = Some(rid.clone());
         let replace = replace || h.current_game.is_some_and(|g| g != app.id);
         let (uuid, id) = (h.uuid.clone(), app.id);
-        let text = format!("Streaming {} from {}. {} to come back to Rare.", app.name, h.name, rare_way(self.guest));
+        let text = trf!(if self.guest { tr().stream.streaming_toast_guest } else { tr().stream.streaming_toast }, game = app.name.clone(), name = h.name.clone());
         self.launch_until = Some(now + LAUNCH_HOLD);
         self.last_now = now;
-        self.background("Starting", move |api| {
+        self.background(tr().stream.busy_starting, move |api| {
             let r = api.launch(&uuid, id, replace);
             Box::new(move |st: &mut StreamState| {
                 st.busy = None;
@@ -335,7 +337,7 @@ impl StreamState {
                         st.toast(text, false);
                     }
                     Err(e) => {
-                        let t = failed("Couldn't start the game.", &e, "Try again.");
+                        let t = failed(tr().stream.err_start, &e, tr().stream.try_again_sentence);
                         st.toast(t, true);
                     }
                 }
@@ -345,12 +347,12 @@ impl StreamState {
 
     pub fn resume(&mut self, host: &Host, app: &StreamApp) {
         let id = run_id(&host.uuid, app.id);
-        self.background("Opening", move |api| {
+        self.background(tr().stream.busy_opening, move |api| {
             let r = api.resume(&id);
             Box::new(move |st: &mut StreamState| {
                 st.busy = None;
                 if let Err(e) = r {
-                    let t = failed("Couldn't resume the game.", &e, "Try again.");
+                    let t = failed(tr().stream.err_resume, &e, tr().stream.try_again_sentence);
                     st.toast(t, true);
                 }
             })
@@ -358,9 +360,9 @@ impl StreamState {
     }
 
     pub fn quit(&mut self, host: &Host) {
-        self.toast(format!("Quitting the game on {}", host.name), false);
+        self.toast(trf!(tr().stream.quitting_on, name = host.name.clone()), false);
         let uuid = host.uuid.clone();
-        self.background("Quitting", move |api| {
+        self.background(tr().stream.busy_quitting, move |api| {
             let r = api.quit(&uuid);
             Box::new(move |st: &mut StreamState| {
                 st.busy = None;
@@ -372,7 +374,7 @@ impl StreamState {
                         st.running = st.api.running();
                     }
                     Err(e) => {
-                        let t = failed("Couldn't close the game.", &e, "Try again.");
+                        let t = failed(tr().stream.err_close, &e, tr().stream.try_again_sentence);
                         st.toast(t, true);
                     }
                 }
@@ -387,7 +389,7 @@ impl StreamState {
             Ok(()) => self.wake_job = Some(WakeJob { uuid: host.uuid.clone(), tries: 0, next: now + WAKE_EVERY, then }),
             Err(e) => {
                 self.waking = None;
-                let t = failed("Couldn't wake that PC.", &e, "Try again.");
+                let t = failed(tr().stream.err_wake, &e, tr().stream.try_again_sentence);
                 self.toast(t, true);
             }
         }
@@ -396,7 +398,7 @@ impl StreamState {
     pub fn set_settings(&mut self, s: StreamSettings) {
         self.settings = s.clone();
         if let Err(e) = self.api.set_settings(&s) {
-            let t = failed("Couldn't save the streaming settings.", &e, "Try again.");
+            let t = failed(tr().stream.err_save, &e, tr().stream.try_again_sentence);
             self.toast(t, true);
         }
     }
@@ -404,7 +406,7 @@ impl StreamState {
     pub fn install(&mut self) {
         self.installing = Some(Installing { progress: None, error: None });
         if let Err(e) = self.api.install() {
-            self.install_done(Some(failed("Couldn't set up streaming.", &e, "Check your Wi-Fi and try again.")));
+            self.install_done(Some(failed(tr().stream.err_setup, &e, tr().stream.check_wifi_sentence)));
         }
     }
 
@@ -421,7 +423,7 @@ impl StreamState {
             }
             None => {
                 self.installing = None;
-                self.toast("Moonlight is installed", false);
+                self.toast(tr().stream.moonlight_installed, false);
             }
         }
         self.load();
@@ -510,7 +512,7 @@ impl StreamState {
                 } else if j.tries >= WAKE_TRIES {
                     self.waking = None;
                     let name = self.host(&j.uuid).map(|h| h.name.clone()).unwrap_or_default();
-                    self.toast(format!("{name} didn't wake up. Check Wake-on-LAN is on in its BIOS and network settings."), true);
+                    self.toast(trf!(tr().stream.wake_failed, name = name), true);
                 } else {
                     self.wake_job = Some(j);
                 }
@@ -529,8 +531,8 @@ pub fn stream_title(st: &StreamState, rid: &str) -> Option<String> {
     let a = st.apps_of(&uuid).iter().find(|a| a.id == app);
     Some(match (a, host) {
         (Some(a), _) => a.name.clone(),
-        (None, Some(h)) => format!("A game on {}", h.name),
-        _ => "PC game".into(),
+        (None, Some(h)) => trf!(tr().stream.game_on_host, name = h.name.clone()),
+        _ => tr().stream.pc_game.into(),
     })
 }
 

@@ -6,6 +6,7 @@
 //! checked by the Move package on chain.
 
 use base64::Engine;
+use rare_i18n::{tr, trf};
 use rare_sui::grpc::{ChainRead, Include};
 use rare_sui::ptb::{bcs, norm_addr, Arg, Tx};
 use serde_json::Value;
@@ -29,7 +30,7 @@ pub struct Chain {
 }
 
 fn u64_of(v: Option<&Value>, what: &str) -> Result<u64, String> {
-    let bad = || format!("The voucher has no valid {what}");
+    let bad = || trf!(tr().features.claim_no_valid, what = what);
     match v {
         Some(Value::String(s)) if !s.is_empty() && s.len() <= 20 && s.bytes().all(|c| c.is_ascii_digit()) => s.parse().map_err(|_| bad()),
         Some(Value::Number(n)) => n.as_u64().ok_or_else(bad),
@@ -40,7 +41,7 @@ fn u64_of(v: Option<&Value>, what: &str) -> Result<u64, String> {
 fn addr_of(v: Option<&Value>, what: &str) -> Result<String, String> {
     match v {
         Some(Value::String(s)) if s.starts_with("0x") && (3..=66).contains(&s.len()) && s[2..].bytes().all(|c| c.is_ascii_hexdigit()) => Ok(norm_addr(s)),
-        _ => Err(format!("The voucher has no valid {what}")),
+        _ => Err(trf!(tr().features.claim_no_valid, what = what)),
     }
 }
 
@@ -52,13 +53,13 @@ fn pairs(keys: Option<&Value>, vals: Option<&Value>) -> Result<(Vec<String>, Vec
         }
         a.iter().map(|x| x.as_str().filter(|s| s.len() <= MAX_ATTR_LEN).map(str::to_string)).collect()
     };
-    let (Some(k), Some(v)) = (list(keys), list(vals)) else { return Err("The voucher has no valid attributes".into()) };
+    let (Some(k), Some(v)) = (list(keys), list(vals)) else { return Err(tr().features.claim_no_attrs.into()) };
     if k.len() != v.len() {
-        return Err("The voucher's attributes don't line up".into());
+        return Err(tr().features.claim_attrs_mismatch.into());
     }
     let mut seen = std::collections::HashSet::new();
     if !k.iter().all(|x| seen.insert(x.clone())) {
-        return Err("The voucher names an attribute twice".into());
+        return Err(tr().features.claim_attr_twice.into());
     }
     Ok((k, v))
 }
@@ -70,21 +71,21 @@ pub fn b64any(text: &str) -> Result<Vec<u8>, ()> {
 }
 
 fn sig_of(v: Option<&Value>) -> Result<Vec<u8>, String> {
-    let b = b64any(v.and_then(Value::as_str).unwrap_or("")).map_err(|_| "The voucher signature is not readable".to_string())?;
+    let b = b64any(v.and_then(Value::as_str).unwrap_or("")).map_err(|_| tr().features.claim_sig_unreadable.to_string())?;
     if b.len() != 64 {
-        return Err("The voucher signature is not readable".into());
+        return Err(tr().features.claim_sig_unreadable.into());
     }
     Ok(b)
 }
 
 /// Reads a voucher (shape only). The Err is a sentence the sheet can show.
 pub fn decode(text: &str) -> Result<Voucher, String> {
-    let unreadable = || "This voucher is not readable".to_string();
+    let unreadable = || tr().features.claim_unreadable.to_string();
     let bytes = b64any(text).map_err(|_| unreadable())?;
     let j: Value = serde_json::from_slice(&bytes).map_err(|_| unreadable())?;
     let o = j.as_object().ok_or_else(unreadable)?;
     if o.get("v").and_then(Value::as_u64) != Some(1) {
-        return Err("This voucher is from a newer version of Rare".into());
+        return Err(tr().features.claim_newer_version.into());
     }
     let nonce = u64_of(o.get("nonce"), "nonce")?;
     let expires_ms = u64_of(o.get("expiresMs"), "expiry")?;
@@ -96,7 +97,7 @@ pub fn decode(text: &str) -> Result<Voucher, String> {
         Some("state") => {
             let (keys, vals) = pairs(o.get("keys"), o.get("vals"))?;
             if keys.is_empty() {
-                return Err("The voucher changes nothing".into());
+                return Err(tr().features.claim_changes_nothing.into());
             }
             Ok(Voucher::State { item_id: addr_of(o.get("item"), "item")?, rev: u64_of(o.get("rev"), "item revision")?, keys, vals, nonce, expires_ms, sig: sig_of(o.get("sig"))? })
         }
@@ -109,7 +110,7 @@ pub fn decode(text: &str) -> Result<Voucher, String> {
             expires_ms,
             sig: sig_of(o.get("sig"))?,
         }),
-        _ => Err("This voucher is for something Rare can't claim yet".into()),
+        _ => Err(tr().features.claim_unsupported.into()),
     }
 }
 
@@ -123,25 +124,27 @@ impl Voucher {
     /// A line for the claim sheet's title.
     pub fn title(&self) -> &'static str {
         match self {
-            Voucher::Item { .. } => "Claim an item",
-            Voucher::State { .. } => "Update your item",
-            Voucher::Trophy { .. } => "Claim a trophy",
+            Voucher::Item { .. } => tr().features.claim_title_item,
+            Voucher::State { .. } => tr().features.claim_title_state,
+            Voucher::Trophy { .. } => tr().features.claim_title_trophy,
         }
     }
 
     /// What the sheet says is being claimed.
     pub fn what(&self) -> String {
-        let attrs = |k: &[String], v: &[String], joiner: &str| k.iter().zip(v).map(|(k, v)| format!("{k}{joiner}{v}")).collect::<Vec<_>>().join(", ");
+        let attrs = |k: &[String], v: &[String], becomes: bool| {
+            k.iter().zip(v).map(|(k, v)| if becomes { trf!(tr().features.claim_attr_becomes, key = k, value = v) } else { trf!(tr().features.claim_attr_pair, key = k, value = v) }).collect::<Vec<_>>().join(", ")
+        };
         match self {
-            Voucher::Trophy { trophy_id, .. } => format!("Trophy {trophy_id}"),
+            Voucher::Trophy { trophy_id, .. } => trf!(tr().features.claim_trophy_n, n = trophy_id),
             Voucher::Item { kind, keys, vals, .. } => {
                 if keys.is_empty() {
-                    format!("Item kind {kind}")
+                    trf!(tr().features.claim_item_kind, kind = kind)
                 } else {
-                    format!("Item kind {kind} with {}", attrs(keys, vals, " "))
+                    trf!(tr().features.claim_item_kind_with, kind = kind, attrs = attrs(keys, vals, false))
                 }
             }
-            Voucher::State { keys, vals, .. } => attrs(keys, vals, " becomes "),
+            Voucher::State { keys, vals, .. } => attrs(keys, vals, true),
         }
     }
 }
@@ -149,11 +152,11 @@ impl Voucher {
 /// Why a well-formed voucher can't be used by this player now.
 pub fn reject_reason(v: &Voucher, player: &str, now_ms: u64) -> Option<String> {
     if v.expires() <= now_ms {
-        return Some("This voucher has expired. Ask the game for a new one.".into());
+        return Some(tr().features.claim_expired.into());
     }
     let mine = norm_addr(player);
     match v {
-        Voucher::Item { player: p, .. } | Voucher::Trophy { player: p, .. } if *p != mine => Some("This voucher is for another account".into()),
+        Voucher::Item { player: p, .. } | Voucher::Trophy { player: p, .. } if *p != mine => Some(tr().features.claim_other_account.into()),
         _ => None,
     }
 }
@@ -194,26 +197,26 @@ async fn read_object(c: &dyn ChainRead, id: &str) -> Option<(String, Option<Valu
 
 /// What an item voucher's class says on chain: its marker type and its TransferPolicy.
 pub async fn read_class(c: &dyn ChainRead, pkg: &str, class_id: &str) -> Result<Chain, String> {
-    let bad = || "The voucher's item class isn't a Rare items class".to_string();
+    let bad = || tr().features.claim_bad_class.to_string();
     let (ty, json) = read_object(c, class_id).await.ok_or_else(bad)?;
     let (outer, marker) = split_generic(&ty).ok_or_else(bad)?;
     if outer != format!("{}::class::Class", norm_addr(pkg)) {
         return Err(bad());
     }
-    let policy_id = json.as_ref().and_then(|j| j.pointer("/policy_cap/policy_id")).and_then(id_of).ok_or("The item class has no transfer policy")?;
+    let policy_id = json.as_ref().and_then(|j| j.pointer("/policy_cap/policy_id")).and_then(id_of).ok_or_else(|| tr().features.claim_no_policy.to_string())?;
     Ok(Chain { marker, policy_id: Some(policy_id), class_id: Some(norm_addr(class_id)) })
 }
 
 /// What a state voucher's item says on chain: its marker type, class and current revision.
 pub async fn read_item(c: &dyn ChainRead, pkg: &str, item_id: &str) -> Result<(Chain, u64), String> {
-    let bad = || "The voucher's item isn't a Rare item".to_string();
+    let bad = || tr().features.claim_bad_item.to_string();
     let (ty, json) = read_object(c, item_id).await.ok_or_else(bad)?;
     let (outer, marker) = split_generic(&ty).ok_or_else(bad)?;
     if outer != format!("{}::item::Item", norm_addr(pkg)) {
         return Err(bad());
     }
     let json = json.unwrap_or(Value::Null);
-    let class_id = json.get("class").and_then(id_of).ok_or("The item has no class")?;
+    let class_id = json.get("class").and_then(id_of).ok_or_else(|| tr().features.claim_no_class.to_string())?;
     let rev = u64_of(Some(json.get("rev").unwrap_or(&Value::String("0".into()))), "item revision")?;
     Ok((Chain { marker, policy_id: None, class_id: Some(class_id) }, rev))
 }

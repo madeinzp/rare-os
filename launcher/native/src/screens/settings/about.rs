@@ -1,8 +1,9 @@
 //! The About and Credits sections (AccountsStorage.tsx AboutSection, Settings.tsx Licences).
 
-use super::{config::Config, rows::*, SectionOut, SectionView};
+use super::{config::Config, SectionOut, SectionView};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
+use rare_i18n::tr;
 use rare_render::theme::tok;
 use rare_render::{Id, Node};
 
@@ -71,7 +72,7 @@ impl super::SectionView for LicencesView {
 pub fn build_licences(cx: &mut Cx, nav: &mut Nav, parent: Id) {
     let r = cx.r();
     let col = cx.scene.add(parent, s().col().gap(0.75 * r).done(), Node::default());
-    cx.scene.add_text(cx.t, col, s().done(), "Rare OS is built from our own code and these open-source projects. Thank you to everyone who made them.", ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
+    cx.scene.add_text(cx.t, col, s().done(), tr().settings.credits_intro, ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
     let p = super::rows::panel(cx, col);
     for (i, (name, licence, usage)) in CREDITS.iter().enumerate() {
         let row_ = cx.scene.add(p, s().col().wp(1.0).px(1.4 * r).py(0.85 * r).done(), Node::default());
@@ -82,7 +83,7 @@ pub fn build_licences(cx: &mut Cx, nav: &mut Nav, parent: Id) {
         text(cx, line, ty::BODY, 600, tok::FG, name);
         text(cx, line, ty::META, 400, tok::MUTED, licence);
         text(cx, row_, ty::SMALL, 400, tok::MUTED, usage);
-        nav.add(Focusable { id: row_, kind: Kind::Row, group: 10, hint: "Read the licence".into(), tag: i as u32, sid: format!("licence:{i}") });
+        nav.add(Focusable { id: row_, kind: Kind::Row, group: 10, hint: tr().settings.read_licence.into(), tag: i as u32, sid: format!("licence:{i}") });
     }
 }
 
@@ -160,34 +161,35 @@ fn device_pass(cx: &mut Cx, nav: &mut Nav, parent: Id) -> Option<Id> {
         Some(pass) if pass.id.starts_with("0x") => rare_render::Src::Url(format!("https://rare.market/pass/{}-card.png", pass.id)),
         _ => rare_render::Src::Static("brand/rare-pass.png", PASS_CARD),
     };
-    text(cx, p, ty::TITLE, 600, tok::FG, "Rare Pass");
+    let t = &tr().settings;
+    text(cx, p, ty::TITLE, 600, tok::FG, t.pass_title);
     if let Some(pass) = &v.pass {
         let number = format!("#{}", pass.number);
         let seen = dp::date(pass.first_seen_ms);
-        stat_line_sized(cx, p, &[("Pass", &number), ("Device", &pass.model), ("First seen", &seen)], true);
+        stat_line_sized(cx, p, &[(t.pass_label, &number), (t.device_label, &pass.model), (t.first_seen, &seen)], true);
         let r_ = cx.r();
-        cx.scene.add_text(cx.t, p, s().max_w(40.0 * r_).done(), "Kept by this account. It stays with this device: if the device changes hands, its new owner can claim it.", ts(r_, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
+        cx.scene.add_text(cx.t, p, s().max_w(40.0 * r_).done(), t.pass_kept, ts(r_, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
         pass_card(cx, row, card_src);
         return None;
     }
     let body = if v.stale {
-        "This device's Rare Pass moved to another account. Claim it again to bring it back here."
+        t.pass_moved
     } else {
-        "One per device. Rare checks this SuiPlay's security chip, then adds a Rare Pass to your account that shows you own a genuine SuiPlay."
+        t.pass_intro
     };
     let r_ = cx.r();
     cx.scene.add_text(cx.t, p, s().max_w(40.0 * r_).done(), body, ts(r_, ty::BODY.0, ty::BODY.0 * 1.625, 400).wrap(), tok::FG.alpha(0.8));
     let busy = matches!(v.phase, Phase::Checking | Phase::Signing);
     let label = match v.phase {
-        Phase::Checking => "Checking this device",
-        Phase::Signing => "Waiting for your approval",
-        _ => "Claim your Rare Pass",
+        Phase::Checking => t.pass_checking,
+        Phase::Signing => t.pass_waiting,
+        _ => t.pass_claim,
     };
-    let b = button(cx, p, label, if busy { Variant::Dimmed } else { Variant::Primary }, Sz::Md, false).sid("device-pass").hint("Claim").tag(2);
+    let b = button(cx, p, label, if busy { Variant::Dimmed } else { Variant::Primary }, Sz::Md, false).sid("device-pass").hint(t.claim).tag(2);
     let id = nav.add(b.group(10));
     let note = match &v.phase {
         Phase::Error(e) => Some((e.as_str(), tok::NEG)),
-        _ if !v.can_sign => Some((crate::sign::NO_SIGNER, tok::MUTED)),
+        _ if !v.can_sign => Some((crate::sign::no_signer(), tok::MUTED)),
         _ => None,
     };
     if let Some((t, color)) = note {
@@ -213,20 +215,21 @@ impl AboutSection {
     }
 
     pub fn build_with(cx: &mut Cx, nav: &mut Nav, parent: Id, _cfg: &Config, d: &DeviceInfo, _now: f64) -> AboutSection {
+        let t = &tr().settings;
         let r = cx.r();
         let p0 = cx.scene.add(parent, s().col().wp(1.0).px(1.4 * r).py(1.2 * r).done(), Node::bg(tok::L1).radius(1.0 * r));
         let system = format!("{} {}", d.os_name, d.os_version);
-        stat_line_sized(cx, p0, &[("Device", &d.name), ("System", system.trim()), ("Hostname", &d.hostname), ("Display", if d.under_gamescope { "Game mode" } else { "Window" })], true);
+        stat_line_sized(cx, p0, &[(t.device_label, &d.name), (t.system_label, system.trim()), (t.hostname_label, &d.hostname), (t.display_label, if d.under_gamescope { t.game_mode } else { t.window_mode })], true);
         // Support details: serial, BIOS and this launcher's build, each when known.
         let build = launcher_build();
         let mut more: Vec<(&str, &str)> = Vec::new();
         if let Some(s) = d.serial.as_deref().filter(|s| !s.is_empty()) {
-            more.push(("Serial number", s));
+            more.push((t.serial_label, s));
         }
         if let Some(b) = d.bios.as_deref().filter(|b| !b.is_empty()) {
-            more.push(("BIOS", b));
+            more.push((t.bios_label, b));
         }
-        more.push(("Launcher", &build));
+        more.push((t.launcher_label, &build));
         let p_more = cx.scene.add(parent, s().col().wp(1.0).px(1.4 * r).py(1.2 * r).done(), Node::bg(tok::L1).radius(1.0 * r));
         stat_line_sized(cx, p_more, &more, false);
         let pass_btn = device_pass(cx, nav, parent);
@@ -241,7 +244,7 @@ impl AboutSection {
         let mut mono = ts(r_, ty::META.0, ty::META.1, 400);
         mono.mono = true;
         cx.scene.add_text(cx.t, col, s().done(), v, mono, tok::MUTED);
-        let b = button(cx, p1, "Credits and licences", Variant::Secondary, Sz::Md, false).sid("licences").tag(1);
+        let b = button(cx, p1, t.credits_button, Variant::Secondary, Sz::Md, false).sid("licences").tag(1);
         let credits_btn = nav.add(b.group(10));
         AboutSection { credits_btn, pass_btn }
     }

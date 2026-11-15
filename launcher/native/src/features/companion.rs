@@ -17,6 +17,7 @@ use crate::features::downloads::Ctl;
 use crate::page::Fx;
 use crate::state::{State, Tone};
 use rare_friends::sign::DeviceKey;
+use rare_i18n::{tr, trf, trn};
 use rare_market::net::Method;
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -106,7 +107,7 @@ fn send(m: Msg) {
 pub fn pair() {
     if TX.get().is_none() {
         // No phone control here (fixtures, a bench build): say so instead of nothing.
-        crate::screens::settings::live::toast_pub("Phone control runs on the device (fixture).", false);
+        crate::screens::settings::live::toast_pub(tr().features.phone_device_only, false);
         return;
     }
     edit(|v| {
@@ -197,21 +198,21 @@ fn run(st: &mut State, fx: &mut Fx, c: Cmd, now: f64) {
                         crate::screens::osk::finish(st, req, Some(v));
                     }
                 }
-                ack(&c.id, true, format!("Typed into {title}"));
+                ack(&c.id, true, trf!(tr().features.phone_typed_into, title = title));
             } else if !st.running.is_empty() && !rare_launch::apps::front::launcher_front() {
                 send(Msg::Type { id: c.id, text, enter });
             } else {
-                ack(&c.id, false, "Nothing on the device is waiting for text. Open a text field first.");
+                ack(&c.id, false, tr().features.phone_no_text_field);
             }
         }
         "open" => {
             let url = d["url"].as_str().unwrap_or("").to_string();
             if !url.starts_with("https://") {
-                return ack(&c.id, false, "Links need to start with https://.");
+                return ack(&c.id, false, tr().features.phone_link_https);
             }
-            st.toast("Opening a link from your phone", Tone::Info, now);
+            st.toast(tr().features.phone_opening_link, Tone::Info, now);
             fx.run(Act::OpenWeb(url.clone()));
-            ack(&c.id, true, format!("Opened {}", short_url(&url)));
+            ack(&c.id, true, trf!(tr().features.phone_opened, name = short_url(&url)));
         }
         "install" => install(st, fx, &c, now),
         "downloads" => downloads(st, fx, &c, now),
@@ -221,7 +222,7 @@ fn run(st: &mut State, fx: &mut Fx, c: Cmd, now: f64) {
             let mime = d["mime"].as_str().unwrap_or("").to_string();
             send(Msg::File { id: c.id, file, name, mime });
         }
-        _ => ack(&c.id, false, "This version of Rare does not know that action yet. Update Rare."),
+        _ => ack(&c.id, false, tr().features.phone_unknown_action),
     }
 }
 
@@ -239,7 +240,7 @@ fn install(st: &mut State, fx: &mut Fx, c: &Cmd, now: f64) {
     match store {
         "steam" => match id.parse::<u32>() {
             Ok(appid) => steam_install(st, fx, c.id.clone(), appid, title, now),
-            Err(_) => ack(&c.id, false, "That Steam app number is not valid."),
+            Err(_) => ack(&c.id, false, tr().features.phone_bad_steam_id),
         },
         "epic" | "gog" => store_install(st, &c.id, &format!("{store}:{id}"), title, now),
         "rare" => {
@@ -254,48 +255,48 @@ fn install(st: &mut State, fx: &mut Fx, c: &Cmd, now: f64) {
             } else if let Some(url) = play {
                 if st.game(&id).is_some() {
                     fx.run(Act::OpenGame(id.clone()));
-                    ack(&c.id, true, format!("{name} is in the library"));
+                    ack(&c.id, true, trf!(tr().features.phone_in_library, name = name));
                 } else {
                     let (cover, hero) = game.as_ref().map(|g| (Some(g.logo_url.clone()).filter(|s| !s.is_empty()), Some(g.banner_url.clone()).filter(|s| !s.is_empty()))).unwrap_or((None, None));
                     fx.run(Act::AddWebGame { id: Some(id.clone()), title: name.clone(), url, cover, hero });
-                    st.toast(format!("{name} added from your phone"), Tone::Info, now);
-                    ack(&c.id, true, format!("Added {name} to the library"));
+                    st.toast(trf!(tr().features.phone_added_toast, name = name), Tone::Info, now);
+                    ack(&c.id, true, trf!(tr().features.phone_added, name = name));
                 }
             } else if game.is_some() || prof.is_some() {
                 fx.run(Act::SuiGame(id.clone()));
-                ack(&c.id, true, format!("Opened {name}. It has no install on this device yet."));
+                ack(&c.id, true, trf!(tr().features.phone_opened_no_install, name = name));
             } else {
-                ack(&c.id, false, format!("{name} is not in Rare's catalog on this device yet."));
+                ack(&c.id, false, trf!(tr().features.phone_not_in_catalog, name = name));
             }
         }
-        _ => ack(&c.id, false, "Unknown store."),
+        _ => ack(&c.id, false, tr().features.phone_unknown_store),
     }
 }
 
 /// A Steam install into the library folder with the most free space (the drive sheet's pick, without asking).
 fn steam_install(st: &mut State, fx: &mut Fx, cmd: String, appid: u32, title: Option<String>, now: f64) {
     let gid = format!("steam:{appid}");
-    let name = st.game(&gid).map(|g| g.title.clone()).or(title).unwrap_or_else(|| format!("Steam app {appid}"));
+    let name = st.game(&gid).map(|g| g.title.clone()).or(title).unwrap_or_else(|| trf!(tr().features.dl_steam_app, id = appid));
     if st.game(&gid).is_some_and(|g| g.installed) {
-        return ack(&cmd, true, format!("{name} is already installed"));
+        return ack(&cmd, true, trf!(tr().features.phone_already_installed, name = name));
     }
     st.feat.downloads.asked.retain(|(a, _)| *a != gid);
     st.feat.downloads.asked.push((gid.clone(), now));
     st.feat.downloads.ver += 1;
-    st.toast(format!("Installing {name}, sent from your phone"), Tone::Info, now);
+    st.toast(trf!(tr().features.phone_installing, name = name), Tone::Info, now);
     fx.spawn(move |b| {
         let folders = b.steam_folders();
         let best = folders.iter().max_by_key(|f| f.free.unwrap_or(0)).map(|f| f.path.clone());
         let r = match best {
-            None => Err("Steam has no library folder yet. Open Steam once, then try again.".to_string()),
+            None => Err(tr().features.dl_no_library_folder.to_string()),
             Some(path) => b.steam_install(appid, &path),
         };
         Box::new(move |st: &mut State, now| match r {
-            Ok(rare_launch::steamdl::Started::Queued) => ack(&cmd, true, format!("{name} is in the downloads")),
-            Ok(rare_launch::steamdl::Started::SteamShown) => ack(&cmd, true, format!("Steam opened {name}. Finish the install on the device.")),
+            Ok(rare_launch::steamdl::Started::Queued) => ack(&cmd, true, trf!(tr().features.phone_in_downloads, name = name)),
+            Ok(rare_launch::steamdl::Started::SteamShown) => ack(&cmd, true, trf!(tr().features.phone_steam_opened, name = name)),
             Ok(rare_launch::steamdl::Started::NeedsEula(_)) => {
-                st.toast(format!("{name} has a licence agreement. Accept it on its page to install."), Tone::Info, now);
-                ack(&cmd, true, format!("{name} has a licence agreement. Accept it on the device."))
+                st.toast(trf!(tr().features.phone_eula_toast, name = name), Tone::Info, now);
+                ack(&cmd, true, trf!(tr().features.phone_eula, name = name))
             }
             Err(e) => {
                 st.feat.downloads.asked.retain(|(a, _)| *a != gid);
@@ -308,17 +309,17 @@ fn steam_install(st: &mut State, fx: &mut Fx, cmd: String, appid: u32, title: Op
 }
 
 fn store_install(st: &mut State, cmd: &str, gid: &str, title: Option<String>, now: f64) {
-    let Some((store, _)) = rare_stores::Store::of(gid) else { return ack(cmd, false, "That game id is not valid.") };
+    let Some((store, _)) = rare_stores::Store::of(gid) else { return ack(cmd, false, tr().features.phone_bad_game_id) };
     let name = st.game(gid).map(|g| g.title.clone()).or(title).unwrap_or_else(|| gid.to_string());
     if st.game(gid).is_some_and(|g| g.installed) {
-        return ack(cmd, true, format!("{name} is already installed"));
+        return ack(cmd, true, trf!(tr().features.phone_already_installed, name = name));
     }
     let home = std::env::var_os("HOME").map(std::path::PathBuf::from).unwrap_or_default();
     let dir = rare_stores::drives::games_dir(&home, store);
     match rare_stores::jobs::add(gid, &name, rare_stores::jobs::Kind::Install { base: dir }) {
         Ok(()) => {
-            st.toast(format!("Installing {name}, sent from your phone"), Tone::Info, now);
-            ack(cmd, true, format!("{name} is in the downloads"));
+            st.toast(trf!(tr().features.phone_installing, name = name), Tone::Info, now);
+            ack(cmd, true, trf!(tr().features.phone_in_downloads, name = name));
         }
         Err(e) => ack(cmd, false, e),
     }
@@ -344,11 +345,10 @@ fn downloads(st: &mut State, fx: &mut Fx, c: &Cmd, now: f64) {
         crate::features::stores::act(st, &format!("stores:{}:{id}", if pause { "pause" } else { "resume" }), now);
         n += 1;
     }
-    let verb = if pause { "Paused" } else { "Resumed" };
-    if n == 0 {
-        ack(&c.id, true, if pause { "Nothing to pause" } else { "Nothing to resume" });
+        if n == 0 {
+        ack(&c.id, true, if pause { tr().features.phone_nothing_pause } else { tr().features.phone_nothing_resume });
     } else {
-        ack(&c.id, true, format!("{verb} {n} download{}", if n == 1 { "" } else { "s" }));
+        ack(&c.id, true, trn!(if pause { tr().features.phone_paused_n } else { tr().features.phone_resumed_n }, n));
     }
 }
 
@@ -475,10 +475,10 @@ fn save_file(bytes: &[u8], name: &str, mime: &str) -> R<String> {
     if picture {
         if let Ok(c) = rare_share::import_picture(bytes) {
             let _ = c;
-            return Ok(format!("Saved {name} to Share"));
+            return Ok(trf!(tr().features.phone_saved_share, name = name));
         }
     }
-    let dir = std::env::var_os("XDG_DOWNLOAD_DIR").map(std::path::PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Downloads"))).ok_or("No Downloads folder")?;
+    let dir = std::env::var_os("XDG_DOWNLOAD_DIR").map(std::path::PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join("Downloads"))).ok_or(tr().features.phone_no_downloads)?;
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let safe: String = name.chars().map(|c| if c == '/' || c == '\\' || c.is_control() { '_' } else { c }).collect();
     let safe = safe.trim_start_matches('.').to_string();
@@ -494,7 +494,7 @@ fn save_file(bytes: &[u8], name: &str, mime: &str) -> R<String> {
         n += 1;
     }
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
-    Ok(format!("Saved {} to Downloads", path.file_name().and_then(|f| f.to_str()).unwrap_or(name)))
+    Ok(trf!(tr().features.phone_saved_downloads, name = path.file_name().and_then(|f| f.to_str()).unwrap_or(name)))
 }
 
 fn worker(rx: Receiver<Msg>) {
@@ -549,7 +549,7 @@ fn worker(rx: Receiver<Msg>) {
                 match &key {
                     None => edit(|v| {
                         v.busy = false;
-                        v.error = Some(if signed_in { format!("This device could not sign in to rare.market: {}", why.unwrap_or_default()) } else { "Sign in with Rare Wallet first.".into() });
+                        v.error = Some(if signed_in { trf!(tr().features.phone_signin_failed, error = why.unwrap_or_default()) } else { tr().features.phone_signin_first.into() });
                     }),
                     Some(k) => match call(k, Method::Post, "/v1/devices/self/pair", Some(&json!({ "name": name, "model": model }))) {
                         Ok(j) => {
@@ -594,18 +594,18 @@ fn worker(rx: Receiver<Msg>) {
                 }
             }
             Some(Msg::File { id, file, name, mime }) => {
-                let r = key.as_ref().ok_or_else(|| "Not signed in".to_string()).and_then(|k| fetch_file(k, &file)).and_then(|b| save_file(&b, &name, &mime));
+                let r = key.as_ref().ok_or_else(|| tr().features.phone_not_signed_in.to_string()).and_then(|k| fetch_file(k, &file)).and_then(|b| save_file(&b, &name, &mime));
                 let (ok, line) = match r {
                     Ok(l) => (true, l),
-                    Err(e) => (false, format!("Could not save {name}: {e}")),
+                    Err(e) => (false, trf!(tr().features.phone_save_failed, name = name, error = e)),
                 };
                 crate::social::toast_any(&line, !ok);
                 ack(&id, ok, line);
             }
             Some(Msg::Type { id, text, enter }) => {
                 let (ok, line) = match typing::type_text(&text, enter) {
-                    Ok(skipped) if skipped > 0 => (true, format!("Typed it ({skipped} characters this keyboard cannot type were left out)")),
-                    Ok(_) => (true, "Typed it into the game".to_string()),
+                    Ok(skipped) if skipped > 0 => (true, trn!(tr().features.phone_typed_skipped, skipped)),
+                    Ok(_) => (true, tr().features.phone_typed_game.to_string()),
                     Err(e) => (false, e),
                 };
                 ack(&id, ok, line);
@@ -622,7 +622,7 @@ fn worker(rx: Receiver<Msg>) {
                 Ok(j) => {
                     let now_paired = j["paired"].as_bool().unwrap_or(false);
                     if now_paired && !paired {
-                        note_recent("Paired with your phone".into(), true);
+                        note_recent(tr().features.phone_paired.into(), true);
                         last_pull = Instant::now() - Duration::from_secs(3600);
                         last_status = Instant::now() - Duration::from_secs(3600);
                     }
@@ -710,7 +710,7 @@ mod typing {
         let mut keys: Vec<u16> = (1..=57).collect();
         keys.push(SHIFT);
         keys.dedup();
-        let mut d = rare_launch::apps::pointer::uinput::Device::open_keys("Rare phone keyboard", &keys).map_err(|e| format!("No virtual keyboard on this device ({e})"))?;
+        let mut d = rare_launch::apps::pointer::uinput::Device::open_keys("Rare phone keyboard", &keys).map_err(|e| rare_i18n::trf!(rare_i18n::tr().features.phone_no_keyboard, error = e))?;
         // The compositor needs a moment to see a new input device.
         std::thread::sleep(Duration::from_millis(350));
         let mut skipped = 0;

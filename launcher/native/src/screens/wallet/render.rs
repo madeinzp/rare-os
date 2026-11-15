@@ -457,7 +457,12 @@ impl<'u, 'a, Msg: Clone> Render<'u, 'a, Msg> {
                 el = slack(txt(e.text.clone().unwrap_or_default(), ts, tc).with_style(style.clone()).look(look.clone()));
             } else if has_text && e.kids.is_empty() {
                 // A flex or grid box (or a padded block): the text is its one item, so alignment applies.
-                el = el.child(txt(e.text.clone().unwrap_or_default(), ts, tc));
+                let mut t = txt(e.text.clone().unwrap_or_default(), ts, tc);
+                if ts.wrap {
+                    // The browser's anonymous text item wraps rather than overflow its box.
+                    t.style.min_size.width = length(0.0);
+                }
+                el = el.child(t);
             } else {
                 let mut kids: Vec<El> = Vec::new();
                 if has_text {
@@ -495,6 +500,13 @@ impl<'u, 'a, Msg: Clone> Render<'u, 'a, Msg> {
                     el.style.flex_direction = FlexDirection::Row;
                     el.style.flex_wrap = FlexWrap::Wrap;
                     el.style.align_items = AlignItems::BASELINE;
+                    // A text run longer than the line wraps inside it (inline flow), as in the
+                    // browser: its min width is 0, not its one-line width (a long translation).
+                    for (k, m) in kids.iter_mut().skip(usize::from(has_text)).zip(&e.kids) {
+                        if m.kids.is_empty() && m.text.as_deref().is_some_and(|t| !t.is_empty()) {
+                            k.style.min_size.width = length(0.0);
+                        }
+                    }
                     if text.align == rare_tw::model::TextAlign::Center {
                         el.style.justify_content = rare_render::taffy::style::JustifyContent::CENTER;
                     } else if text.align == rare_tw::model::TextAlign::Right {

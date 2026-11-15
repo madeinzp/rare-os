@@ -19,6 +19,7 @@ use rare_render::scene::{GradDir, Gradient};
 use rare_render::view::{key, El, Look, Motion};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Mutex;
+use rare_i18n::{tr, trf, trn};
 
 pub const STATS: &str = "stats";
 pub const YEAR: &str = "year";
@@ -67,8 +68,22 @@ pub fn weekday(day: i64) -> usize {
     (day + 3).rem_euclid(7) as usize
 }
 
-const MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-const DAYS: [&str; 7] = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+fn month_full(i: usize) -> &'static str {
+    let f = &tr().features_more;
+    [f.stats_month_january, f.stats_month_february, f.stats_month_march, f.stats_month_april, f.stats_month_may, f.stats_month_june, f.stats_month_july, f.stats_month_august, f.stats_month_september, f.stats_month_october, f.stats_month_november, f.stats_month_december][i]
+}
+fn month_short(i: usize) -> &'static str {
+    let f = &tr().features_more;
+    [f.stats_month_jan_short, f.stats_month_feb_short, f.stats_month_mar_short, f.stats_month_apr_short, f.stats_month_may_short, f.stats_month_jun_short, f.stats_month_jul_short, f.stats_month_aug_short, f.stats_month_sep_short, f.stats_month_oct_short, f.stats_month_nov_short, f.stats_month_dec_short][i]
+}
+fn day_full(i: usize) -> &'static str {
+    let f = &tr().features_more;
+    [f.stats_day_monday, f.stats_day_tuesday, f.stats_day_wednesday, f.stats_day_thursday, f.stats_day_friday, f.stats_day_saturday, f.stats_day_sunday][i]
+}
+fn day_short(i: usize) -> &'static str {
+    let f = &tr().features_more;
+    [f.stats_day_mon_short, f.stats_day_tue_short, f.stats_day_wed_short, f.stats_day_thu_short, f.stats_day_fri_short, f.stats_day_sat_short, f.stats_day_sun_short][i]
+}
 
 // ---------------------------------------------------------------- the numbers
 
@@ -104,9 +119,9 @@ impl Span {
     const ALL: [Span; 3] = [Span::Week, Span::Month, Span::Year];
     fn label(self) -> &'static str {
         match self {
-            Span::Week => "This week",
-            Span::Month => "This month",
-            Span::Year => "This year",
+            Span::Week => tr().features_more.stats_this_week,
+            Span::Month => tr().features_more.stats_this_month,
+            Span::Year => tr().features_more.stats_this_year,
         }
     }
     /// [first day, last day] of the span holding `today`, and of the one before it.
@@ -197,7 +212,7 @@ pub fn summarize(sessions: &[Session], span: Span, now: i64, off: &dyn Fn(i64) -
     let inside: Vec<&Session> = sessions.iter().filter(|x| x.e > lo && x.s < hi && x.e - x.s >= 60).collect();
     let longest_session = inside.iter().max_by_key(|x| x.e - x.s).map(|x| (x.id.clone(), x.e - x.s));
     let bars: Vec<(String, i64)> = match span {
-        Span::Week => (0..7).map(|i| (DAYS[i][..3].to_string(), sum_range(&days, a + i as i64, a + i as i64))).collect(),
+        Span::Week => (0..7).map(|i| (day_short(i).to_string(), sum_range(&days, a + i as i64, a + i as i64))).collect(),
         Span::Month => (a..=b).map(|d| (civil(d).2.to_string(), sum_range(&days, d, d))).collect(),
         Span::Year => {
             let (y, _, _) = civil(today);
@@ -205,7 +220,7 @@ pub fn summarize(sessions: &[Session], span: Span, now: i64, off: &dyn Fn(i64) -
                 .map(|m| {
                     let s = day_of_civil(y, m, 1);
                     let e = if m == 12 { day_of_civil(y + 1, 1, 1) - 1 } else { day_of_civil(y, m + 1, 1) - 1 };
-                    (MONTHS[m as usize - 1][..3].to_string(), sum_range(&days, s, e))
+                    (rare_i18n::fmt::month_standalone(m).map(String::from).unwrap_or_else(|| month_short(m as usize - 1).to_string()), sum_range(&days, s, e))
                 })
                 .collect()
         }
@@ -236,13 +251,13 @@ pub fn summarize(sessions: &[Session], span: Span, now: i64, off: &dyn Fn(i64) -
 pub fn dur(secs: i64) -> String {
     let m = secs / 60;
     if m < 60 {
-        format!("{m} min")
+        trf!(tr().features_more.stats_min, n = m)
     } else {
         let h = secs as f64 / 3600.0;
         if h >= 100.0 {
-            format!("{} h", int(h.round() as i64))
+            trf!(tr().features_more.stats_hours, n = int(h.round() as i64))
         } else {
-            format!("{:.1} h", (h * 10.0).round() / 10.0)
+            trf!(tr().features_more.stats_hours, n = format!("{:.1}", (h * 10.0).round() / 10.0))
         }
     }
 }
@@ -252,7 +267,7 @@ fn int(n: i64) -> String {
 }
 
 fn days_word(n: u32) -> String {
-    format!("{n} {}", if n == 1 { "day" } else { "days" })
+    trn!(tr().features_more.stats_days_n, n)
 }
 
 /// Every session: the log plus the ones still running (fixtures: a sample year).
@@ -314,57 +329,57 @@ impl Page for StatsPage {
         let since = sm.since.map(|d| {
             let (y, m, dd) = civil(d);
             let (ty, _, _) = civil((now + utc_offset(now)).div_euclid(DAY));
-            if y == ty { format!("Counted by Rare since {} {dd}", &MONTHS[m as usize - 1][..3]) } else { format!("Counted by Rare since {} {dd}, {y}", &MONTHS[m as usize - 1][..3]) }
+            if y == ty { trf!(tr().features_more.stats_since, month = month_short(m as usize - 1), day = dd) } else { trf!(tr().features_more.stats_since_year, month = month_short(m as usize - 1), day = dd, year = y) }
         });
         let head = ui
             .bx(s().row().items_center().gap(0.75).h(2.5).mb(1.0))
             .child(kit::icon(ui, "chart-line", 1.5, tok::ICON2))
-            .child(ui.text("Your stats", T::new(Ty::Title).w(700)))
+            .child(ui.text(tr().features_more.stats_title, T::new(Ty::Title).w(700)))
             .child(ui.text_s(s().ml_auto().shrink().min0(), since.unwrap_or_default(), T::new(Ty::Small).c(tok::MUTED).trunc()));
         let items: Vec<TabItem> = Span::ALL.iter().map(|s| TabItem::new(s.label())).collect();
         let tabs = kit::tabs(ui, s().mb(1.5), &items, Span::ALL.iter().position(|x| *x == self.span).unwrap_or(0), true);
         let mut page = ui.bx(s().col().fill().px(2.5).pt(2.0).pb(5.0)).bg(tok::BG).enter(Motion::FADE).scrolls_y(key("stats-page")).child(head).child(tabs);
         if sm.since.is_none() {
-            let lib = kit::button(ui, B::new("Go to Library", acts.tag(Act::Tab(crate::state::Tab::Library))).primary().def(true));
-            return page.child(kit::empty(ui, s(), "No play counted yet", Some("Rare counts the time you spend in games it starts. Play something and your week shows here."), vec![lib]));
+            let lib = kit::button(ui, B::new(tr().features_more.stats_go_library, acts.tag(Act::Tab(crate::state::Tab::Library))).primary().def(true));
+            return page.child(kit::empty(ui, s(), tr().features_more.stats_empty_title, Some(tr().features_more.stats_empty_body), vec![lib]));
         }
         // The total and how it compares.
         let what = match self.span {
-            Span::Week => "last week",
-            Span::Month => "last month",
-            Span::Year => "last year",
+            Span::Week => tr().features_more.stats_last_week,
+            Span::Month => tr().features_more.stats_last_month,
+            Span::Year => tr().features_more.stats_last_year,
         };
         let diff = sm.total - sm.before;
         let cmp = if sm.before == 0 && sm.total == 0 {
-            "Nothing played yet".to_string()
+            tr().features_more.stats_nothing_yet.to_string()
         } else if sm.before == 0 {
-            format!("Nothing counted {what}")
+            trf!(tr().features_more.stats_nothing_counted, when = what)
         } else if diff.abs() < 60 {
-            format!("The same as {what}")
+            trf!(tr().features_more.stats_same_as, when = what)
         } else if diff > 0 {
-            format!("{} more than {what}", dur(diff))
+            trf!(tr().features_more.stats_more_than, time = dur(diff), when = what)
         } else {
-            format!("{} less than {what}", dur(-diff))
+            trf!(tr().features_more.stats_less_than, time = dur(-diff), when = what)
         };
         let total = ui.bx(s().col().gap(0.2).mb(1.25)).child(ui.text(dur(sm.total), T::new(Ty::Px(3.0, 3.4)).w(700).tab())).child(ui.text(cmp, T::new(Ty::Small).c(tok::MUTED)));
         page = page.child(total);
         // Cards.
         let longest = sm.longest_session.as_ref().map(|(id, s)| (dur(*s), title_of(st, id).to_string()));
         let mut cards = vec![
-            kit::info_card(ui, "Sessions", &int(sm.sessions as i64), None, None),
-            kit::info_card(ui, "Games played", &sm.games.len().to_string(), None, None),
-            kit::info_card(ui, "Streak", &days_word(sm.streak), Some(if sm.streak > 0 { "Days in a row, up to today" } else { "Play today to start one" }), None),
-            kit::info_card(ui, "Longest streak", &days_word(sm.best_streak), Some(self.span.label()), None),
+            kit::info_card(ui, tr().features_more.stats_sessions, &int(sm.sessions as i64), None, None),
+            kit::info_card(ui, tr().features_more.stats_games_played, &sm.games.len().to_string(), None, None),
+            kit::info_card(ui, tr().features_more.stats_streak, &days_word(sm.streak), Some(if sm.streak > 0 { tr().features_more.stats_streak_on } else { tr().features_more.stats_streak_off }), None),
+            kit::info_card(ui, tr().features_more.stats_longest_streak, &days_word(sm.best_streak), Some(self.span.label()), None),
         ];
         if let Some((d, t)) = &longest {
-            cards.push(kit::info_card(ui, "Longest session", d, Some(t), None));
+            cards.push(kit::info_card(ui, tr().features_more.stats_longest_session, d, Some(t), None));
         }
         page = page.child(ui.bx(s().row().wrap().gap(1.0).mb(1.5)).kids(cards));
         // Bars.
         page = page.child(bars(ui, &sm, self.span));
         // Top games.
         if !sm.games.is_empty() {
-            page = page.child(ui.text_s(s().mt(1.75).mb(0.6), "Top games", T::new(Ty::Row).w(600)));
+            page = page.child(ui.text_s(s().mt(1.75).mb(0.6), tr().features_more.stats_top_games, T::new(Ty::Row).w(600)));
             let top = sm.games.first().map(|g| g.1).unwrap_or(1).max(1);
             let rows: Vec<El> = sm
                 .games
@@ -391,13 +406,13 @@ impl Page for StatsPage {
                         .child(mid)
                         .child(ui.text_s(s().w(6.0), dur(*secs), T::new(Ty::Body).w(600).tab().right()));
                     let tag = acts.tag(Act::Local(ACT_GAME + i as u32));
-                    kit::nav(kit::row_look(el), tag, if g.is_some() { Some("Open") } else { None }, None, i == 0 && self.span != Span::Year).key(key(id))
+                    kit::nav(kit::row_look(el), tag, if g.is_some() { Some(tr().common.open) } else { None }, None, i == 0 && self.span != Span::Year).key(key(id))
                 })
                 .collect();
             page = page.child(ui.bx(s().col().gap(0.25).max_w(56.0)).group(Group::new("stats-top", [0.0; 4]).remember()).kids(rows));
         }
         if self.span == Span::Year {
-            let b = kit::button(ui, B::new("Your year on Rare", acts.tag(Act::Local(ACT_YEAR))).primary().def(true).icon(BtnIcon::Lucide("sparkles", 1.0, false)));
+            let b = kit::button(ui, B::new(tr().features_more.stats_your_year, acts.tag(Act::Local(ACT_YEAR))).primary().def(true).icon(BtnIcon::Lucide("sparkles", 1.0, false)));
             page = page.child(ui.bx(s().row().mt(1.75)).child(b));
         }
         page
@@ -435,7 +450,7 @@ impl Page for StatsPage {
     }
 
     fn hints(&self, _st: &State) -> Vec<Hint> {
-        vec![hint(Key::LbRb, "Week, month, year"), hint(Key::B, "Back")]
+        vec![hint(Key::LbRb, tr().features_more.stats_span_hint), hint(Key::B, tr().common.back)]
     }
 }
 
@@ -456,7 +471,7 @@ fn bars(ui: &mut Ui, sm: &Summary, span: Span) -> El {
             ui.bx(s().col().items_center().justify_end().grow().gap(0.4)).child(ui.bx(s().col().justify_end().items_center().h(h).wp(1.0)).child(bar)).child(lab).key(key(&(span as u8, i)))
         })
         .collect();
-    let peak = ui.text(format!("Most in a {}: {}", if span == Span::Year { "month" } else { "day" }, dur(sm.bars.iter().map(|b| b.1).max().unwrap_or(0))), T::new(Ty::Small).c(tok::MUTED));
+    let peak = ui.text(trf!(if span == Span::Year { tr().features_more.stats_most_month } else { tr().features_more.stats_most_day }, time = dur(sm.bars.iter().map(|b| b.1).max().unwrap_or(0))), T::new(Ty::Small).c(tok::MUTED));
     kit::panel(ui, s().col().gap(0.9).p(1.25).max_w(56.0)).child(peak).child(ui.bx(s().row().items_end().gap(if many { 0.15 } else { 0.5 }).wp(1.0)).kids(cols))
 }
 
@@ -538,7 +553,7 @@ impl Page for YearPage {
             }
             Some(Err(_)) => {
                 self.sharing = false;
-                st.toast("Couldn't make the picture. Try again.", Tone::Error, now);
+                st.toast(tr().features_more.stats_card_failed, Tone::Error, now);
                 None
             }
         }
@@ -555,9 +570,9 @@ impl Page for YearPage {
         let card = year_card(ui, st, &sm, year, cw, chh);
         let mut btns = Vec::new();
         if sm.since.is_some() {
-            btns.push(kit::button(ui, B::new(if self.sharing { "Making the picture" } else { "Share" }, acts.tag(Act::Local(1))).primary().def(true).disabled(self.sharing).icon(BtnIcon::Lucide("share-2", 1.0, false)).hint("Share").key(1)));
+            btns.push(kit::button(ui, B::new(if self.sharing { tr().features_more.stats_making_picture } else { tr().common.share }, acts.tag(Act::Local(1))).primary().def(true).disabled(self.sharing).icon(BtnIcon::Lucide("share-2", 1.0, false)).hint(tr().common.share).key(1)));
         }
-        btns.push(kit::button(ui, B::new("Back", acts.tag(Act::Close)).ghost().def(sm.since.is_none()).key(2)));
+        btns.push(kit::button(ui, B::new(tr().common.back, acts.tag(Act::Close)).ghost().def(sm.since.is_none()).key(2)));
         let row = ui.bx(s().row().gap(0.75).mt(1.25)).group(Group::new("year-actions", [0.0; 4])).kids(btns);
         // Above the hint bar (3rem).
         ui.bx(s().fill().col().items_center().justify_center().px(2.5).pb(3.0)).bg(tok::BG).enter(Motion::FADE).child(card).child(row)
@@ -582,9 +597,9 @@ impl Page for YearPage {
 
     fn hints(&self, _st: &State) -> Vec<Hint> {
         if self.log.is_empty() {
-            return vec![hint(Key::B, "Back")];
+            return vec![hint(Key::B, tr().common.back)];
         }
-        vec![hint(Key::Y, "Share"), hint(Key::B, "Back")]
+        vec![hint(Key::Y, tr().common.share), hint(Key::B, tr().common.back)]
     }
 }
 
@@ -599,32 +614,32 @@ fn year_card(ui: &mut Ui, st: &State, sm: &Summary, year: i64, w: f32, h: f32) -
         card = card.child(ui.bx(s().fill()).child(art)).child(ui.bx(s().fill()).look(Look::default().grad(Gradient { dir: GradDir::ToRight, stops: [tok::BG.alpha(0.97), tok::BG.alpha(0.85), tok::BG.alpha(0.55)], mid: 0.55 })));
     }
     let label = T::new(Ty::Px(0.8 * k, 1.1 * k)).w(600).c(tok::MUTED).track(0.08);
-    let mut left = ui.bx(s().col().gap(0.3 * k).w(w * 0.46).min0()).child(ui.text(format!("YOUR {year} ON RARE"), label));
+    let mut left = ui.bx(s().col().gap(0.3 * k).w(w * 0.46).min0()).child(ui.text(trf!(tr().features_more.stats_year_label, year = year), label));
     if sm.since.is_none() {
-        left = left.child(ui.text_s(s().mt(1.0 * k).wp(1.0), "No play counted yet this year", T::new(Ty::Px(2.0 * k, 2.5 * k)).w(700).wrap()));
+        left = left.child(ui.text_s(s().mt(1.0 * k).wp(1.0), tr().features_more.stats_year_empty, T::new(Ty::Px(2.0 * k, 2.5 * k)).w(700).wrap()));
     } else {
         let hours = sm.total as f64 / 3600.0;
-        let big = if hours >= 1.0 { format!("{} {}", int(hours.round() as i64), if hours.round() as i64 == 1 { "hour" } else { "hours" }) } else { dur(sm.total) };
+        let big = if hours >= 1.0 { trn!(tr().features_more.stats_hours_n, hours.round() as i64, n = int(hours.round() as i64)) } else { dur(sm.total) };
         left = left
             .child(ui.text_s(s().mt(0.6 * k).wp(1.0), big, T::new(Ty::Px(4.2 * k, 4.8 * k)).w(800).tab().trunc()))
-            .child(ui.text_s(s().wp(1.0), format!("across {} {} and {} {}", sm.games.len(), if sm.games.len() == 1 { "game" } else { "games" }, int(sm.sessions as i64), if sm.sessions == 1 { "session" } else { "sessions" }), T::new(Ty::Px(1.05 * k, 1.5 * k)).c(tok::fg(0.8)).trunc()));
+            .child(ui.text_s(s().wp(1.0), trf!(tr().features_more.stats_across, games = trn!(tr().common.games_n, sm.games.len()), sessions = trn!(tr().features_more.stats_sessions_n, sm.sessions, n = int(sm.sessions as i64))), T::new(Ty::Px(1.05 * k, 1.5 * k)).c(tok::fg(0.8)).trunc()));
         let fact = |ui: &mut Ui, l: &str, v: String| ui.bx(s().col().gap(0.15 * k).w(w * 0.2).min0()).child(ui.text(l, T::new(Ty::Px(0.75 * k, 1.05 * k)).c(tok::MUTED).trunc())).child(ui.text(v, T::new(Ty::Px(1.15 * k, 1.5 * k)).w(700).trunc()));
-        let mut facts = vec![fact(ui, "Longest streak", days_word(sm.best_streak))];
+        let mut facts = vec![fact(ui, tr().features_more.stats_longest_streak, days_word(sm.best_streak))];
         if let Some(m) = sm.busiest_month {
-            facts.push(fact(ui, "Busiest month", MONTHS[m].to_string()));
+            facts.push(fact(ui, tr().features_more.stats_busiest_month, month_full(m).to_string()));
         }
         if let Some(d) = sm.favourite_day {
-            facts.push(fact(ui, "Favourite day", DAYS[d].to_string()));
+            facts.push(fact(ui, tr().features_more.stats_favourite_day, day_full(d).to_string()));
         }
         if let Some((_, s)) = &sm.longest_session {
-            facts.push(fact(ui, "Longest session", dur(*s)));
+            facts.push(fact(ui, tr().features_more.stats_longest_session, dur(*s)));
         }
         left = left.child(ui.bx(s().row().wrap().gap_xy(1.2 * k, 1.0 * k).mt(1.6 * k).wp(1.0)).kids(facts));
     }
     left = left.child(ui.text_s(s().mt_auto(), "rare.market", T::new(Ty::Px(0.85 * k, 1.2 * k)).w(600).c(tok::MUTED)));
     let mut right = ui.bx(s().col().gap(0.55 * k).w(w * 0.38).min0());
     if !sm.games.is_empty() {
-        right = right.child(ui.text_s(s().mb(0.2 * k), "Most played", label));
+        right = right.child(ui.text_s(s().mb(0.2 * k), tr().features_more.stats_most_played, label));
         for (i, (id, secs)) in sm.games.iter().take(5).enumerate() {
             let g = st.game(id);
             let thumb = match g {

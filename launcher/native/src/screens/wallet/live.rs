@@ -4,6 +4,7 @@
 //! answer comes back on a channel the page drains in `tick`.
 
 use super::types::{ActivityChange, ActivityItem, ActivityKind, Portfolio, PortfolioToken};
+use rare_i18n::tr;
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, OnceLock};
 
@@ -100,7 +101,7 @@ pub fn load(address: &str, inventory: bool) -> Receiver<Answer> {
                 let trade = rare_sui::prices::PriceClient::new(rare_sui::prices::TRADE_URL, http());
                 rare_sui::balances::portfolio(s, &trade, &a).await.map(portfolio_of).map_err(|e| e.to_string())
             }
-            None => Err("Sui is not reachable".into()),
+            None => Err(tr().wallet.sui_unreachable.into()),
         };
         let _ = t.send(Answer::Portfolio(a, r));
     });

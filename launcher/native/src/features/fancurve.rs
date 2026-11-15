@@ -9,6 +9,7 @@ use crate::act::Act;
 use crate::kit::{self, s, tok, Ty, Ui, T};
 use crate::page::{hash, Acts, Btn, Feedback, Fx, Page};
 use crate::state::{State, Tone};
+use rare_i18n::{tr, trf};
 use rare_render::focus::hints::{hint, Hint, Key};
 use rare_render::focus::{Focusable, Group};
 use rare_render::view::{key, El, Motion};
@@ -20,13 +21,26 @@ pub const KIND: &str = "fan-curve";
 
 /// hhd's points, the ones rare-fand's presets use.
 pub const TEMPS: [u32; 9] = [40, 45, 50, 55, 60, 65, 70, 80, 90];
-/// The presets LB and RB step through: (rare-fand name, label, what it does).
-const PRESETS: [(&str, &str, &str); 4] = [
-    ("quiet", "Quiet", "Stays low to about 65 C."),
-    ("default", "Balanced", "The device's own curve."),
-    ("cool", "Max", "Spins up early and runs flat out from 80 C."),
-    ("custom", "Custom", "Your curve. Up and down change a point, X saves it."),
-];
+/// The presets LB and RB step through (rare-fand names).
+const PRESETS: [&str; 4] = ["quiet", "default", "cool", "custom"];
+
+fn preset_label(name: &str) -> &'static str {
+    match name {
+        "quiet" => tr().features.fan_quiet,
+        "default" => tr().features.fan_balanced,
+        "cool" => tr().features.fan_max,
+        _ => tr().features.fan_custom,
+    }
+}
+
+fn preset_note(name: &str) -> &'static str {
+    match name {
+        "quiet" => tr().features.fan_quiet_note,
+        "default" => tr().features.fan_balanced_note,
+        "cool" => tr().features.fan_max_note,
+        _ => tr().features.fan_custom_note,
+    }
+}
 const STEP: u32 = 5;
 /// Bar height in rem at 100%.
 const BAR_H: f32 = 15.0;
@@ -85,7 +99,7 @@ pub fn nudge(points: &mut [u32], i: usize, delta: i32) {
 }
 
 fn preset_index(name: &str) -> usize {
-    PRESETS.iter().position(|p| p.0 == name).unwrap_or(1)
+    PRESETS.iter().position(|p| *p == name).unwrap_or(1)
 }
 
 /// "54 C, 2,898 rpm, fan at 41%".
@@ -98,10 +112,10 @@ pub fn now_line(f: &FanStatus) -> String {
         parts.push(format!("{} rpm", crate::kit::format::grouped(r as f64, 0, 0)));
     }
     if let Some(d) = f.duty {
-        parts.push(format!("fan at {d}%"));
+        parts.push(trf!(tr().features.fan_duty, n = d));
     }
     if parts.is_empty() {
-        "Reading the fan".into()
+        tr().features.fan_reading.into()
     } else {
         parts.join(", ")
     }
@@ -136,7 +150,7 @@ impl FanCurvePage {
 
     fn show_preset(&mut self, i: usize) {
         self.preset = i;
-        let name = PRESETS[i].0;
+        let name = PRESETS[i];
         if name != "custom" {
             self.points = at_temps(&rare_system::system::fan_preset_curve(name));
             self.dirty = false;
@@ -157,33 +171,34 @@ impl Page for FanCurvePage {
             self.take(f);
         }
         let f = fan.as_ref();
-        let now = f.map(now_line).unwrap_or_else(|| "Reading the fan".into());
+        let now = f.map(now_line).unwrap_or_else(|| tr().features.fan_reading.into());
         let head = ui
             .bx(s().row().items_center().gap(0.75).h(2.5).mb(0.5))
             .child(kit::icon(ui, "activity", 1.5, tok::ICON2))
-            .child(ui.text("Fan curve", T::new(Ty::Title).w(700)))
+            .child(ui.text(tr().features.fan_title, T::new(Ty::Title).w(700)))
             .child(ui.text_s(s().ml_auto(), now, T::new(Ty::Small).c(tok::MUTED).tab()));
         let mut page = ui.bx(s().col().fill().px(2.5).py(2.0)).bg(tok::BG).enter(Motion::FADE).scrolls_y(key("fan-curve")).child(head);
         if f.is_none() && self.points.is_empty() {
-            return page.child(kit::empty(ui, s(), "No fan control here", Some("The fan follows the device's own curve. Rare OS controls the fan on the SuiPlay0X1."), vec![]));
+            return page.child(kit::empty(ui, s(), tr().features.fan_no_control, Some(tr().features.fan_no_control_body), vec![]));
         }
         // Presets: LB and RB.
         let mut chips = ui.bx(s().row().items_center().gap(0.5).mb(0.4));
-        for (i, (_, label, _)) in PRESETS.iter().enumerate() {
+        for (i, name) in PRESETS.iter().enumerate() {
+            let label = preset_label(name);
             let on = i == self.preset;
             chips = chips.child(
                 ui.bx(s().row().items_center().justify_center().h(2.25).min_w(5.5).px(1.0))
                     .bg(if on { tok::FG } else { tok::L2 })
                     .radius(ui.r(0.25))
-                    .child(ui.text(*label, T::new(Ty::Small).w(500).c(if on { tok::BG } else { tok::FG })))
+                    .child(ui.text(label, T::new(Ty::Small).w(500).c(if on { tok::BG } else { tok::FG })))
                     .key(key(&("fan-preset", i))),
             );
         }
-        chips = chips.child(ui.text_s(s().ml(0.75).min0().shrink(), PRESETS[self.preset].2, T::new(Ty::Small).c(tok::MUTED).trunc()));
+        chips = chips.child(ui.text_s(s().ml(0.75).min0().shrink(), preset_note(PRESETS[self.preset]), T::new(Ty::Small).c(tok::MUTED).trunc()));
         page = page.child(chips);
         // The chart: one column per point; the one nearest the temperature now is marked.
         let near = f.and_then(|f| f.temp).map(|t| TEMPS.iter().enumerate().min_by_key(|(_, p)| ((**p as f64 - t).abs() * 10.0) as i64).map(|(i, _)| i).unwrap_or(0));
-        let editing = PRESETS[self.preset].0 == "custom";
+        let editing = PRESETS[self.preset] == "custom";
         let mut cols = ui.bx(s().row().items_end().gap(0.75).mt(1.25).wp(1.0).max_w(78.0)).group(Group::new("fan-points", [0.0; 4]).remember());
         for (i, (&t, &d)) in TEMPS.iter().zip(self.points.iter()).enumerate() {
             let bar = ui
@@ -193,7 +208,7 @@ impl Page for FanCurvePage {
                 .clip()
                 .child(ui.bx(s().wp(1.0).h(BAR_H * d as f32 / 100.0)).bg(if editing { tok::fg(0.85) } else { tok::fg(0.45) }));
             let label = ui.text(format!("{t} C"), T::new(Ty::Small).tab().c(if near == Some(i) { tok::FG } else { tok::MUTED }));
-            let marker = ui.text(if near == Some(i) { "Now" } else { " " }, T::new(Ty::Label).w(600).c(tok::FG));
+            let marker = ui.text(if near == Some(i) { tr().features.fan_now } else { " " }, T::new(Ty::Label).w(600).c(tok::FG));
             let col = ui
                 .bx(s().col().items_center().gap(0.4).grow().min_w(4.0).py(0.5).px(0.4))
                 .radius(ui.r(0.5))
@@ -205,24 +220,24 @@ impl Page for FanCurvePage {
             let col = col.focus_look(fl);
             let tag = acts.tag(Act::Local(ACT_POINT + i as u32));
             // A on a point: edit the curve from here (a preset becomes Custom), save a changed one.
-            let a = if !editing { "Edit" } else if self.dirty { "Save curve" } else { "Change" };
+            let a = if !editing { tr().common.edit } else if self.dirty { tr().features.fan_save_curve } else { tr().common.change };
             cols = cols.child(kit::nav(col, tag, Some(a), None, i == 0).key(key(&("fan-col", i))));
         }
         page = page.child(cols);
         let note = if editing {
             if self.dirty {
-                "Not saved yet. X saves this curve; B leaves it as it was."
+                tr().features.fan_unsaved
             } else {
-                "Up and down change the point you are on. The fan never slows down as it gets hotter."
+                tr().features.fan_editing
             }
         } else {
-            "Up or down on a point starts a custom curve from this one."
+            tr().features.fan_start_custom
         };
         page = page.child(ui.text_s(s().mt(1.25), note, T::new(Ty::Small).c(tok::MUTED).wrap()));
         if f.is_some_and(|f| f.mode == "emergency" || f.mode == "failsafe") {
-            page = page.child(ui.text_s(s().mt(0.5), "The fan is running flat out to cool the device down.", T::new(Ty::Small).c(tok::ATTN).wrap()));
+            page = page.child(ui.text_s(s().mt(0.5), tr().features.fan_flat_out, T::new(Ty::Small).c(tok::ATTN).wrap()));
         }
-        let save = kit::button(ui, kit::Btn::new("Save curve", acts.tag(Act::Local(ACT_SAVE))).primary().disabled(!(editing && self.dirty)));
+        let save = kit::button(ui, kit::Btn::new(tr().features.fan_save_curve, acts.tag(Act::Local(ACT_SAVE))).primary().disabled(!(editing && self.dirty)));
         page.child(ui.bx(s().row().mt(1.25)).child(save))
     }
 
@@ -233,7 +248,7 @@ impl Page for FanCurvePage {
                 let i = if b == Btn::Rb { (self.preset + 1) % n } else { (self.preset + n - 1) % n };
                 self.show_preset(i);
                 fx.fb(Feedback::Toggle);
-                let name = PRESETS[i].0;
+                let name = PRESETS[i];
                 if name == "custom" {
                     // Custom: the saved custom curve if there is one, else keep what is shown.
                     if let Some(c) = self.fan_now().filter(|f| f.preset == "custom" && !f.curve.is_empty()) {
@@ -248,7 +263,7 @@ impl Page for FanCurvePage {
                     Box::new(move |st: &mut State, now| {
                         if let Err(e) = r {
                             log::warn!("fan: {e}");
-                            st.toast("Couldn't change the fan.", Tone::Error, now);
+                            st.toast(tr().features.fan_change_failed, Tone::Error, now);
                         }
                         *fan.lock().unwrap() = f;
                         seen.fetch_add(1, Ordering::Relaxed);
@@ -259,7 +274,7 @@ impl Page for FanCurvePage {
             Btn::Up | Btn::Down => {
                 let Some(Act::Local(c)) = cur.and_then(|c| c.1) else { return false };
                 let Some(i) = c.checked_sub(ACT_POINT).map(|i| i as usize).filter(|i| *i < TEMPS.len()) else { return false };
-                if PRESETS[self.preset].0 != "custom" {
+                if PRESETS[self.preset] != "custom" {
                     self.preset = preset_index("custom");
                 }
                 nudge(&mut self.points, i, if b == Btn::Up { STEP as i32 } else { -(STEP as i32) });
@@ -278,7 +293,7 @@ impl Page for FanCurvePage {
 
     fn act(&mut self, st: &mut State, fx: &mut Fx, code: u32) {
         if (ACT_POINT..ACT_POINT + TEMPS.len() as u32).contains(&code) {
-            if PRESETS[self.preset].0 != "custom" {
+            if PRESETS[self.preset] != "custom" {
                 // Custom, starting from the curve shown: the bars light up for editing.
                 self.preset = preset_index("custom");
                 self.ver += 1;
@@ -287,11 +302,11 @@ impl Page for FanCurvePage {
                 return self.act(st, fx, ACT_SAVE);
             } else {
                 let t = TEMPS[(code - ACT_POINT) as usize];
-                st.toast(format!("Up and down change the fan at {t} C."), Tone::Info, rare_render::clock::secs());
+                st.toast(trf!(tr().features.fan_up_down, t = t), Tone::Info, rare_render::clock::secs());
             }
             return;
         }
-        if code != ACT_SAVE || !self.dirty || PRESETS[self.preset].0 != "custom" {
+        if code != ACT_SAVE || !self.dirty || PRESETS[self.preset] != "custom" {
             return;
         }
         let points: Vec<(u32, u32)> = TEMPS.iter().copied().zip(self.points.iter().copied()).collect();
@@ -304,10 +319,10 @@ impl Page for FanCurvePage {
             let f = b.fan_status();
             Box::new(move |st: &mut State, now| {
                 match r {
-                    Ok(()) => st.toast("Fan curve saved", Tone::Info, now),
+                    Ok(()) => st.toast(tr().features.fan_saved, Tone::Info, now),
                     Err(e) => {
                         log::warn!("fan curve: {e}");
-                        st.toast("Couldn't save the fan curve.", Tone::Error, now);
+                        st.toast(tr().features.fan_save_failed, Tone::Error, now);
                     }
                 }
                 *fan.lock().unwrap() = f;
@@ -325,9 +340,9 @@ impl Page for FanCurvePage {
     }
 
     fn hints(&self, _st: &State) -> Vec<Hint> {
-        let mut h = vec![hint(Key::LbRb, "Preset"), hint(Key::B, "Back")];
+        let mut h = vec![hint(Key::LbRb, tr().features.fan_preset), hint(Key::B, tr().common.back)];
         if self.dirty {
-            h.insert(0, hint(Key::X, "Save curve"));
+            h.insert(0, hint(Key::X, tr().features.fan_save_curve));
         }
         h
     }

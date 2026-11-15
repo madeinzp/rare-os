@@ -1,6 +1,7 @@
 //! Friends data and pure logic (friends/{types,display,format,mock}.ts, the selectors of store.ts)
 //! and the Friends tab body (overlay/menuTabs.tsx FriendsTab).
 
+use rare_i18n::{tr, trf, trn};
 use super::{calm, line, mk_row, right_label, section, G_ONLINE, G_PARTY, G_PLAYING, G_REQUESTS};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
@@ -145,7 +146,7 @@ pub fn name_of(p: Option<&Identity>, fallback: &str) -> String {
 
 /// store.ts `label`.
 pub fn label(p: Option<&Identity>) -> String {
-    name_of(p, "Someone")
+    name_of(p, tr().overlay.someone)
 }
 
 // ---- format.ts ----
@@ -154,27 +155,29 @@ fn round(x: f64) -> i64 {
     (x + 0.5).floor() as i64
 }
 
-fn mins(ms: i64) -> String {
+pub fn mins(ms: i64) -> String {
     let m = round(ms as f64 / 60_000.0).max(1);
     if m < 60 {
-        format!("{m} min")
+        trf!(tr().overlay.min_short, m = m)
+    } else if m % 60 != 0 {
+        trf!(tr().overlay.h_min_short, h = m / 60, m = m % 60)
     } else {
-        format!("{} h {}", m / 60, if m % 60 != 0 { format!("{} min", m % 60) } else { String::new() }).trim().to_string()
+        trf!(tr().overlay.h_short, h = m / 60)
     }
 }
 
 pub fn ago(t: i64, now: i64) -> String {
     let s = ((now - t) as f64 / 1000.0).max(0.0);
     if s < 120.0 {
-        "just now".into()
+        tr().overlay.ago_just_now.into()
     } else if s < 3600.0 {
-        format!("{} min ago", round(s / 60.0))
+        trf!(tr().overlay.ago_min, n = round(s / 60.0))
     } else if s < 86400.0 {
-        format!("{} h ago", round(s / 3600.0))
+        trf!(tr().overlay.ago_h, n = round(s / 3600.0))
     } else if s < 86400.0 * 2.0 {
-        "yesterday".into()
+        tr().overlay.ago_yesterday.into()
     } else {
-        format!("{} days ago", round(s / 86400.0))
+        trn!(tr().overlay.ago_days, round(s / 86400.0))
     }
 }
 
@@ -182,19 +185,19 @@ pub fn ago(t: i64, now: i64) -> String {
 pub fn presence_text(p: &Presence, long: bool, now: i64) -> String {
     match p.state {
         PState::Offline => match p.last_seen.filter(|t| *t != 0) {
-            Some(t) => format!("Last seen {}", ago(t, now)),
-            None => "Offline".into(),
+            Some(t) => trf!(tr().overlay.last_seen, when = ago(t, now)),
+            None => tr().common.offline.into(),
         },
         PState::Away => match &p.game {
-            Some(g) => format!("Away, in {}", g.title),
-            None => "Away".into(),
+            Some(g) => trf!(tr().overlay.away_in, game = g.title),
+            None => tr().overlay.away.into(),
         },
         PState::Online => match &p.game {
             Some(g) => match p.since.filter(|t| *t != 0) {
-                Some(since) if long => format!("Playing {} for {}", g.title, mins(now - since)),
-                _ => format!("Playing {}", g.title),
+                Some(since) if long => trf!(tr().overlay.playing_for, game = g.title, time = mins(now - since)),
+                _ => trf!(tr().overlay.playing_game, game = g.title),
             },
-            None => "Online".into(),
+            None => tr().common.online.into(),
         },
     }
 }
@@ -355,19 +358,19 @@ fn friend_row(cx: &mut Cx, nav: &mut Nav, parent: Id, f: &Friend, group: u32, hi
 pub fn friends_tab(cx: &mut Cx, nav: &mut Nav, parent: Id, v: &FriendsView, now_ms: i64) {
     let r = cx.r();
     match v.status {
-        Status::None => return calm(cx, parent, "Sign in with a passkey to see your friends."),
-        Status::Watch => return calm(cx, parent, "Add a passkey to see your friends."),
-        Status::Error => return calm(cx, parent, v.error.as_deref().unwrap_or("Friends didn't load. Try again in a moment.")),
+        Status::None => return calm(cx, parent, tr().overlay.friends_sign_in),
+        Status::Watch => return calm(cx, parent, tr().overlay.friends_add_passkey),
+        Status::Error => return calm(cx, parent, v.error.as_deref().unwrap_or(tr().overlay.friends_failed)),
         Status::Unlinked | Status::Linking => {
             let c = cx.scene.add(parent, s().col().items_start().gap(0.8 * r).pad(0.75 * r, 1.2 * r, 0.75 * r, 1.2 * r).done(), Node::default());
-            cx.scene.add_text(cx.t, c, s().done(), "Turn on friends to see who is playing and join their games.", ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
+            cx.scene.add_text(cx.t, c, s().done(), tr().overlay.friends_turn_on_intro, ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
             let linking = v.status == Status::Linking;
-            let b = button(cx, c, if linking { "Turning on..." } else { "Turn on friends" }, Variant::Secondary, Sz::Md, false);
+            let b = button(cx, c, if linking { tr().overlay.turning_on } else { tr().overlay.turn_on_friends }, Variant::Secondary, Sz::Md, false);
             if linking {
                 // disabled:opacity-40, not focusable.
                 cx.scene.n(b.id).opacity.snap(0.4);
             } else {
-                nav.add(b.group(G_ONLINE + 10).hint("Turn on").sid("turn-on"));
+                nav.add(b.group(G_ONLINE + 10).hint(tr().common.turn_on).sid("turn-on"));
             }
             return;
         }
@@ -382,73 +385,73 @@ pub fn friends_tab(cx: &mut Cx, nav: &mut Nav, parent: Id, v: &FriendsView, now_
     let online: Vec<&Friend> = v.friends.iter().filter(|f| f.presence.state != PState::Offline && f.presence.game.is_none()).collect();
     let requests = v.received.len();
 
-    let sec = section(cx, col, "Party", None);
+    let sec = section(cx, col, tr().overlay.party, None);
     if let (Some(inv), None) = (invite, party) {
         let fo = mk_row(cx, sec, 3.25);
         let sub = match &inv.game {
             Some(g) => g.title.clone(),
-            None => format!("{} in the party", inv.members.iter().filter(|m| m.state == MState::Joined).count()),
+            None => trf!(tr().overlay.party_members_count, n = inv.members.iter().filter(|m| m.state == MState::Joined).count()),
         };
-        line(cx, fo.id, &format!("{} invited you", host_label(inv)), Some(&sub));
-        right_label(cx, fo.id, "Join");
-        nav.add(fo.group(G_PARTY).hint("Join party").sid("invite-join"));
+        line(cx, fo.id, &trf!(tr().overlay.party_invited_you, name = host_label(inv)), Some(&sub));
+        right_label(cx, fo.id, tr().overlay.join);
+        nav.add(fo.group(G_PARTY).hint(tr().overlay.join_party).sid("invite-join"));
     }
     if let Some(p) = party {
         let fo = mk_row(cx, sec, 3.25);
-        let title = if p.host == v.address { "Your party".to_string() } else { format!("{}'s party", host_label(p)) };
-        let names: Vec<String> = p.members.iter().filter(|m| m.state == MState::Joined).map(|m| if m.who.address == v.address { "you".to_string() } else { label(Some(&m.who)) }).collect();
+        let title = if p.host == v.address { tr().overlay.your_party.to_string() } else { trf!(tr().overlay.party_of, name = host_label(p)) };
+        let names: Vec<String> = p.members.iter().filter(|m| m.state == MState::Joined).map(|m| if m.who.address == v.address { tr().overlay.you_lower.to_string() } else { label(Some(&m.who)) }).collect();
         line(cx, fo.id, &title, Some(&names.join(", ")));
-        right_label(cx, fo.id, "Invite");
-        nav.add(fo.group(G_PARTY).hint("Invite friends").sid("party-invite"));
+        right_label(cx, fo.id, tr().overlay.invite);
+        nav.add(fo.group(G_PARTY).hint(tr().overlay.invite_friends).sid("party-invite"));
         let fo = mk_row(cx, sec, 3.25);
-        line(cx, fo.id, "Leave party", None);
-        nav.add(fo.group(G_PARTY).hint("Leave party").sid("party-leave"));
+        line(cx, fo.id, tr().overlay.leave_party, None);
+        nav.add(fo.group(G_PARTY).hint(tr().overlay.leave_party).sid("party-leave"));
     } else {
         let fo = mk_row(cx, sec, 3.25);
-        line(cx, fo.id, "Start a party", Some("Then invite friends to this game"));
-        nav.add(fo.group(G_PARTY).hint("Start a party").sid("party-start"));
+        line(cx, fo.id, tr().overlay.start_party, Some(tr().overlay.start_party_sub));
+        nav.add(fo.group(G_PARTY).hint(tr().overlay.start_party).sid("party-start"));
     }
     if !v.convos.is_empty() {
         let unread: u32 = v.convos.iter().map(|c| c.unread).sum();
-        let note = (unread > 0).then(|| format!("{unread} new"));
-        let sec = section(cx, col, "Messages", note.as_deref());
+        let note = (unread > 0).then(|| trf!(tr().overlay.new_count, n = unread));
+        let sec = section(cx, col, tr().overlay.messages, note.as_deref());
         for c in v.convos.iter().take(4) {
             let fo = mk_row(cx, sec, 4.75);
             avatar(cx, fo.id, &c.who.address, c.avatar.as_deref(), 2.25 * r);
             let lc = cx.scene.add(fo.id, s().col().grow().done(), Node::default());
             text_tr(cx, lc, ty::SMALL, 500, tok::FG, &label(Some(&c.who)));
             for (mine, t) in c.lines.iter().rev().take(2).rev() {
-                let who = if *mine { "You".to_string() } else { label(Some(&c.who)) };
-                text_tr(cx, lc, ty::LABEL, 400, if *mine { tok::MUTED } else { tok::FG.alpha(0.85) }, &format!("{who}: {t}"));
+                let who = if *mine { tr().overlay.say_you.to_string() } else { label(Some(&c.who)) };
+                text_tr(cx, lc, ty::LABEL, 400, if *mine { tok::MUTED } else { tok::FG.alpha(0.85) }, &trf!(tr().overlay.say_line, who = who, text = t));
             }
             if c.unread > 0 {
                 dot(cx, fo.id, tok::FG);
                 right_label(cx, fo.id, &if c.unread > 99 { "99+".to_string() } else { c.unread.to_string() });
             }
-            nav.add(fo.group(G_PARTY + 20).hint("Reply").sid(&format!("dm:{}", c.who.address)));
+            nav.add(fo.group(G_PARTY + 20).hint(tr().overlay.reply).sid(&format!("dm:{}", c.who.address)));
         }
     }
     if !playing.is_empty() {
-        let sec = section(cx, col, "Playing", Some(&playing.len().to_string()));
+        let sec = section(cx, col, tr().overlay.playing_section, Some(&playing.len().to_string()));
         for f in &playing {
-            friend_row(cx, nav, sec, f, G_PLAYING, "Join game", format!("join-game:{}", f.who.address), now_ms);
+            friend_row(cx, nav, sec, f, G_PLAYING, tr().overlay.join_game, format!("join-game:{}", f.who.address), now_ms);
         }
     }
     if !online.is_empty() {
-        let sec = section(cx, col, "Online", Some(&online.len().to_string()));
+        let sec = section(cx, col, tr().overlay.online_section, Some(&online.len().to_string()));
         for f in &online {
-            friend_row(cx, nav, sec, f, G_ONLINE, "Open", format!("friend:{}", f.who.address), now_ms);
+            friend_row(cx, nav, sec, f, G_ONLINE, tr().common.open, format!("friend:{}", f.who.address), now_ms);
         }
     }
     if requests > 0 {
-        let sec = section(cx, col, "Requests", None);
+        let sec = section(cx, col, tr().overlay.requests, None);
         let fo = mk_row(cx, sec, 3.25);
-        line(cx, fo.id, &if requests == 1 { "1 friend request".to_string() } else { format!("{requests} friend requests") }, None);
+        line(cx, fo.id, &trn!(tr().overlay.friend_requests, requests), None);
         dot(cx, fo.id, tok::FG);
-        nav.add(fo.group(G_REQUESTS).hint("Open").sid("requests"));
+        nav.add(fo.group(G_REQUESTS).hint(tr().common.open).sid("requests"));
     }
     if playing.is_empty() && online.is_empty() && requests == 0 {
-        calm(cx, col, "None of your friends are online right now.");
+        calm(cx, col, tr().overlay.friends_none_online);
     }
 }
 

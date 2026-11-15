@@ -2,13 +2,14 @@
 //! realized P/L curve, what they hold now, and their latest buys and sells. X follows them on this
 //! device; A on a trade mirrors it at this account's size (the swap review, then Rare Wallet's).
 
+use rare_i18n::{tr, trf, trn};
 use super::fmt::normalize_type;
 use super::model::logo_url;
 use super::review::{review_sheet, Review};
 use super::ticket::{to_base, SUI_TYPE};
 
 use super::traders::{ago, pct, trader_avatar, trader_name, Follow, TokenChip, UserChip};
-use super::ui::{action, chip, coin_logo, tf_chips, Action, Tone, Val};
+use super::ui::{action, coin_logo, tf_chips, Action, Tone, Val};
 use crate::kit::format::{num_text, NumKind, NumOptions};
 use crate::kit::{cell, dot, head_row, mini_curve, num, panel, row, section_head, DotTone};
 use crate::screens::market::host::*;
@@ -170,17 +171,17 @@ impl TraderData {
         let mut w = Vec::new();
         if let Some(l) = self.stats.as_ref().and_then(|s| s.label.as_ref()) {
             if l.smart {
-                w.push("Smart money".to_string());
+                w.push(tr().trade.smart_money.to_string());
             }
             if l.whale {
-                w.push("Whale".into());
+                w.push(tr().trade.whale.into());
             }
             if l.kol {
-                w.push("KOL".into());
+                w.push(tr().trade.kol.into());
             }
         }
         if let Some(t) = self.linked.as_ref().map(|l| l.total).filter(|t| *t > 0) {
-            w.push(format!("Linked to {t} {}", if t == 1 { "wallet" } else { "wallets" }));
+            w.push(trn!(tr().trade.linked_wallets, t));
         }
         w
     }
@@ -211,22 +212,22 @@ pub fn mirror_plan(trade: &TraderTrade, size: MirrorSize, coin_decimals: u32, he
     let is_sui = coin == SUI_TYPE;
     if trade.buy {
         if size.buy_sui.is_nan() || size.buy_sui <= 0.0 {
-            return MirrorPlan::No("Choose a size first.".into());
+            return MirrorPlan::No(tr().trade.mirror_choose_size.into());
         }
         if is_sui {
             if trade.price_usd.is_nan() || trade.price_usd <= 0.0 {
-                return MirrorPlan::No("No price for SUI right now.".into());
+                return MirrorPlan::No(tr().trade.mirror_no_sui_price.into());
             }
             let usd = super::fmt::to_fixed(size.buy_sui * trade.price_usd, 6);
             return MirrorPlan::Ok { buy: true, coin_in: normalize_type(USDC_TYPE), coin_out: SUI_TYPE.into(), amount_in: super::ticket::to_base_str(&usd, 6), decimals_in: 6 };
         }
         return MirrorPlan::Ok { buy: true, coin_in: SUI_TYPE.into(), coin_out: coin, amount_in: to_base(size.buy_sui, 9), decimals_in: 9 };
     }
-    let Some(held) = held else { return MirrorPlan::No("Checking your balance.".into()) };
+    let Some(held) = held else { return MirrorPlan::No(tr().trade.mirror_checking_balance.into()) };
     let spend = super::ticket::spendable(held, &coin);
     let amount = super::ticket::pct_of(spend, size.sell_pct);
     if amount == 0 {
-        return MirrorPlan::No("You hold none of this coin.".into());
+        return MirrorPlan::No(tr().trade.mirror_hold_none.into());
     }
     let out = if is_sui { normalize_type(USDC_TYPE) } else { SUI_TYPE.to_string() };
     MirrorPlan::Ok { buy: false, coin_in: coin, coin_out: out, amount_in: amount, decimals_in: coin_decimals }
@@ -266,9 +267,9 @@ impl TraderPage {
 
     pub fn page_hints(&self) -> Vec<(&'static str, String)> {
         if self.mirroring.is_some() {
-            return vec![("a", "Select".into()), ("b", "Cancel".into())];
+            return vec![("a", tr().common.select.into()), ("b", tr().common.cancel.into())];
         }
-        vec![("a", "Select".into()), ("x", if self.data.following() { "Unfollow" } else { "Follow" }.into()), ("b", "Back".into())]
+        vec![("a", tr().common.select.into()), ("x", if self.data.following() { tr().trade.unfollow } else { tr().trade.follow }.into()), ("b", tr().common.back.into())]
     }
 
     fn toggle_follow(&mut self) {
@@ -375,14 +376,14 @@ pub fn view(ui: &mut Ui, d: &TraderData, win30: bool, size: MirrorSize, mirrorin
         labels = labels.child(ui.text(w, T::new(Ty::Label).c(tok::MUTED)));
     }
     if d.stats.as_ref().is_some_and(|s_| s_.bot) {
-        labels = labels.child(ui.text("Trades like a bot", T::new(Ty::Label).c(tok::MUTED)));
+        labels = labels.child(ui.text(tr().trade.trades_like_bot, T::new(Ty::Label).c(tok::MUTED)));
     }
     let who = ui
         .bx(s().col().flex(1.0).min0())
         .child(ui.text(name.clone(), T::new(Ty::Title).w(600).track(-0.02).trunc()))
         .child(ui.text(d.address.clone(), T::new(Ty::Meta).mono().tab().c(tok::MUTED).trunc()))
         .child(labels);
-    let follow = action(ui, s(), Action { def: true, lg: false, hint: Some(if following { "Unfollow" } else { "Follow" }.into()), ..Action::new(if following { "Following" } else { "Follow" }, if following { Tone::Secondary } else { Tone::Primary }, T_FOLLOW) });
+    let follow = action(ui, s(), Action { def: true, lg: false, hint: Some(if following { tr().trade.unfollow } else { tr().trade.follow }.into()), ..Action::new(if following { tr().trade.following } else { tr().trade.follow }, if following { Tone::Secondary } else { Tone::Primary }, T_FOLLOW) });
     let avatar = trader_avatar(ui, &user, 4.5);
     let head = ui.bx(s().row().items_end().gap(1.25).px(2.5)).child(avatar).child(who).child(ui.bx(s().row().gap(0.5)).group(crate::kit::group("tr-trader-actions", true)).child(follow));
 
@@ -393,12 +394,12 @@ pub fn view(ui: &mut Ui, d: &TraderData, win30: bool, size: MirrorSize, mirrorin
         ui,
         s(),
         vec![
-            ("Realized P/L", Stat::Num(NumKind::Pnl, st.map(|x| x.realized), o)),
-            ("Unrealized", Stat::Num(NumKind::Pnl, st.map(|x| x.unrealized), o)),
-            ("Win rate", Stat::Text(st.map(|x| pct(x.win_rate)).unwrap_or_default())),
-            ("Trades", Stat::Text(st.map(|x| super::fmt::grouped(x.trades, 0, 0)).unwrap_or_default())),
-            ("Volume", Stat::Num(NumKind::Market, st.map(|x| x.volume), o)),
-            ("Holdings", Stat::Num(NumKind::Money, st.and_then(|x| x.holdings_usd), o)),
+            (tr().trade.realized_pnl, Stat::Num(NumKind::Pnl, st.map(|x| x.realized), o)),
+            (tr().trade.unrealized, Stat::Num(NumKind::Pnl, st.map(|x| x.unrealized), o)),
+            (tr().trade.win_rate, Stat::Text(st.map(|x| pct(x.win_rate)).unwrap_or_default())),
+            (tr().trade.trades, Stat::Text(st.map(|x| super::fmt::grouped(x.trades, 0, 0)).unwrap_or_default())),
+            (tr().trade.volume, Stat::Num(NumKind::Market, st.map(|x| x.volume), o)),
+            (tr().trade.holdings, Stat::Num(NumKind::Money, st.and_then(|x| x.holdings_usd), o)),
         ],
         true,
         true,
@@ -410,22 +411,22 @@ pub fn view(ui: &mut Ui, d: &TraderData, win30: bool, size: MirrorSize, mirrorin
     let note = if points.len() > 1 {
         None
     } else if d.pnl_error {
-        Some("Unavailable")
+        Some(tr().trade.unavailable)
     } else {
         Some("")
     };
-    let win_chips = tf_chips(ui, &["7 days", "30 days"], if win30 { 1 } else { 0 }, "tr-trader-win", T_WIN);
+    let win_chips = tf_chips(ui, &[tr().trade.days_7, tr().trade.days_30], if win30 { 1 } else { 0 }, "tr-trader-win", T_WIN);
     let curve_w = ui.w / ui.rem - 5.0 - 24.0 - 1.25 - 2.5;
     let mut curve_box = ui.bx(s().mt(0.75).h(11.0).wp(1.0));
     if points.len() > 1 {
         curve_box = curve_box.child(mini_curve(ui, s(), &points, curve_w, 11.0, None));
     }
-    let pl = panel(ui, s().col().p(1.25)).child(ui.bx(s().row().items_center().gap(1.0)).child(section_head(ui, s(), "P/L", note, None)).child(ui.bx(s().ml_auto()).child(win_chips))).child(curve_box);
+    let pl = panel(ui, s().col().p(1.25)).child(ui.bx(s().row().items_center().gap(1.0)).child(section_head(ui, s(), tr().trade.pnl, note, None)).child(ui.bx(s().ml_auto()).child(win_chips))).child(curve_box);
 
     // Latest trades.
-    let live = ui.bx(s().row().items_center().gap(0.4)).child(dot(ui, s(), DotTone::Brand, true)).child(ui.text("Live", T::new(Ty::Small).c(tok::MUTED)));
-    let heads: Vec<El> = ["Age", "Side", "Coin", "Value", "Price"].iter().enumerate().map(|(i, l)| ct(ui, *l, T::new(Ty::Label).w(500).c(tok::MUTED), i > 2)).collect();
-    let mut tp = panel(ui, s().col().p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), "Latest trades", None, Some(live))).child(head_row(ui, &TRADE_COLS, heads));
+    let live = ui.bx(s().row().items_center().gap(0.4)).child(dot(ui, s(), DotTone::Brand, true)).child(ui.text(tr().trade.live, T::new(Ty::Small).c(tok::MUTED)));
+    let heads: Vec<El> = [tr().trade.age_label, tr().trade.side, tr().trade.coin, tr().trade.value, tr().trade.price].iter().enumerate().map(|(i, l)| ct(ui, *l, T::new(Ty::Label).w(500).c(tok::MUTED), i > 2)).collect();
+    let mut tp = panel(ui, s().col().p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), tr().trade.latest_trades, None, Some(live))).child(head_row(ui, &TRADE_COLS, heads));
     let items = d.trades.as_ref().map(|t| t.items.as_slice()).unwrap_or(&[]);
     let mut list = ui.bx(s().col()).group(crate::kit::group("tr-trader-trades", false));
     for (i, t) in items.iter().enumerate() {
@@ -436,19 +437,19 @@ pub fn view(ui: &mut Ui, d: &TraderData, win30: bool, size: MirrorSize, mirrorin
         let coin = cell(ui, false).child(ui.bx(s().row().items_center().gap(0.6).min0()).child(coin_logo(ui, logo.as_deref(), &sym, 1.75)).child(ui.text(sym.clone(), small.w(600).trunc())));
         let cells = vec![
             ct(ui, ago(t.time_ms, d.now_ms), small.c(tok::MUTED), false),
-            ct(ui, if t.buy { "Buy" } else { "Sell" }, small.w(600).c(if t.buy { tok::POS } else { tok::NEG }), false),
+            ct(ui, if t.buy { tr().common.buy } else { tr().common.sell }, small.w(600).c(if t.buy { tok::POS } else { tok::NEG }), false),
             coin,
             cell(ui, true).maybe(num(ui, s(), NumKind::Money, Some(t.usd), o, small, true)),
             cell(ui, true).maybe(num(ui, s(), NumKind::Price, Some(t.price_usd), o, small.c(tok::MUTED), true)),
         ];
-        list = list.child(row(ui, &TRADE_COLS, T_TRADE + i as u32, Some(if t.buy { "Mirror buy" } else { "Mirror sell" }), cells).key(rare_render::view::key(&t.id)));
+        list = list.child(row(ui, &TRADE_COLS, T_TRADE + i as u32, Some(if t.buy { tr().trade.mirror_buy } else { tr().trade.mirror_sell }), cells).key(rare_render::view::key(&t.id)));
     }
     tp = tp.child(list);
     if items.is_empty() {
         let msg = if d.trades_error {
-            "Could not load trades. This page refreshes on its own."
+            tr().trade.trades_failed_refresh
         } else if d.trades.is_some() {
-            "No trades yet."
+            tr().trade.no_trades
         } else {
             ""
         };
@@ -468,17 +469,17 @@ pub fn view(ui: &mut Ui, d: &TraderData, win30: bool, size: MirrorSize, mirrorin
         sells = sells.child(c);
     }
     let mirror = panel(ui, s().col().p(1.25))
-        .child(section_head(ui, s(), "Mirror size", None, None))
-        .child(ui.text_s(s().mt(0.25), "A on a trade builds the same swap at your size. You review it before anything is signed.", T::new(Ty::Small).c(tok::MUTED).wrap()))
-        .child(ui.text_s(s().mt(0.9), "Each buy, in SUI", T::new(Ty::Label).c(tok::MUTED)))
+        .child(section_head(ui, s(), tr().trade.mirror_size, None, None))
+        .child(ui.text_s(s().mt(0.25), tr().trade.mirror_explain, T::new(Ty::Small).c(tok::MUTED).wrap()))
+        .child(ui.text_s(s().mt(0.9), tr().trade.each_buy, T::new(Ty::Label).c(tok::MUTED)))
         .child(buys)
-        .child(ui.text_s(s().mt(0.9), "Each sell, of what you hold", T::new(Ty::Label).c(tok::MUTED)))
+        .child(ui.text_s(s().mt(0.9), tr().trade.each_sell, T::new(Ty::Label).c(tok::MUTED)))
         .child(sells);
 
     // Holdings.
     let holdings = d.holdings();
     let hn = (!holdings.is_empty()).then(|| holdings.len().to_string());
-    let mut hp = panel(ui, s().col().p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), "Holdings", hn.as_deref(), None));
+    let mut hp = panel(ui, s().col().p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), tr().trade.holdings, hn.as_deref(), None));
     let mut hl = ui.bx(s().col()).group(crate::kit::group("tr-trader-holdings", false));
     for (i, h) in holdings.iter().take(12).enumerate() {
         let sym = h.token.as_ref().map(|x| x.symbol.clone()).unwrap_or_else(|| short_coin(&h.coin));
@@ -489,14 +490,14 @@ pub fn view(ui: &mut Ui, d: &TraderData, win30: bool, size: MirrorSize, mirrorin
         }
         let value = num(ui, s(), NumKind::Money, h.value_usd, o, T::new(Ty::Small).w(500), true);
         let r = ui.bx(s().row().items_center().gap(0.75).h(3.25).wp(1.0).px(0.75)).radius(ui.r(0.5)).child(coin_logo(ui, logo.as_deref(), &sym, 2.0)).child(names).maybe(value);
-        hl = hl.child(crate::kit::nav(crate::kit::row_look(r), T_HOLD + i as u32, Some("Trade"), None, false).key(rare_render::view::key(&h.coin)));
+        hl = hl.child(crate::kit::nav(crate::kit::row_look(r), T_HOLD + i as u32, Some(tr().common.trade), None, false).key(rare_render::view::key(&h.coin)));
     }
     hp = hp.child(hl);
     if holdings.is_empty() {
         let msg = if d.stats.is_some() {
-            "Holds nothing priced right now."
+            tr().trade.holds_nothing
         } else if d.stats_error {
-            "Holdings are unavailable right now."
+            tr().trade.holdings_unavailable
         } else {
             ""
         };
@@ -510,11 +511,11 @@ pub fn view(ui: &mut Ui, d: &TraderData, win30: bool, size: MirrorSize, mirrorin
         let sym = d.trades.as_ref().and_then(|p| p.tokens.get(&t.coin)).map(|x| x.symbol.clone()).unwrap_or_else(|| short_coin(&t.coin));
         let usd = num_text(NumKind::Money, Some(t.usd), o);
         let r = Review {
-            title: format!("Mirror {} of {sym}", if t.buy { "buy" } else { "sell" }),
-            sub: Some(format!("{name} {} {usd}. Your size: {}.", if t.buy { "bought" } else { "sold" }, if t.buy { format!("{} SUI", size.buy_sui) } else { format!("{}% of your {sym}", size.sell_pct) })),
-            action: if t.buy { "Confirm buy" } else { "Confirm sell" }.into(),
+            title: trf!(if t.buy { tr().trade.mirror_title_buy } else { tr().trade.mirror_title_sell }, symbol = sym),
+            sub: Some(trf!(if t.buy { tr().trade.mirror_sub_buy } else { tr().trade.mirror_sub_sell }, name = name, usd = usd, size = if t.buy { trf!(tr().trade.mirror_size_sui, amount = size.buy_sui) } else { trf!(tr().trade.mirror_size_pct, pct = size.sell_pct, symbol = sym) })),
+            action: if t.buy { tr().trade.confirm_buy } else { tr().trade.confirm_sell }.into(),
             tone: if t.buy { Tone::Buy } else { Tone::Sell },
-            lines: vec![("Trader".into(), Val::t(format!("{} {usd} of {sym}", if t.buy { "Bought" } else { "Sold" })), false)],
+            lines: vec![(tr().trade.trader.into(), Val::t(trf!(if t.buy { tr().trade.bought_of } else { tr().trade.sold_of }, usd = usd, symbol = sym)), false)],
         };
         page = page.child(review_sheet(ui, &r, d.wallet.is_some()));
     }

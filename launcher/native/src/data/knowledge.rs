@@ -7,6 +7,7 @@
 //! Fixtures (RR_FIXTURE) answer from samples unless RR_KNOW_LIVE=1; RR_KNOW picks the sample set
 //! (`none`, `one`, `long`, default many) for the edge-case shots.
 
+use rare_i18n::{tr, trf};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -69,11 +70,11 @@ impl RunSettings {
             });
             v.push(match self.fps {
                 Some(f) => format!("{f} fps"),
-                None => "no frame limit".into(),
+                None => tr().data.no_frame_limit.into(),
             });
         }
         match (self.upscale.as_deref(), self.size.as_deref()) {
-            (Some(u), Some(s)) if u != "Off" => v.push(format!("{u} at {s}")),
+            (Some(u), Some(s)) if u != "Off" => v.push(trf!(tr().data.upscale_at, upscale = u, size = s)),
             (_, Some(s)) if s != "1200p" && s != "Native" => v.push(s.to_string()),
             _ => {}
         }
@@ -444,7 +445,7 @@ pub fn report(key: &str, title: &str, rating: &str, settings: &RunSettings) -> R
     }
     // No friends key yet: turn friends on first (one wallet signature), then send.
     let sent = crate::social::signed_post::<R>("/v1/knowledge/runs", &body).or_else(|| crate::social::link_device_key().ok().and_then(|_| crate::social::signed_post::<R>("/v1/knowledge/runs", &body)));
-    let r: R = sent.ok_or_else(|| "Sign in with Rare Wallet to send reports.".to_string())??;
+    let r: R = sent.ok_or_else(|| tr().data.sign_in_to_report.to_string())??;
     Ok(r.runs)
 }
 
@@ -569,16 +570,20 @@ pub fn free_line(f: &FreeGame, now: i64) -> String {
             // SAFETY: localtime_r fills tm.
             unsafe { libc::localtime_r(&tt, &mut tm) };
             let h = tm.tm_hour;
-            format!("{}{}", if h % 12 == 0 { 12 } else { h % 12 }, if h < 12 { " am" } else { " pm" })
+            if matches!(rare_i18n::lang(), rare_i18n::Lang::Ru | rare_i18n::Lang::Es | rare_i18n::Lang::PtBr) {
+                trf!(tr().data.hour_24, h = h)
+            } else {
+                trf!(if h < 12 { tr().data.hour_am } else { tr().data.hour_pm }, h = if h % 12 == 0 { 12 } else { h % 12 })
+            }
         } else {
             day_label(t, d < 6 * 86400)
         }
     };
     let weekend = f.kind == "weekend";
     match (f.upcoming, f.start.as_deref().and_then(parse_iso), f.end.as_deref().and_then(parse_iso)) {
-        (true, Some(s), _) => format!("{} from {}", if weekend { "Play free" } else { "Free" }, when(s)),
-        (_, _, Some(e)) => format!("{} until {}", if weekend { "Play free" } else { "Free" }, when(e)),
-        _ => if weekend { "Play free this weekend".into() } else { "Free to keep".into() },
+        (true, Some(s), _) => trf!(if weekend { tr().data.play_free_from } else { tr().data.free_from }, when = when(s)),
+        (_, _, Some(e)) => trf!(if weekend { tr().data.play_free_until } else { tr().data.free_until }, when = when(e)),
+        _ => if weekend { tr().data.play_free_weekend.into() } else { tr().data.free_to_keep.into() },
     }
 }
 
@@ -588,12 +593,10 @@ pub fn day_label(t: i64, short: bool) -> String {
     let tt = t as libc::time_t;
     // SAFETY: localtime_r fills tm.
     unsafe { libc::localtime_r(&tt, &mut tm) };
-    const D: [&str; 7] = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const M: [&str; 12] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     if short {
-        D[tm.tm_wday.clamp(0, 6) as usize].to_string()
+        super::model::weekday_short(tm.tm_wday).to_string()
     } else {
-        format!("{} {}", M[tm.tm_mon.clamp(0, 11) as usize], tm.tm_mday)
+        trf!(tr().data.month_day, month = super::model::month_short(tm.tm_mon), day = tm.tm_mday)
     }
 }
 

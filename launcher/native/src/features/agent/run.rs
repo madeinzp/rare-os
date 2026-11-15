@@ -11,6 +11,7 @@ use super::{request_ui, UiReq};
 use crate::act::Act;
 use crate::page::Fx;
 use crate::state::{Overlay, State, Tab};
+use rare_i18n::{tr, trf, trn};
 use rare_agent::agent::Outcome;
 use rare_agent::Call;
 use serde_json::{json, Value};
@@ -63,7 +64,7 @@ pub fn run(st: &mut State, fx: &mut Fx, c: &Call, reply: Reply) {
             let list = c.name == "market_list";
             let price = parse_amount(&arg(c, "price_sui"), 9);
             if list && price.is_none_or(|p| p == 0) {
-                return reply(Outcome::err("Give the price in SUI, for example \"12.5\"."));
+                return reply(Outcome::err(tr().features.ask_give_price));
             }
             if over_game(st) {
                 request_ui(UiReq::CloseMenu);
@@ -73,7 +74,7 @@ pub fn run(st: &mut State, fx: &mut Fx, c: &Call, reply: Reply) {
         "friends_list" => reply(friends_list()),
         "invite_friends" => reply(invite_friends(&c.args["friends"])),
         "message_friend" => reply(message_friend(&arg(c, "friend"), &arg(c, "text"))),
-        other => reply(Outcome::err(format!("There is no tool called {other}."))),
+        other => reply(Outcome::err(trf!(tr().features.ask_no_tool, name = other))),
     }
 }
 
@@ -119,9 +120,8 @@ fn search_games(st: &State, q: &str) -> Outcome {
     };
     let n = lib.len() + apps.len() + store.len();
     let summary = match n {
-        0 => format!("Nothing called \"{q}\""),
-        1 => "1 match".to_string(),
-        n => format!("{n} matches"),
+        0 => trf!(tr().features.ask_nothing_called, query = q),
+        n => trn!(tr().features.ask_matches, n),
     };
     Outcome::ok(summary, json!({ "library": lib, "apps": apps, "rareStore": store }))
 }
@@ -134,7 +134,7 @@ fn launch_game(st: &mut State, fx: &mut Fx, id: &str) -> Outcome {
             request_ui(UiReq::Leave);
         }
         fx.run(Act::OpenApp(app));
-        return Outcome::ok(format!("Opened {}", a.name), json!({ "ok": true, "title": a.name }));
+        return Outcome::ok(trf!(tr().features.ask_opened, name = a.name), json!({ "ok": true, "title": a.name }));
     }
     // A small model may pass a name or a made-up id: the one installed game it clearly means.
     let g = st.game(id).cloned().or_else(|| {
@@ -142,9 +142,9 @@ fn launch_game(st: &mut State, fx: &mut Fx, id: &str) -> Outcome {
         let hits: Vec<&crate::data::model::Game> = st.games().iter().filter(|g| g.installed && !want.is_empty() && norm(&g.title) == want).collect();
         (hits.len() == 1).then(|| hits[0].clone())
     });
-    let Some(g) = g else { return Outcome::err("That id isn't in the library. Use search_games to get the id.") };
+    let Some(g) = g else { return Outcome::err(tr().features.ask_id_not_in_library) };
     if !g.installed {
-        return Outcome::err(format!("{} isn't installed. install_game opens its install sheet.", g.title));
+        return Outcome::err(trf!(tr().features.ask_not_installed_install, title = g.title));
     }
     let again = st.is_running(&g.id);
     if leave {
@@ -154,9 +154,9 @@ fn launch_game(st: &mut State, fx: &mut Fx, id: &str) -> Outcome {
         fx.run(Act::Launch(g.id.clone()));
     }
     if again {
-        return Outcome::ok(format!("Back to {}", g.title), json!({ "ok": true, "title": g.title, "alreadyRunning": true }));
+        return Outcome::ok(trf!(tr().features.ask_back_to, title = g.title), json!({ "ok": true, "title": g.title, "alreadyRunning": true }));
     }
-    Outcome::ok(format!("Starting {}", g.title), json!({ "ok": true, "title": g.title }))
+    Outcome::ok(trf!(tr().features.ask_starting, title = g.title), json!({ "ok": true, "title": g.title }))
 }
 
 fn install_game(st: &mut State, fx: &mut Fx, id: &str) -> Outcome {
@@ -165,29 +165,29 @@ fn install_game(st: &mut State, fx: &mut Fx, id: &str) -> Outcome {
             request_ui(UiReq::Leave);
         }
         st.open(Some(Overlay::Game(format!("rare:{slug}"))));
-        return Outcome::ok("Opened its Rare Store page", json!({ "status": "store_page_open" }));
+        return Outcome::ok(tr().features.ask_opened_store_page, json!({ "status": "store_page_open" }));
     }
-    let Some(g) = st.game(id).cloned() else { return Outcome::err("That id isn't in the library. Use search_games.") };
+    let Some(g) = st.game(id).cloned() else { return Outcome::err(tr().features.ask_id_not_in_library_short) };
     if g.installed {
-        return Outcome::err(format!("{} is already installed.", g.title));
+        return Outcome::err(trf!(tr().features.ask_already_installed, title = g.title));
     }
     if over_game(st) {
         request_ui(UiReq::CloseMenu);
     }
     fx.run(Act::Install(g.id.clone()));
-    Outcome::ok(format!("Install sheet for {}", g.title), json!({ "status": "install_sheet_open", "title": g.title, "note": "The player picks the drive and starts the download." }))
+    Outcome::ok(trf!(tr().features.ask_install_sheet, title = g.title), json!({ "status": "install_sheet_open", "title": g.title, "note": "The player picks the drive and starts the download." }))
 }
 
 fn uninstall_game(st: &mut State, fx: &mut Fx, id: &str) -> Outcome {
-    let Some(g) = st.game(id).cloned() else { return Outcome::err("That id isn't in the library. Use search_games.") };
+    let Some(g) = st.game(id).cloned() else { return Outcome::err(tr().features.ask_id_not_in_library_short) };
     if !g.installed {
-        return Outcome::err(format!("{} isn't installed.", g.title));
+        return Outcome::err(trf!(tr().features.ask_not_installed, title = g.title));
     }
     if over_game(st) {
         request_ui(UiReq::CloseMenu);
     }
     fx.run(Act::Uninstall(g.id.clone()));
-    Outcome::ok(format!("Uninstall sheet for {}", g.title), json!({ "status": "uninstall_sheet_open", "title": g.title, "note": "The player confirms on the sheet." }))
+    Outcome::ok(trf!(tr().features.ask_uninstall_sheet, title = g.title), json!({ "status": "uninstall_sheet_open", "title": g.title, "note": "The player confirms on the sheet." }))
 }
 
 fn downloads(st: &State) -> Outcome {
@@ -210,10 +210,9 @@ fn downloads(st: &State) -> Outcome {
     let others = crate::features::stores::menu_line();
     let n = items.len();
     let summary = match (n, &others) {
-        (0, None) => "Nothing is downloading".to_string(),
+        (0, None) => tr().features.ask_nothing_downloading.to_string(),
         (0, Some(o)) => o.clone(),
-        (1, _) => "1 download".to_string(),
-        (n, _) => format!("{n} downloads"),
+        (n, _) => trn!(tr().features.ask_downloads, n),
     };
     Outcome::ok(summary, json!({ "steam": items, "allPaused": snap.all_paused, "epicGog": others }))
 }
@@ -224,7 +223,7 @@ fn storage(st: &State) -> Outcome {
     let drives: Vec<Value> = snap.drives.iter().map(|d| json!({ "drive": d.label, "freeGB": gb(d.free), "totalGB": gb(d.total) })).collect();
     let Some(items) = snap.items.as_ref() else {
         crate::features::storage::want_fresh();
-        return Outcome::ok("Measuring storage", json!({ "drives": drives, "note": "Rare is still measuring what each game uses. Ask again in a minute, or open Settings > Storage." }));
+        return Outcome::ok(tr().features.ask_measuring_storage, json!({ "drives": drives, "note": "Rare is still measuring what each game uses. Ask again in a minute, or open Settings > Storage." }));
     };
     let now = crate::data::model::now_secs() as i64;
     let mut v: Vec<&rare_library::storage::Item> = items.iter().filter(|i| i.bytes > 200_000_000).collect();
@@ -240,7 +239,7 @@ fn storage(st: &State) -> Outcome {
         .map(|i| json!({ "title": i.title, "sizeGB": gb(i.bytes), "source": i.source, "id": i.game_id, "lastPlayedDaysAgo": idle_days(i), "kind": format!("{:?}", i.kind) }))
         .collect();
     let free: u64 = snap.drives.iter().map(|d| d.free).sum();
-    Outcome::ok(format!("{} GB free", gb(free)), json!({ "drives": drives, "biggest": list, "note": "Suggest; uninstall_game opens the sheet for a game." }))
+    Outcome::ok(trf!(tr().features.ask_gb_free, size = gb(free)), json!({ "drives": drives, "biggest": list, "note": "Suggest; uninstall_game opens the sheet for a game." }))
 }
 
 // ---------------------------------------------------------------- settings
@@ -250,7 +249,7 @@ fn device_settings(fx: &mut Fx, reply: Reply) {
         let (p, l, r) = (b.perf(), b.levels(), b.radios());
         let dnd = crate::social::dnd();
         reply(Outcome::ok(
-            "Read settings",
+            tr().features.ask_read_settings,
             json!({
                 "powerProfile": p.as_ref().map(|p| p.profile.clone()),
                 "brightness": l.and_then(|l| l.brightness).map(|v| v.round()),
@@ -278,7 +277,7 @@ fn change_setting(st: &mut State, fx: &mut Fx, setting: &str, value: &str, reply
                 "quiet" | "battery" | "low" | "saver" => "quiet",
                 "balanced" | "normal" | "default" => "balanced",
                 "performance" | "high" | "max" => "performance",
-                _ => return reply(Outcome::err("power_profile is quiet, balanced or performance.")),
+                _ => return reply(Outcome::err(tr().features.ask_power_profile_values)),
             };
             fx.spawn(move |b| {
                 let r = b.set_perf(id, None, None);
@@ -288,7 +287,7 @@ fn change_setting(st: &mut State, fx: &mut Fx, setting: &str, value: &str, reply
                     st.game_perf.perf = st.qs.perf.clone();
                     st.ver.qs += 1;
                     reply(match r {
-                        Ok(()) => Outcome::ok(format!("Power profile: {id}"), json!({ "ok": true, "powerProfile": id })),
+                        Ok(()) => Outcome::ok(trf!(tr().features.ask_power_profile, profile = id), json!({ "ok": true, "powerProfile": id })),
                         Err(e) => Outcome::err(e),
                     })
                 })
@@ -296,7 +295,7 @@ fn change_setting(st: &mut State, fx: &mut Fx, setting: &str, value: &str, reply
         }
         "brightness" | "volume" => {
             let Some(n) = value.trim_end_matches('%').trim().parse::<f32>().ok().map(|n| n.clamp(0.0, 100.0)) else {
-                return reply(Outcome::err(format!("{setting} is a number from 0 to 100.")));
+                return reply(Outcome::err(trf!(tr().features.ask_number_0_100, setting = setting)));
             };
             let bright = setting == "brightness";
             if let Some(l) = st.qs.levels.as_mut() {
@@ -310,34 +309,34 @@ fn change_setting(st: &mut State, fx: &mut Fx, setting: &str, value: &str, reply
             fx.spawn(move |b| {
                 let r = if bright { b.set_levels(Some(n), None) } else { b.set_levels(None, Some(n)) };
                 reply(match r {
-                    Ok(()) => Outcome::ok(format!("{} {}%", if bright { "Brightness" } else { "Volume" }, n.round()), json!({ "ok": true, "value": n.round() })),
+                    Ok(()) => Outcome::ok(trf!(if bright { tr().features.ask_brightness_pct } else { tr().features.ask_volume_pct }, n = n.round()), json!({ "ok": true, "value": n.round() })),
                     Err(e) => Outcome::err(e),
                 });
                 Box::new(|_: &mut State, _| {})
             });
         }
         "wifi" => {
-            let Some(on) = on_off(value) else { return reply(Outcome::err("wifi is on or off.")) };
+            let Some(on) = on_off(value) else { return reply(Outcome::err(tr().features.ask_wifi_on_off)) };
             fx.spawn(move |b| {
                 let r = b.set_radio("wifi", on);
                 Box::new(move |st: &mut State, _| match r {
                     Ok(r) => {
                         st.qs.radios = Some(r);
                         st.ver.qs += 1;
-                        reply(Outcome::ok(format!("Wi-Fi {}", if on { "on" } else { "off" }), json!({ "ok": true, "wifi": on })));
+                        reply(Outcome::ok(if on { tr().features.ask_wifi_on } else { tr().features.ask_wifi_off }, json!({ "ok": true, "wifi": on })));
                     }
                     Err(e) => reply(Outcome::err(e)),
                 })
             });
         }
         "do_not_disturb" => {
-            let Some(on) = on_off(value) else { return reply(Outcome::err("do_not_disturb is on or off.")) };
+            let Some(on) = on_off(value) else { return reply(Outcome::err(tr().features.ask_dnd_on_off)) };
             crate::social::set_dnd(on);
             st.qs.dnd = on;
             st.ver.qs += 1;
-            reply(Outcome::ok(format!("Do not disturb {}", if on { "on" } else { "off" }), json!({ "ok": true, "doNotDisturb": on })));
+            reply(Outcome::ok(if on { tr().features.ask_dnd_on } else { tr().features.ask_dnd_off }, json!({ "ok": true, "doNotDisturb": on })));
         }
-        _ => reply(Outcome::err("That setting can't be changed here.")),
+        _ => reply(Outcome::err(tr().features.ask_setting_unchangeable)),
     }
 }
 
@@ -358,9 +357,9 @@ fn open_page(st: &mut State, page: &str) -> Outcome {
         "settings" => st.set_tab(Tab::Settings, false),
         "downloads" => st.open(Some(Overlay::Other(crate::features::downloads::KIND))),
         "trophies" => st.open(Some(Overlay::Other("trophies"))),
-        _ => return Outcome::err("Unknown page."),
+        _ => return Outcome::err(tr().features.ask_unknown_page),
     }
-    Outcome::ok(format!("Opened {page}"), json!({ "ok": true }))
+    Outcome::ok(trf!(tr().features.ask_opened, name = page), json!({ "ok": true }))
 }
 
 // ---------------------------------------------------------------- wallet
@@ -392,9 +391,9 @@ fn fmt_units(raw: u128, dp: u32) -> String {
 }
 
 fn account() -> Result<crate::sign::Account, String> {
-    let a = crate::sign::account().ok_or(crate::sign::NO_SIGNER)?;
+    let a = crate::sign::account().ok_or(crate::sign::no_signer())?;
     if !a.signer {
-        return Err("This Rare Wallet account is watch only.".into());
+        return Err(tr().features.ask_watch_only.into());
     }
     Ok(a)
 }
@@ -415,14 +414,14 @@ fn coin_of(s: &str, tokens: &[crate::screens::wallet::types::PortfolioToken]) ->
 }
 
 fn balances() -> Outcome {
-    let Some((addr, label)) = crate::data::account::current() else { return Outcome::err("There is no Rare Wallet account on this device.") };
+    let Some((addr, label)) = crate::data::account::current() else { return Outcome::err(tr().features.ask_no_wallet_account) };
     let held = crate::data::wallet::get(&addr);
     let Some(pf) = held.pf else {
         crate::data::wallet::refresh(&addr);
-        return Outcome::err("The wallet is still loading. Ask again in a moment.");
+        return Outcome::err(tr().features.ask_wallet_loading);
     };
     let coins: Vec<Value> = pf.tokens.iter().take(20).map(|t| json!({ "symbol": t.symbol, "amount": t.amount, "usd": t.value_usd.map(|v| (v * 100.0).round() / 100.0), "type": t.coin_type })).collect();
-    Outcome::ok(format!("{} coins", coins.len()), json!({ "account": label, "totalUsd": pf.total_usd.map(|v| (v * 100.0).round() / 100.0), "coins": coins }))
+    Outcome::ok(trn!(tr().features.ask_coins, coins.len()), json!({ "account": label, "totalUsd": pf.total_usd.map(|v| (v * 100.0).round() / 100.0), "coins": coins }))
 }
 
 fn wallet_send(st: &State, to: &str, amount: &str, coin: &str, reply: Reply) {
@@ -431,10 +430,10 @@ fn wallet_send(st: &State, to: &str, amount: &str, coin: &str, reply: Reply) {
         Err(e) => return reply(Outcome::err(e)),
     };
     let tokens = crate::data::wallet::get(&a.address).pf.map(|p| p.tokens).unwrap_or_default();
-    let Some((coin_type, symbol, dp, balance)) = coin_of(coin, &tokens) else { return reply(Outcome::err(format!("The wallet doesn't hold {coin}."))) };
-    let Some(raw) = parse_amount(amount, dp).filter(|r| *r > 0) else { return reply(Outcome::err("Give the amount as a number, for example \"2.5\".")) };
+    let Some((coin_type, symbol, dp, balance)) = coin_of(coin, &tokens) else { return reply(Outcome::err(trf!(tr().features.ask_wallet_lacks, coin = coin))) };
+    let Some(raw) = parse_amount(amount, dp).filter(|r| *r > 0) else { return reply(Outcome::err(tr().features.ask_give_amount)) };
     if balance.is_some_and(|b| raw > b) {
-        return reply(Outcome::err(format!("That is more {symbol} than the wallet holds.")));
+        return reply(Outcome::err(trf!(tr().features.ask_more_than_held, coin = symbol)));
     }
     // A friend by name first, then whatever the recipient field takes (0x..., name.sui).
     let friend = find_friend(to).map(|f| f.0);
@@ -444,11 +443,11 @@ fn wallet_send(st: &State, to: &str, amount: &str, coin: &str, reply: Reply) {
         .name("ask-send".into())
         .spawn(move || {
             use rare_wallet::recipient::RecipientState as R;
-            let Some(w) = crate::screens::wallet::service::wallet() else { return reply(Outcome::err("Rare Wallet isn't available.")) };
+            let Some(w) = crate::screens::wallet::service::wallet() else { return reply(Outcome::err(tr().features.ask_wallet_unavailable)) };
             let addr = match w.rt.block_on(rare_wallet::recipient::resolve_recipient(&w.names(), &to_text)) {
                 R::Ready { address, .. } => address,
                 R::Missing { msg, .. } | R::Error { msg, .. } | R::Invalid { msg } => return reply(Outcome::err(msg)),
-                _ => return reply(Outcome::err("That recipient isn't a 0x address, a name.sui or a friend.")),
+                _ => return reply(Outcome::err(tr().features.ask_bad_recipient)),
             };
             let p = rare_sui::tx::CoinSend { sender: a.address.clone(), to: addr.clone(), coin_type: coin_type.clone(), amount: raw, max: false, balance };
             let built = w.rt.block_on(rare_sui::tx::build_coin_send(&w.sui, &p));
@@ -457,12 +456,12 @@ fn wallet_send(st: &State, to: &str, amount: &str, coin: &str, reply: Reply) {
                 Err(e) => return reply(Outcome::err(e.to_string())),
             };
             let human = fmt_units(raw as u128, dp);
-            let title = format!("Send {human} {symbol}");
+            let title = trf!(tr().features.ask_send_title, amount = human, coin = symbol);
             let short = format!("{}...{}", &addr[..6.min(addr.len())], &addr[addr.len().saturating_sub(4)..]);
-            reply(Outcome::ok(format!("Review sheet: {human} {symbol} to {short}"), json!({ "status": "review_sheet_open", "amount": human, "coin": symbol, "to": addr, "note": "The player confirms on the device." })));
+            reply(Outcome::ok(trf!(tr().features.ask_review_send, amount = human, coin = symbol, to = short), json!({ "status": "review_sheet_open", "amount": human, "coin": symbol, "to": addr, "note": "The player confirms on the device." })));
             match crate::screens::wallet::service::send(rare_wallet::sign::TxInput::PtbGas(tx, opts), &a.address, &title) {
-                Ok(r) if r.status.as_deref() != Some("failure") => crate::features::bus::note(format!("Sent {human} {symbol}"), false),
-                Ok(_) => crate::features::bus::note("The network rejected this transaction.", true),
+                Ok(r) if r.status.as_deref() != Some("failure") => crate::features::bus::note(trf!(tr().features.ask_sent, amount = human, coin = symbol), false),
+                Ok(_) => crate::features::bus::note(tr().features.ask_tx_rejected, true),
                 Err(rare_wallet::sign::SignError::Rejected(_)) => {}
                 Err(e) => crate::features::bus::note(e.to_string(), true),
             }
@@ -476,15 +475,15 @@ fn wallet_swap(from: &str, to: &str, amount: &str, reply: Reply) {
         Err(e) => return reply(Outcome::err(e)),
     };
     let tokens = crate::data::wallet::get(&a.address).pf.map(|p| p.tokens).unwrap_or_default();
-    let Some((cin, sin, din, bal)) = coin_of(from, &tokens) else { return reply(Outcome::err(format!("The wallet doesn't hold {from}."))) };
+    let Some((cin, sin, din, bal)) = coin_of(from, &tokens) else { return reply(Outcome::err(trf!(tr().features.ask_wallet_lacks, coin = from))) };
     let out = coin_of(to, &tokens).or_else(|| to.contains("::").then(|| (to.to_string(), to.rsplit("::").next().unwrap_or(to).to_string(), 0, None)));
-    let Some((cout, sout, dout, _)) = out else { return reply(Outcome::err(format!("I don't know the coin {to}. Give its coin type (0x...::module::NAME)."))) };
+    let Some((cout, sout, dout, _)) = out else { return reply(Outcome::err(trf!(tr().features.ask_unknown_coin, coin = to))) };
     if cin == cout {
-        return reply(Outcome::err("Pick two different coins."));
+        return reply(Outcome::err(tr().features.ask_two_coins));
     }
-    let Some(raw) = parse_amount(amount, din).filter(|r| *r > 0) else { return reply(Outcome::err("Give the amount as a number, for example \"2.5\".")) };
+    let Some(raw) = parse_amount(amount, din).filter(|r| *r > 0) else { return reply(Outcome::err(tr().features.ask_give_amount)) };
     if bal.is_some_and(|b| raw > b) {
-        return reply(Outcome::err(format!("That is more {sin} than the wallet holds.")));
+        return reply(Outcome::err(trf!(tr().features.ask_more_than_held, coin = sin)));
     }
     std::thread::Builder::new()
         .name("ask-swap".into())
@@ -501,11 +500,11 @@ fn wallet_swap(from: &str, to: &str, amount: &str, reply: Reply) {
             };
             let human_in = fmt_units(raw as u128, din);
             let human_out = if dout > 0 { fmt_units(q.amount_out, dout) } else { q.amount_out.to_string() };
-            let title = format!("Swap {human_in} {sin} for {sout}");
-            reply(Outcome::ok(format!("Review sheet: {human_in} {sin} for about {human_out} {sout}"), json!({ "status": "review_sheet_open", "pay": format!("{human_in} {sin}"), "getAbout": format!("{human_out} {sout}"), "note": "The player confirms on the device." })));
+            let title = trf!(tr().features.ask_swap_title, from_amount = human_in, from_coin = sin, to_coin = sout);
+            reply(Outcome::ok(trf!(tr().features.ask_review_swap, from_amount = human_in, from_coin = sin, to_amount = human_out, to_coin = sout), json!({ "status": "review_sheet_open", "pay": format!("{human_in} {sin}"), "getAbout": format!("{human_out} {sout}"), "note": "The player confirms on the device." })));
             let req = rare_trade::wallet::SignRequest { tx: b.tx, account: a.address.clone(), title, origin_name: rare_trade::wallet::ORIGIN_NAME, origin_kind: rare_trade::wallet::ORIGIN_KIND, sponsorship: None };
             let o = crate::sign::sign_trade(&req, None);
-            crate::screens::trade::live::note_outcome(&o, &format!("Swapped {human_in} {sin} for {sout}"));
+            crate::screens::trade::live::note_outcome(&o, &trf!(tr().features.ask_swapped, from_amount = human_in, from_coin = sin, to_coin = sout));
         })
         .ok();
 }
@@ -513,11 +512,11 @@ fn wallet_swap(from: &str, to: &str, amount: &str, reply: Reply) {
 // ---------------------------------------------------------------- market
 
 fn my_items(q: &str) -> Outcome {
-    let Some((addr, _)) = crate::data::account::current() else { return Outcome::err("There is no Rare Wallet account on this device.") };
+    let Some((addr, _)) = crate::data::account::current() else { return Outcome::err(tr().features.ask_no_wallet_account) };
     let held = crate::data::wallet::get(&addr);
     let Some(inv) = held.inv else {
         crate::data::wallet::refresh(&addr);
-        return Outcome::err("Your items are still loading. Ask again in a moment.");
+        return Outcome::err(tr().features.ask_items_loading);
     };
     let nq = norm(q);
     let sui = |m: &Option<String>| m.as_deref().and_then(|s| s.parse::<f64>().ok()).map(|v| (v / MIST * 1000.0).round() / 1000.0);
@@ -535,7 +534,7 @@ fn my_items(q: &str) -> Outcome {
             }
         }
     }
-    Outcome::ok(format!("{} items", out.len()), json!({ "items": out, "total": inv.total }))
+    Outcome::ok(trn!(tr().features.ask_items, out.len()), json!({ "items": out, "total": inv.total }))
 }
 
 fn market_search(fx: &mut Fx, q: &str, reply: Reply) {
@@ -547,7 +546,7 @@ fn market_search(fx: &mut Fx, q: &str, reply: Reply) {
         let r = match api::get::<SearchResult>(net, &paths::search(&q)) {
             Ok(r) => r,
             Err(_) => {
-                reply(Outcome::err("Couldn't reach Rare's market."));
+                reply(Outcome::err(tr().features.ask_market_unreachable));
                 return Box::new(|_: &mut State, _| {});
             }
         };
@@ -561,7 +560,7 @@ fn market_search(fx: &mut Fx, q: &str, reply: Reply) {
                 }
             }
         }
-        reply(Outcome::ok(format!("{} collections", colls.len()), json!({ "collections": colls, "cheapestListedInFirst": cheapest })));
+        reply(Outcome::ok(trn!(tr().features.ask_collections, colls.len()), json!({ "collections": colls, "cheapestListedInFirst": cheapest })));
         Box::new(|_: &mut State, _| {})
     });
 }
@@ -576,19 +575,19 @@ fn market_buy(fx: &mut Fx, id: &str, reply: Reply) {
         use rare_market::api::{self, ItemDetail};
         let net = crate::screens::wallet::live::market_net();
         let r: Result<(rare_sui::ptb::Tx, String, f64), String> = (|| {
-            let d = api::get::<ItemDetail>(net, &api::paths::item(&id)).map_err(|_| "Couldn't read that item.".to_string())?;
-            let listing = d.card.listing.clone().ok_or_else(|| "This item is not listed.".to_string())?;
+            let d = api::get::<ItemDetail>(net, &api::paths::item(&id)).map_err(|_| tr().features.ask_item_unreadable.to_string())?;
+            let listing = d.card.listing.clone().ok_or_else(|| tr().features.ask_item_not_listed.to_string())?;
             let price = listing.all_in_mist.as_deref().unwrap_or(&listing.price_mist).parse::<f64>().unwrap_or(0.0) / MIST;
-            let tx = rare_market::buy::build_buy_transaction(net, &Default::default(), &d.card, &listing, &a.address, None, None).map_err(|e| if e.0.is_empty() { "This item can't be bought here.".to_string() } else { e.0 })?;
+            let tx = rare_market::buy::build_buy_transaction(net, &Default::default(), &d.card, &listing, &a.address, None, None).map_err(|e| if e.0.is_empty() { tr().features.ask_item_not_buyable.to_string() } else { e.0 })?;
             Ok((tx, d.card.name, price))
         })();
         match r {
             Err(e) => reply(Outcome::err(e)),
             Ok((tx, name, price)) => {
-                reply(Outcome::ok(format!("Review sheet: {name} for {price} SUI"), json!({ "status": "review_sheet_open", "item": name, "priceSui": price, "note": "The player confirms on the device." })));
+                reply(Outcome::ok(trf!(tr().features.ask_review_buy, name = name, price = price), json!({ "status": "review_sheet_open", "item": name, "priceSui": price, "note": "The player confirms on the device." })));
                 let addr = a.address.clone();
-                std::thread::spawn(move || match crate::sign::sign_and_execute(tx, &addr, &format!("Buy {name}")) {
-                    Ok(_) => crate::features::bus::note(format!("Bought {name}."), false),
+                std::thread::spawn(move || match crate::sign::sign_and_execute(tx, &addr, &trf!(tr().features.ask_buy_title, name = name)) {
+                    Ok(_) => crate::features::bus::note(trf!(tr().features.ask_bought, name = name), false),
                     Err(e) if e == rare_market::inventory::notice::SIGN_REJECTED => {}
                     Err(e) => crate::features::bus::note(e, true),
                 });
@@ -626,7 +625,7 @@ fn find_friend(name: &str) -> Option<(String, String)> {
 }
 
 fn friends_list() -> Outcome {
-    let Some(social) = crate::social::live() else { return Outcome::err("Friends isn't running.") };
+    let Some(social) = crate::social::live() else { return Outcome::err(tr().features.ask_friends_not_running) };
     let d = social.data();
     let list: Vec<Value> = d
         .st
@@ -636,11 +635,11 @@ fn friends_list() -> Outcome {
         .map(|f| json!({ "name": d.st.label_of(&f.person.address), "username": f.person.username, "status": f.presence.state.as_str(), "playing": f.presence.game.as_ref().map(|g| g.title.clone()) }))
         .collect();
     let online = d.st.friends.iter().filter(|f| f.presence.state.as_str() != "offline").count();
-    Outcome::ok(format!("{} friends, {online} online", list.len()), json!({ "friends": list, "inParty": d.st.active_party().is_some() }))
+    Outcome::ok(trf!(tr().features.ask_friends_online, n = list.len(), online = online), json!({ "friends": list, "inParty": d.st.active_party().is_some() }))
 }
 
 fn invite_friends(names: &Value) -> Outcome {
-    let Some(social) = crate::social::live() else { return Outcome::err("Friends isn't running.") };
+    let Some(social) = crate::social::live() else { return Outcome::err(tr().features.ask_friends_not_running) };
     let names: Vec<String> = names.as_array().map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default();
     let mut found = vec![];
     let mut missing = vec![];
@@ -651,7 +650,7 @@ fn invite_friends(names: &Value) -> Outcome {
         }
     }
     if found.is_empty() {
-        return Outcome::err(format!("None of those are friends: {}.", missing.join(", ")));
+        return Outcome::err(trf!(tr().features.ask_not_friends, names = missing.join(", ")));
     }
     let addrs = found.iter().map(|f| f.0.clone()).collect::<Vec<_>>().join(",");
     let party = social.data().st.active_party().map(|p| p.id.clone());
@@ -660,18 +659,18 @@ fn invite_friends(names: &Value) -> Outcome {
         None => social.act(&format!("friends:start-party:{addrs}")),
     };
     let who = found.iter().map(|f| f.1.clone()).collect::<Vec<_>>().join(", ");
-    Outcome::ok(format!("Invited {who}"), json!({ "invited": who, "notFriends": missing }))
+    Outcome::ok(trf!(tr().features.ask_invited, who = who), json!({ "invited": who, "notFriends": missing }))
 }
 
 fn message_friend(name: &str, text: &str) -> Outcome {
-    let Some(social) = crate::social::live() else { return Outcome::err("Friends isn't running.") };
-    let Some((addr, label)) = find_friend(name) else { return Outcome::err(format!("{name} isn't one of your friends.")) };
+    let Some(social) = crate::social::live() else { return Outcome::err(tr().features.ask_friends_not_running) };
+    let Some((addr, label)) = find_friend(name) else { return Outcome::err(trf!(tr().features.ask_not_a_friend, name = name)) };
     let text: String = text.trim().chars().take(280).collect();
     if text.is_empty() {
-        return Outcome::err("The message is empty.");
+        return Outcome::err(tr().features.ask_message_empty);
     }
     social.answer(&format!("dm:{addr}"), text.clone());
-    Outcome::ok(format!("Message to {label}"), json!({ "sent": true, "to": label }))
+    Outcome::ok(trf!(tr().features.ask_message_to, name = label), json!({ "sent": true, "to": label }))
 }
 
 // ---------------------------------------------------------------- fixtures (screenshots, no device)

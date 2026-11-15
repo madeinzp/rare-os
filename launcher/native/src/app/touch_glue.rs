@@ -449,12 +449,13 @@ impl App {
         // The top bar (4.25rem), while nothing is over the page: anywhere in its height, the tab
         // (or the Rare mark) whose label spans the finger's x, give or take half the gap.
         if y < 4.25 * r && self.st.overlay.is_none() && self.st.options.is_none() && self.st.osk.is_none() && !crate::screens::wallet::sign::host::active() && self.legacy.is_none() {
-            let labels = labels_in(&self.scene, self.top.view.root_id(), &|t| TABS.iter().any(|(_, l)| *l == t) || t == "rare");
+            let labels = labels_in(&self.scene, self.top.view.root_id(), &|t| tabs().iter().any(|(_, l)| *l == t) || t == "rare");
             let near = nearest(labels, &|l| if l == "rare" { 2.5 * r } else { 0.0 }, 0.65 * r);
             if let Some(label) = near.map(|n| n.0) {
                 if label == "rare" {
                     self.press(Btn::Guide);
-                } else if let Some((tab, _)) = TABS.iter().find(|(_, l)| *l == label) {
+                } else if let Some((tab, _)) = tabs().iter().find(|(_, l)| *l == label)
+ {
                     if *tab != self.st.tab {
                         self.st.close();
                         self.st.set_tab(*tab, false);

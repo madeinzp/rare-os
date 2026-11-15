@@ -3,6 +3,7 @@
 //! collections table with its time range. X steps the range, LT/RT the Market sections.
 
 use super::data::Answers;
+use rare_i18n::{tr, trf, trn};
 use super::host::*;
 use super::parts::*;
 use super::shell::{Act, MkPage};
@@ -59,7 +60,7 @@ pub fn view(ui: &mut Ui, a: &Answers, win: usize, frame: u64) -> El {
 
     // ---- sections, search, SUI price
     let sections = market_sections(ui, Section::Collections);
-    let search = search_field(ui, s().ml_auto().w(24.0), 2.75, "Search collections", true, SM, 1.0, T_SEARCH);
+    let search = search_field(ui, s().ml_auto().w(24.0), 2.75, tr().market.search_collections, true, SM, 1.0, T_SEARCH);
     let mut head = ui.bx(s().row().items_center().gap(1.0).px(2.5).pb(1.5).pt(0.5)).child(sections).child(search);
     if let Some(u) = a.sui_usd() {
         head = head.child(ui.text(format!("SUI ${u:.3}"), t(SM).c(tok::MUTED).tab()));
@@ -68,12 +69,12 @@ pub fn view(ui: &mut Ui, a: &Answers, win: usize, frame: u64) -> El {
     // ---- trending
     let trend_path = paths::collections("24h", "volume", 12);
     let rows: Vec<CollectionRow> = a.page::<CollectionRow>(&trend_path).map(|p| p.data).unwrap_or_default();
-    let mut trending = ui.bx(s().col()).child(ui.bx(s().px(2.5)).child(ui.text("Trending", t(XL).w(700))));
+    let mut trending = ui.bx(s().col()).child(ui.bx(s().px(2.5)).child(ui.text(tr().market.trending, t(XL).w(700))));
     if !rows.is_empty() {
         let cards: Vec<El> = rows.iter().enumerate().map(|(i, c)| mover_card(ui, c, T_TREND + i as u32, i == 0)).collect();
         trending = trending.child(kit::rail(ui, s().mt(1.25), &format!("mk-trending-{frame}"), None, None, cards));
     } else if a.failed(&trend_path) {
-        trending = trending.child(empty(ui, "Could not load Rare Marketplace", Some("Check the connection. This page refreshes on its own."), None, true));
+        trending = trending.child(empty(ui, tr().market.load_failed_title, Some(tr().market.load_failed_body), None, true));
     }
 
     let mut page = page.child(head).child(trending);
@@ -85,13 +86,13 @@ pub fn view(ui: &mut Ui, a: &Answers, win: usize, frame: u64) -> El {
             let mine_total = a.page::<ItemCard>(&paths::account_items(&acct.address)).and_then(|m| m.total);
             let who = if acct.label.is_empty() { short_addr(Some(&acct.address)) } else { acct.label.clone() };
             let right = match mine_total {
-                Some(n) => format!("{who}, {} items", fmt_int(Some(n as f64), false)),
+                Some(n) => trn!(tr().market.who_items, n, who = who, n = fmt_int(Some(n as f64), false)),
                 None => who,
             };
             let mut tiles: Vec<El> = items.iter().take(14).enumerate().map(|(i, it)| item_card(ui, s().w(11.0), it, 11.0, T_MINE + i as u32, false, true)).collect();
-            let all = ui.bx(s().row().items_center().justify_center().w(11.0)).bg(tok::BUTTON_SECONDARY).radius(ui.r(0.5)).child(ui.text("See all", t(SM).w(500)));
+            let all = ui.bx(s().row().items_center().justify_center().w(11.0)).bg(tok::BUTTON_SECONDARY).radius(ui.r(0.5)).child(ui.text(tr().market.see_all, t(SM).w(500)));
             tiles.push(fill_nav(all, T_MINE_ALL, None, None, false));
-            let sec = ui.bx(s().col().mt(2.5)).child(section_title(ui, s().px(2.5), "Your NFTs", Some(right))).child(kit::rail(ui, s(), &format!("mk-mine-{frame}"), None, None, tiles));
+            let sec = ui.bx(s().col().mt(2.5)).child(section_title(ui, s().px(2.5), tr().market.your_nfts, Some(right))).child(kit::rail(ui, s(), &format!("mk-mine-{frame}"), None, None, tiles));
             page = page.child(sec);
         }
     }
@@ -100,7 +101,7 @@ pub fn view(ui: &mut Ui, a: &Answers, win: usize, frame: u64) -> El {
     let top_rows = a.rows::<CollectionRow>(&paths::collections(WINDOWS[win], "volume", 25));
     let top = &top_rows.items;
     let seg = segmented(ui, &WINDOWS, win, T_WIN);
-    let thead = ui.bx(s().row().items_center().gap(0.5).pb(0.75)).child(ui.bx(s().pl(0.75)).child(ui.text("Top collections", t(XL).w(700)))).child(ui.bx(s().grow())).child(seg);
+    let thead = ui.bx(s().row().items_center().gap(0.5).pb(0.75)).child(ui.bx(s().pl(0.75)).child(ui.text(tr().market.top_collections, t(XL).w(700)))).child(ui.bx(s().grow())).child(seg);
     let mut body = ui.bx(s().col()).group(kit::group(&format!("mk-top-{frame}"), false));
     for (i, c) in top.iter().take(100).enumerate() {
         body = body.child(collection_row(ui, c, T_ROW + i as u32));
@@ -108,9 +109,9 @@ pub fn view(ui: &mut Ui, a: &Answers, win: usize, frame: u64) -> El {
     let head_row = collection_head(ui, WINDOWS[win]);
     let mut table = ui.bx(s().col().mx(2.5).mt(2.5).p(1.0)).bg(tok::L1).radius(ui.r(1.0)).child(thead).child(head_row).child(body);
     if top_rows.ready && top.is_empty() {
-        table = table.child(empty(ui, "No collections yet", None, None, true));
+        table = table.child(empty(ui, tr().market.no_collections, None, None, true));
     } else if top.is_empty() && a.failed(&paths::collections(WINDOWS[win], "volume", 25)) {
-        table = table.child(empty(ui, "Could not load collections", None, None, true));
+        table = table.child(empty(ui, tr().market.collections_failed, None, None, true));
     }
     page.child(table)
 }
@@ -142,7 +143,7 @@ impl MkPage for HomePage {
                     rows.get((t - T_TREND) as usize).map(|c| Act::Push(View::Collection { slug: c.r#ref.slug.clone() })).unwrap_or(Act::None)
                 }
                 Some(T_MINE_ALL) => match &self.a.account {
-                    Some(acct) => Act::Push(View::Account { address: acct.address.clone(), label: "Your NFTs".into() }),
+                    Some(acct) => Act::Push(View::Account { address: acct.address.clone(), label: tr().market.your_nfts.into() }),
                     None => Act::None,
                 },
                 Some(t) if (T_MINE..T_MINE + 100).contains(&t) => {
@@ -188,7 +189,7 @@ impl MkPage for HomePage {
     }
 
     fn hints(&self) -> Vec<(&'static str, String)> {
-        vec![("a", "Open".into()), ("x", format!("Range {}", WINDOWS[self.win])), ("ltrt", "Sections".into()), ("y", "Search".into()), ("b", "Back".into()), ("qam", "Quick settings".into())]
+        vec![("a", tr().common.open.into()), ("x", trf!(tr().market.range_hint, range = WINDOWS[self.win])), ("ltrt", tr().common.sections.into()), ("y", tr().common.search.into()), ("b", tr().common.back.into()), ("qam", tr().common.quick_settings.into())]
     }
 }
 

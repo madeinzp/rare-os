@@ -5,6 +5,7 @@
 use rare_library::custom::{ArtKind, Custom};
 use serde_json::Value;
 use std::time::Duration;
+use rare_i18n::tr;
 
 /// One picture to pick: what is stored, and a smaller one to show in the list.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -33,7 +34,7 @@ fn get_json(url: &str, bearer: Option<&str>) -> Result<Value, String> {
     }
     let mut r = req.call().map_err(|e| e.to_string())?;
     if r.status() == 401 || r.status() == 403 {
-        return Err("SteamGridDB didn't accept the key. Check it in Settings > Storage.".into());
+        return Err(tr().features_more.art_key_rejected.into());
     }
     if !r.status().is_success() {
         return Err(format!("HTTP {}", r.status()));

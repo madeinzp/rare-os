@@ -2,6 +2,7 @@
 //! dot for the unread, per-kind action hints, Mark all read and Clear in the head, Steam downloads
 //! in progress above the list, and a calm empty line. Plus the small counts the shell shows.
 
+use rare_i18n::{tr, trf};
 use super::data::actions::action_label;
 use super::data::downloads::{download_fraction, Download};
 use super::data::store::NotifyStore;
@@ -37,10 +38,10 @@ pub struct Centre {
 /// "Downloading", "Paused" or the percentage (Centre.tsx DownloadRows).
 pub fn download_status(d: &Download) -> String {
     if d.paused {
-        return "Paused".into();
+        return tr().notify.paused.into();
     }
     match download_fraction(d) {
-        None => "Downloading".into(),
+        None => tr().common.downloading.into(),
         Some(f) => format!("{}%", (f * 100.0).round() as i64),
     }
 }
@@ -53,7 +54,7 @@ pub fn unread_label(store: &NotifyStore) -> Option<String> {
 
 /// What came in while a game runs, in the bottom bar's Playing cell: "N new".
 pub fn missed_label(store: &NotifyStore) -> Option<String> {
-    (store.missed > 0).then(|| format!("{} new", store.missed))
+    (store.missed > 0).then(|| trf!(tr().notify.n_new, n = store.missed))
 }
 
 fn chip_button(cx: &mut Cx, parent: Id, label: &str) -> Focusable {
@@ -83,17 +84,17 @@ impl Centre {
         let unread = self.store.unread();
         // Head.
         let head = cx.scene.add(self.section, s().row().items_center().gap(0.5 * r).done(), Node::default());
-        text(cx, head, ty::LABEL, 500, tok::MUTED, "Notifications");
+        text(cx, head, ty::LABEL, 500, tok::MUTED, tr().common.notifications);
         if unread > 0 {
-            cx.scene.add_text(cx.t, head, s().done(), &format!("{unread} new"), ts(r, ty::LABEL.0, ty::LABEL.1, 400).tabular(), tok::FG);
+            cx.scene.add_text(cx.t, head, s().done(), &trf!(tr().notify.n_new, n = unread), ts(r, ty::LABEL.0, ty::LABEL.1, 400).tabular(), tok::FG);
         }
         if !list.is_empty() {
             let btns = cx.scene.add(head, s().row().gap(0.4 * r).ml_auto().done(), Node::default());
             if unread > 0 {
-                let b = chip_button(cx, btns, "Mark all read").group(G_HEAD).hint("Mark all read").tag(T_MARK);
+                let b = chip_button(cx, btns, tr().notify.mark_all_read).group(G_HEAD).hint(tr().notify.mark_all_read).tag(T_MARK);
                 self.nav.add(b);
             }
-            let b = chip_button(cx, btns, "Clear").group(G_HEAD).hint("Clear all").tag(T_CLEAR);
+            let b = chip_button(cx, btns, tr().notify.clear).group(G_HEAD).hint(tr().notify.clear_all).tag(T_CLEAR);
             self.nav.add(b);
         }
         // Downloads in progress.
@@ -108,13 +109,13 @@ impl Centre {
                 let bar = cx.scene.add(row_, s().h(3.0).wp(1.0).done(), Node::bg(tok::L2).radius(1.5).clip());
                 let f = download_fraction(d).unwrap_or(0.0);
                 cx.scene.add(bar, s().hp(1.0).wp(((f * 100.0).round() / 100.0) as f32).done(), Node::bg(tok::FG).radius(1.5));
-                self.nav.add(Focusable { id: row_, kind: Kind::Row, group: G_DOWNLOADS, hint: "Open library".into(), tag: 2000 + i as u32, sid: String::new() });
+                self.nav.add(Focusable { id: row_, kind: Kind::Row, group: G_DOWNLOADS, hint: tr().notify.open_library.into(), tag: 2000 + i as u32, sid: String::new() });
             }
         }
         // The list.
         if list.is_empty() {
             let b = cx.scene.add(self.section, s().px(0.95 * r).py(0.8 * r).done(), Node::default().radius(0.5 * r).border(1.0, tok::HAIR));
-            text(cx, b, ty::SMALL, 400, tok::MUTED, "No notifications yet.");
+            text(cx, b, ty::SMALL, 400, tok::MUTED, tr().notify.none_yet);
         } else {
             let col = cx.scene.add(self.section, s().col().done(), Node::default());
             for (i, n) in list.iter().take(SHOW).enumerate() {

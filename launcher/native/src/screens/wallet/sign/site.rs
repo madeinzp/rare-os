@@ -3,6 +3,8 @@
 //! for these checks: the scheme, a special scheme's host (lower case, IDN labels as `xn--`
 //! punycode), the port dropped when it is the scheme's default, and the inputs it refuses.
 
+use rare_i18n::tr;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Risk {
     pub id: String,
@@ -187,13 +189,13 @@ pub fn site_risks(url: Option<&str>) -> Vec<Risk> {
     let Some(url) = url.filter(|u| !u.is_empty()) else { return Vec::new() };
     let mut out = Vec::new();
     match parse_url(url) {
-        None => out.push(Risk::new("site-invalid", "Could not verify this site address.", true)),
+        None => out.push(Risk::new("site-invalid", tr().wallet_sign.site_invalid, true)),
         Some(u) => {
             if u.scheme == "http" && !(u.hostname == "localhost" || u.hostname == "127.0.0.1") {
-                out.push(Risk::new("site-insecure", "This site is not using HTTPS.", true));
+                out.push(Risk::new("site-insecure", tr().wallet_sign.site_insecure, true));
             }
             if u.hostname.split('.').any(|p| p.starts_with("xn--")) {
-                out.push(Risk::new("site-lookalike", "This address uses special characters and may imitate another site.", true));
+                out.push(Risk::new("site-lookalike", tr().wallet_sign.site_lookalike, true));
             }
         }
     }

@@ -7,13 +7,15 @@
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
 use rare_input::remap::{self, Button, Layout, Status, Target, BUTTONS};
+use rare_i18n::{tr, trf};
 use rare_render::input::Pad;
 use rare_render::theme::tok;
 use rare_render::{Id, Node};
 use std::sync::{Arc, Mutex};
 
-const SUB: &str = "Applies to all games and the launcher. Rare and Quick always stay as they are.";
-const HINT_LIST: &str = "Pick a button to change what it does.";
+fn hint_list() -> &'static str {
+    tr().settings_more.rm_hint_list
+}
 
 const T_SWAP_AB: u32 = 100;
 const T_SWAP_XY: u32 = 101;
@@ -41,11 +43,11 @@ impl RemapSheet {
     pub fn open(cx: &mut Cx, layout: Layout, live: bool, now: f64) -> RemapSheet {
         let r = cx.r();
         let root = cx.scene.root;
-        let sh = sheet(cx, root, "Button layout", Some(SUB), true, true, now);
+        let sh = sheet(cx, root, tr().settings_more.rm_title, Some(tr().settings_more.rm_sub), true, true, now);
         // The status line keeps two lines of room, so the list never moves when it changes.
         let note_box = cx.scene.add(sh.body, s().col().min_h(2.0 * ty::SMALL.1 * r).mb(0.5 * r).done(), Node::default());
         let first = if live { remap::status().line() } else { None };
-        let note = cx.scene.add_text(cx.t, note_box, s().done(), first.as_deref().unwrap_or(HINT_LIST), ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
+        let note = cx.scene.add_text(cx.t, note_box, s().done(), first.as_deref().unwrap_or(hint_list()), ts(r, ty::SMALL.0, ty::SMALL.1, 400).wrap(), tok::MUTED);
         let body = cx.scene.add(sh.body, s().col().wp(1.0).done(), Node::default());
         let mut me = RemapSheet { nav: Nav::default(), body, footer: sh.footer.unwrap(), note, layout, picking: None, live, pending: None };
         me.draw(cx, now, Some(0));
@@ -77,31 +79,31 @@ impl RemapSheet {
                         cx.scene.add_text(cx.t, row, s().grow().done(), b.label(), ts(r, ty::BODY.0, ty::BODY.1, 600), tok::FG);
                         let changed = t != Target::Button(*b);
                         cx.scene.add_text(cx.t, row, s().done(), t.label(), ts(r, ty::BODY.0, ty::BODY.1, if changed { 600 } else { 400 }), if changed { tok::FG } else { tok::MUTED });
-                        self.nav.add(Focusable { id: row, kind: Kind::Row, group: 1, hint: "Change".into(), tag: i as u32, sid: format!("remap-{}", b.key()) });
+                        self.nav.add(Focusable { id: row, kind: Kind::Row, group: 1, hint: tr().common.change.into(), tag: i as u32, sid: format!("remap-{}", b.key()) });
                     }
                 }
-                let ab = if self.layout.swapped(Button::A, Button::B) { "Swap A and B back" } else { "Swap A and B" };
-                let xy = if self.layout.swapped(Button::X, Button::Y) { "Swap X and Y back" } else { "Swap X and Y" };
-                for (label, tag, v) in [(ab, T_SWAP_AB, Variant::Secondary), (xy, T_SWAP_XY, Variant::Secondary), ("Reset to default", T_RESET, if self.layout.is_default() { Variant::Dimmed } else { Variant::Secondary }), ("Done", T_DONE, Variant::Primary)] {
+                let ab = if self.layout.swapped(Button::A, Button::B) { tr().settings_more.rm_swap_ab_back } else { tr().settings_more.rm_swap_ab };
+                let xy = if self.layout.swapped(Button::X, Button::Y) { tr().settings_more.rm_swap_xy_back } else { tr().settings_more.rm_swap_xy };
+                for (label, tag, v) in [(ab, T_SWAP_AB, Variant::Secondary), (xy, T_SWAP_XY, Variant::Secondary), (tr().settings_more.rm_reset, T_RESET, if self.layout.is_default() { Variant::Dimmed } else { Variant::Secondary }), (tr().common.done, T_DONE, Variant::Primary)] {
                     self.nav.add(button(cx, self.footer, label, v, Sz::Md, false).hint(label).tag(tag).group(2));
                 }
             }
             Some(b) => {
                 let head = cx.scene.add(self.body, s().mb(0.75 * r).done(), Node::default());
-                text(cx, head, ty::BODY, 600, tok::FG, &format!("What {} does", b.label()));
+                text(cx, head, ty::BODY, 600, tok::FG, &trf!(tr().settings_more.rm_what_does, name = b.label()));
                 let grid = cx.scene.add(self.body, s().row().wrap().gap(0.5 * r).wp(1.0).done(), Node::default());
                 let cur = self.layout.target(b);
                 let mut choices: Vec<(Target, u32)> = BUTTONS.iter().enumerate().map(|(i, x)| (Target::Button(*x), T_PICK + i as u32)).collect();
                 choices.push((Target::Nothing, T_NOTHING));
                 for (t, tag) in choices {
                     let on = t == cur;
-                    let label = if t == Target::Button(b) { format!("{} (its own)", t.label()) } else { t.label().to_string() };
+                    let label = if t == Target::Button(b) { trf!(tr().settings_more.rm_own, name = t.label()) } else { t.label().to_string() };
                     let (base, fg) = if on { (tok::FG, tok::BG) } else { (tok::L2, tok::FG) };
                     let chip = cx.scene.add(grid, s().row().items_center().justify_center().h(2.6 * r).min_w(5.5 * r).px(1.0 * r).done(), Node::bg(base).radius(0.25 * r));
                     let tid = cx.scene.add_text(cx.t, chip, s().done(), &label, ts(r, ty::SMALL.0, ty::SMALL.1, 500), fg);
-                    self.nav.add(Focusable { id: chip, kind: Kind::Btn { base, fg, text: tid }, group: 1, hint: "Pick".into(), tag, sid: String::new() });
+                    self.nav.add(Focusable { id: chip, kind: Kind::Btn { base, fg, text: tid }, group: 1, hint: tr().settings_more.rm_pick.into(), tag, sid: String::new() });
                 }
-                self.nav.add(button(cx, self.footer, "Back", Variant::Secondary, Sz::Md, false).hint("Back").tag(T_BACK).group(2));
+                self.nav.add(button(cx, self.footer, tr().common.back, Variant::Secondary, Sz::Md, false).hint(tr().common.back).tag(T_BACK).group(2));
             }
         }
         let target = focus.and_then(|t| self.nav.items.iter().find(|f| f.tag == t)).or_else(|| self.nav.items.first()).map(|f| f.id);
@@ -133,7 +135,7 @@ impl RemapSheet {
             });
             self.pending = Some(slot);
         } else {
-            self.set_note(cx, HINT_LIST);
+            self.set_note(cx, hint_list());
         }
         true
     }
@@ -218,7 +220,7 @@ impl Screen for RemapSheet {
         let done = self.pending.as_ref().and_then(|p| p.lock().ok().and_then(|mut g| g.take()));
         if let Some(st) = done {
             self.pending = None;
-            let line = st.line().unwrap_or_else(|| HINT_LIST.to_string());
+            let line = st.line().unwrap_or_else(|| hint_list().to_string());
             self.set_note(cx, &line);
         }
     }

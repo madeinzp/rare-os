@@ -4,6 +4,7 @@
 //! plan for the person to carry out in that wallet: the web page passes no `signCovered`, so the
 //! covered sends are never offered here either.
 
+use rare_i18n::tr;
 use crate::screens::firstrun::move_assets as ma;
 use crate::screens::wallet::home::lib::{hint, Hint};
 use crate::screens::wallet::home::stack::WalletView;
@@ -113,7 +114,7 @@ impl WalletTab {
             scan: self.flows.playtron.scan.as_ref().map(|s| &s.1),
             plan: plan.as_ref(),
             covered: false,
-            exit_label: "Done",
+            exit_label: tr().common.done,
             has_back: true,
             tz_min: 0,
         };
@@ -131,7 +132,7 @@ impl WalletTab {
     }
 
     pub(in crate::screens::wallet) fn playtron_hints(&self) -> Vec<Hint> {
-        vec![hint("a", "Select"), hint("b", "Back")]
+        vec![hint("a", tr().common.select), hint("b", tr().common.back)]
     }
 
     pub(in crate::screens::wallet) fn playtron_handle(&mut self, st: &mut State, m: Msg) {
@@ -153,7 +154,7 @@ impl WalletTab {
                 self.stack.pop();
                 self.push(st, WalletView::Add);
             }
-            Some(E::AskFrom(v)) => st.ask_text(ASK_FROM, "Your old SuiPlay wallet address", v.unwrap_or_default(), Some("0x... or name.sui")),
+            Some(E::AskFrom(v)) => st.ask_text(ASK_FROM, tr().wallet_setup.ask_old_address, v.unwrap_or_default(), Some(tr().wallet_setup.old_address_example)),
             Some(E::Abort) => {
                 let f = &mut self.flows.playtron;
                 f.rx_scan = None;
@@ -169,7 +170,7 @@ impl WalletTab {
                     return;
                 }
                 let stage = self.flows.playtron.stage.clone();
-                *stage.lock().unwrap() = Some("Starting".into());
+                *stage.lock().unwrap() = Some(tr().wallet_setup.stage_starting.into());
                 self.flows.playtron.rx_scan = Some(service::work(move |w| {
                     let say = |s: &str| *stage.lock().unwrap() = Some(s.to_string());
                     let r = w.rt.block_on(rescue::scan_playtron(&w.sui, &address, &say)).map_err(|e| e.to_string());

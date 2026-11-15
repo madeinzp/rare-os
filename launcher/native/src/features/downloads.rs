@@ -13,6 +13,7 @@ use crate::kit::{self, s, tok, Btn as B, Ty, Ui, T};
 use crate::page::{hash, Acts, Btn, Feedback, Fx, Page};
 use crate::screens::game::parts::{self, Variant};
 use crate::state::{OptionItem, OptionsSpec, State, Tone};
+use rare_i18n::{tr, trf};
 pub use rare_launch::steamdl::{Dl, Folder, Snapshot, Started};
 use rare_render::focus::hints::{hint, Hint, Key};
 use rare_render::focus::{Focusable, Group};
@@ -117,14 +118,14 @@ fn fmt_rate(b: u64) -> String {
 fn fmt_eta(secs: u64) -> String {
     match secs {
         0 => String::new(),
-        s if s < 60 => "Less than a minute left".into(),
-        s if s < 3600 => format!("{} min left", (s + 59) / 60),
+        s if s < 60 => tr().features.dl_under_minute.into(),
+        s if s < 3600 => trf!(tr().features.dl_min_left, n = (s + 59) / 60),
         s => {
             let m = (s % 3600 + 59) / 60;
             if m == 0 || m == 60 {
-                format!("{} h left", (s + 3599) / 3600)
+                trf!(tr().features.dl_h_left, n = (s + 3599) / 3600)
             } else {
-                format!("{} h {m} min left", s / 3600)
+                trf!(tr().features.dl_h_min_left, h = s / 3600, m = m)
             }
         }
     }
@@ -142,16 +143,16 @@ fn gb(b: u64) -> String {
 /// The status word: Downloading, Paused, Queued, Updating.
 pub fn status(d: &Dl) -> &'static str {
     match (d.paused, d.active, d.update) {
-        (true, _, _) => "Paused",
-        (false, true, true) => "Updating",
-        (false, true, false) => "Downloading",
-        (false, false, _) => "Queued",
+        (true, _, _) => tr().features.dl_paused,
+        (false, true, true) => tr().features.dl_updating,
+        (false, true, false) => tr().common.downloading,
+        (false, false, _) => tr().features.dl_queued,
     }
 }
 
 /// "4.2 GB of 44.4 GB · 12.3 MB/s · 38 min left" (only what is known).
 pub fn detail(d: &Dl) -> String {
-    let mut parts = vec![if d.total > 0 { format!("{} of {}", gb(d.done), gb(d.total)) } else { String::new() }];
+    let mut parts = vec![if d.total > 0 { trf!(tr().features.dl_of, done = gb(d.done), total = gb(d.total)) } else { String::new() }];
     if d.active && !d.paused {
         if d.rate > 0 {
             parts.push(fmt_rate(d.rate));
@@ -189,7 +190,7 @@ pub fn game_panel(ui: &mut Ui, st: &State, g: &Game) -> Option<El> {
     }
     let (word, line, frac, dim) = match d {
         Some(d) => (status(d).to_string(), detail(d), fraction(d), d.paused || !d.active),
-        None => ("Starting the install".to_string(), "Steam is getting it ready".to_string(), 0.0, true),
+        None => (tr().features.dl_starting_install.to_string(), tr().features.dl_steam_getting_ready.to_string(), 0.0, true),
     };
     let pct = d.filter(|d| d.total > 0).map(|d| format!("{}%", (fraction(d) * 100.0).floor() as u32)).unwrap_or_default();
     let head = ui.bx(s().row().items_center().gap(0.6).mb(0.45)).child(ui.text(word, T::new(Ty::Small).w(600))).child(ui.text_s(s().ml_auto(), pct, T::new(Ty::Small).w(600).tab()));
@@ -200,21 +201,21 @@ pub fn game_panel(ui: &mut Ui, st: &State, g: &Game) -> Option<El> {
 pub fn update_now_button(ui: &mut Ui, st: &State, acts: &mut Acts, g: &Game) -> Option<El> {
     let appid = appid_of(&g.id)?;
     waiting_of(st, appid)?;
-    Some(kit::button(ui, B::new("Update now", acts.game(Act::Download(appid, Ctl::UpdateNow), &g.id)).lg().ghost().game()))
+    Some(kit::button(ui, B::new(tr().features.dl_update_now, acts.game(Act::Download(appid, Ctl::UpdateNow), &g.id)).lg().ghost().game()))
 }
 
 /// The game page's main button while the game is in the queue (Pause or Resume), else None.
 pub fn game_button(ui: &mut Ui, st: &State, acts: &mut Acts, g: &Game) -> Option<El> {
     let appid = appid_of(&g.id)?;
     if let Some(d) = of(st, &g.id) {
-        let (label, ctl, icon) = if d.paused || !d.active { ("Resume", Ctl::Resume, "play") } else { ("Pause", Ctl::Pause, "pause") };
+        let (label, ctl, icon) = if d.paused || !d.active { (tr().common.resume, Ctl::Resume, "play") } else { (tr().features.dl_pause, Ctl::Pause, "pause") };
         return Some(kit::button(ui, B::new(label, acts.game(Act::Download(appid, ctl), &g.id)).primary().lg().def(true).hint(label).icon(kit::BtnIcon::Lucide(icon, 1.1, true)).min_w(10.0).game()));
     }
     if asked(st, &g.id) {
-        return Some(kit::button(ui, B::new("Starting", acts.game(Act::None, &g.id)).primary().lg().def(true).min_w(10.0).game()));
+        return Some(kit::button(ui, B::new(tr().features.dl_starting, acts.game(Act::None, &g.id)).primary().lg().def(true).min_w(10.0).game()));
     }
     if !g.installed && g.source == "steam" {
-        let label = "Install";
+        let label = tr().common.install;
         return Some(kit::button(ui, B::new(label, acts.game(Act::Install(g.id.clone()), &g.id)).primary().lg().def(true).hint(label).icon(kit::BtnIcon::Lucide("download", 1.1, false)).min_w(10.0).game()));
     }
     None
@@ -241,7 +242,7 @@ fn apply(st: &mut State, snap: Option<Snapshot>, now: f64) {
     let lib_titles: Vec<(u32, String)> = snap.as_ref().map(|s| s.items.iter().map(|d| (d.appid, title_of(st, d))).collect()).unwrap_or_default();
     let finished_titles: Vec<String> = snap
         .as_ref()
-        .map(|s| s.finished.iter().map(|a| st.game(&format!("steam:{a}")).map(|g| g.title.clone()).unwrap_or_else(|| format!("Steam app {a}"))).collect())
+        .map(|s| s.finished.iter().map(|a| st.game(&format!("steam:{a}")).map(|g| g.title.clone()).unwrap_or_else(|| trf!(tr().features.dl_steam_app, id = a))).collect())
         .unwrap_or_default();
     let sh = &mut st.feat.downloads;
     sh.busy = false;
@@ -258,7 +259,7 @@ fn apply(st: &mut State, snap: Option<Snapshot>, now: f64) {
         snap.items.iter().map(|d| rare_notify::downloads::Download { id: format!("steam:{}", d.appid), title: d.title.clone(), done: d.done as f64, total: d.total as f64, paused: d.paused }).collect();
     let mut notices = sh.watch.poll(Some(as_notify));
     for t in finished_titles {
-        let title = format!("{t} finished downloading");
+        let title = trf!(tr().features.dl_finished, title = t);
         if !notices.iter().any(|n| n.title == title) {
             notices.push(rare_notify::LocalNotice::new(rare_notify::types::NoticeKind::DownloadDone, title, rare_notify::types::NoticeAction::Downloads));
         }
@@ -293,9 +294,9 @@ fn menu_summary(s: &Snapshot) -> Option<String> {
     }
     let running: Vec<&Dl> = items.iter().filter(|d| d.active && !d.paused).collect();
     Some(match (items.len(), running.first()) {
-        (1, Some(d)) => format!("{}, {}%", d.title, (fraction(d) * 100.0).floor() as u32),
-        (n, Some(d)) => format!("{}, {}%. {} more in the queue", d.title, (fraction(d) * 100.0).floor() as u32, n - 1),
-        (n, None) => format!("{n} paused"),
+        (1, Some(d)) => trf!(tr().features.dl_summary_one, title = d.title, pct = (fraction(d) * 100.0).floor() as u32),
+        (n, Some(d)) => trf!(tr().features.dl_summary_more, title = d.title, pct = (fraction(d) * 100.0).floor() as u32, n = n - 1),
+        (n, None) => trf!(tr().features.dl_summary_paused, n = n),
     })
 }
 
@@ -324,19 +325,19 @@ pub fn run(st: &mut State, fx: &mut Fx, a: Act, now: f64) {
             st.feat.downloads.asked.push((id.clone(), now));
             st.feat.downloads.ver += 1;
             fx.fb(Feedback::Launch);
-            st.toast(format!("Starting the install of {title}"), Tone::Info, now);
+            st.toast(trf!(tr().features.dl_toast_starting, title = title), Tone::Info, now);
             fx.spawn(move |b| {
                 let r = b.steam_install(appid, &path);
                 Box::new(move |st: &mut State, now| {
                     match r {
                         Ok(Started::Queued) => {}
-                        Ok(Started::SteamShown) => st.toast("Finish the install in Steam. The Rare button brings you back.", Tone::Info, now),
+                        Ok(Started::SteamShown) => st.toast(tr().features.dl_finish_in_steam, Tone::Info, now),
                         Ok(Started::NeedsEula(eulas)) => eula_sheet(st, appid, &id, &eulas),
                         Err(e) => {
                             log::warn!("install {id}: {e}");
                             st.feat.downloads.asked.retain(|(a, _)| *a != id);
                             st.feat.downloads.ver += 1;
-                            st.toast(if e.contains("busy") { "Close the game first, then install.".to_string() } else { e }, Tone::Error, now);
+                            st.toast(if e.contains("busy") { tr().features.dl_close_game_install.to_string() } else { e }, Tone::Error, now);
                         }
                     }
                     soon(st, now);
@@ -370,17 +371,17 @@ pub fn run(st: &mut State, fx: &mut Fx, a: Act, now: f64) {
                     match r {
                         Ok(true) => {
                             if ctl == Ctl::Cancel {
-                                st.toast("Removed from the queue", Tone::Info, now);
+                                st.toast(tr().features.dl_removed, Tone::Info, now);
                             }
                             if ctl == Ctl::UpdateNow {
-                                st.toast("Updating now", Tone::Info, now);
+                                st.toast(tr().features.dl_updating_now, Tone::Info, now);
                             }
                             if ctl == Ctl::CancelInstall {
                                 st.feat.downloads.asked.retain(|(a, _)| *a != format!("steam:{appid}"));
                                 st.feat.downloads.ver += 1;
                             }
                         }
-                        Ok(false) => st.toast("Steam's Downloads has the screen. The Rare button brings you back.", Tone::Info, now),
+                        Ok(false) => st.toast(tr().features.dl_steam_has_screen, Tone::Info, now),
                         Err(e) if ctl == Ctl::AcceptEula => {
                             log::warn!("download {appid}: {e}");
                             st.feat.downloads.asked.retain(|(a, _)| *a != format!("steam:{appid}"));
@@ -389,7 +390,7 @@ pub fn run(st: &mut State, fx: &mut Fx, a: Act, now: f64) {
                         }
                         Err(e) => {
                             log::warn!("download {appid}: {e}");
-                            st.toast(if e.contains("busy") { "Close the game first, then try again.".to_string() } else { "Steam didn't take that. Try again.".to_string() }, Tone::Error, now);
+                            st.toast(if e.contains("busy") { tr().features.dl_close_game_retry.to_string() } else { tr().features.dl_steam_declined.to_string() }, Tone::Error, now);
                         }
                     }
                     soon(st, now);
@@ -402,66 +403,66 @@ pub fn run(st: &mut State, fx: &mut Fx, a: Act, now: f64) {
 
 /// The game's licence agreements before Steam installs it: accept in Rare, read one, or cancel.
 fn eula_sheet(st: &mut State, appid: u32, id: &str, eulas: &[rare_library::appinfo::Eula]) {
-    let title = st.game(id).map(|g| g.title.clone()).unwrap_or_else(|| "This game".into());
+    let title = st.game(id).map(|g| g.title.clone()).unwrap_or_else(|| tr().features.dl_this_game.into());
     let names: Vec<String> = eulas.iter().map(|e| e.name.clone()).filter(|n| !n.is_empty()).fold(Vec::new(), |mut v, n| {
         if !v.contains(&n) {
             v.push(n);
         }
         v
     });
-    let mut items = vec![OptionItem { label: "Accept and install".into(), on: None, act: Act::Download(appid, Ctl::AcceptEula) }];
+    let mut items = vec![OptionItem { label: tr().features.dl_accept_install.into(), on: None, act: Act::Download(appid, Ctl::AcceptEula) }];
     for e in eulas.iter().filter(|e| !e.url.is_empty()).take(2) {
-        items.push(OptionItem { label: format!("Read {}", if e.name.is_empty() { "the agreement" } else { e.name.as_str() }), on: None, act: Act::OpenWeb(e.url.replace("http://", "https://")) });
+        items.push(OptionItem { label: if e.name.is_empty() { tr().features.dl_read_agreement.into() } else { trf!(tr().features.dl_read_named, name = e.name) }, on: None, act: Act::OpenWeb(e.url.replace("http://", "https://")) });
     }
-    items.push(OptionItem { label: "Cancel the install".into(), on: None, act: Act::Download(appid, Ctl::CancelInstall) });
-    let sub = if names.is_empty() { format!("{title} asks you to accept its licence agreement.") } else { format!("{title} asks you to accept: {}.", names.join(", ")) };
-    st.options = Some(OptionsSpec { title: "Licence agreement".into(), sub: Some(sub), items });
+    items.push(OptionItem { label: tr().features.dl_cancel_install.into(), on: None, act: Act::Download(appid, Ctl::CancelInstall) });
+    let sub = if names.is_empty() { trf!(tr().features.dl_eula_sub, title = title) } else { trf!(tr().features.dl_eula_sub_named, title = title, names = names.join(", ")) };
+    st.options = Some(OptionsSpec { title: tr().features.dl_eula_title.into(), sub: Some(sub), items });
 }
 
 /// "Install <game>": one row per drive with its free space.
 fn drive_sheet(st: &mut State, g: &Game, folders: Vec<Folder>, now: f64) {
     if folders.is_empty() {
-        st.toast("Steam has no library folder yet. Open Steam once, then try again.", Tone::Error, now);
+        st.toast(tr().features.dl_no_library_folder, Tone::Error, now);
         return;
     }
     let need = g.size_bytes.unwrap_or(0.0);
     let items = folders
         .iter()
         .map(|f| {
-            let free = f.free.map(|b| format!("{} free", fmt_size(Some(b as f64)))).unwrap_or_default();
+            let free = f.free.map(|b| trf!(tr().features.dl_free, size = fmt_size(Some(b as f64)))).unwrap_or_default();
             let short = f.free.is_some_and(|b| need > 0.0 && (b as f64) < need);
-            let label = [f.name.clone(), free, if short { "Not enough space".into() } else { String::new() }].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(" \u{b7} ");
-            let act = if short { Act::Toast(format!("{} needs {}. Free up space or pick another drive.", g.title, fmt_size(Some(need)))) } else { Act::InstallTo(g.id.clone(), f.path.clone()) };
+            let label = [f.name.clone(), free, if short { tr().features.dl_not_enough_space.into() } else { String::new() }].into_iter().filter(|x| !x.is_empty()).collect::<Vec<_>>().join(" \u{b7} ");
+            let act = if short { Act::Toast(trf!(tr().features.dl_needs_space, title = g.title, size = fmt_size(Some(need)))) } else { Act::InstallTo(g.id.clone(), f.path.clone()) };
             OptionItem { label, on: None, act }
         })
         .collect();
-    let sub = if need > 0.0 { format!("Install size {}. Pick a drive.", fmt_size(Some(need))) } else { "Pick a drive.".to_string() };
-    st.options = Some(OptionsSpec { title: format!("Install {}", g.title), sub: Some(sub), items });
+    let sub = if need > 0.0 { trf!(tr().features.dl_install_size, size = fmt_size(Some(need))) } else { tr().features.dl_pick_drive.to_string() };
+    st.options = Some(OptionsSpec { title: trf!(tr().features.dl_install_title, title = g.title), sub: Some(sub), items });
 }
 
 /// A queue row's sheet: Pause or Resume, Move to the top, Cancel, the game's page.
 fn row_sheet(st: &mut State, appid: u32) {
     let id = format!("steam:{appid}");
     if let Some(d) = waiting_of(st, appid).cloned() {
-        let mut items = vec![OptionItem { label: "Update now".into(), on: None, act: Act::Download(appid, Ctl::UpdateNow) }];
+        let mut items = vec![OptionItem { label: tr().features.dl_update_now.into(), on: None, act: Act::Download(appid, Ctl::UpdateNow) }];
         if st.game(&id).is_some() {
-            items.push(OptionItem { label: "Game page".into(), on: None, act: Act::OpenGame(id) });
+            items.push(OptionItem { label: tr().features.dl_game_page.into(), on: None, act: Act::OpenGame(id) });
         }
-        st.options = Some(OptionsSpec { title: title_of(st, &d), sub: Some("Waiting. Steam updates it later, or now if you ask.".into()), items });
+        st.options = Some(OptionsSpec { title: title_of(st, &d), sub: Some(tr().features.dl_waiting_sub.into()), items });
         return;
     }
     let Some(d) = st.feat.downloads.snap.items.iter().find(|d| d.appid == appid).cloned() else { return };
     let mut items = vec![if d.paused || !d.active {
-        OptionItem { label: "Resume".into(), on: None, act: Act::Download(appid, Ctl::Resume) }
+        OptionItem { label: tr().common.resume.into(), on: None, act: Act::Download(appid, Ctl::Resume) }
     } else {
-        OptionItem { label: "Pause".into(), on: None, act: Act::Download(appid, Ctl::Pause) }
+        OptionItem { label: tr().features.dl_pause.into(), on: None, act: Act::Download(appid, Ctl::Pause) }
     }];
     if !(d.active && !d.paused) {
-        items.push(OptionItem { label: "Download this first".into(), on: None, act: Act::Download(appid, Ctl::Top) });
+        items.push(OptionItem { label: tr().features.dl_download_first.into(), on: None, act: Act::Download(appid, Ctl::Top) });
     }
-    items.push(OptionItem { label: if d.update { "Remove the update from the queue".into() } else { "Cancel the install".into() }, on: None, act: Act::Download(appid, Ctl::Cancel) });
+    items.push(OptionItem { label: if d.update { tr().features.dl_remove_update.into() } else { tr().features.dl_cancel_install.into() }, on: None, act: Act::Download(appid, Ctl::Cancel) });
     if st.game(&id).is_some() {
-        items.push(OptionItem { label: "Game page".into(), on: None, act: Act::OpenGame(id) });
+        items.push(OptionItem { label: tr().features.dl_game_page.into(), on: None, act: Act::OpenGame(id) });
     }
     st.options = Some(OptionsSpec { title: title_of(st, &d), sub: Some(status(&d).to_string()), items });
 }
@@ -480,25 +481,25 @@ fn row(ui: &mut Ui, st: &State, acts: &mut Acts, d: &Dl, def: bool, waiting: boo
     let pct = if d.total > 0 { format!("{}%", (fraction(d) * 100.0).floor() as u32) } else { String::new() };
     let mut word = status(d).to_string();
     if !d.active && !d.paused && d.queue == 1 {
-        word = "Next".into();
+        word = tr().features.dl_next.into();
     }
     let pct = if waiting { String::new() } else { pct };
     if waiting {
-        word = "Waiting".into();
+        word = tr().features.dl_waiting.into();
     }
     let head = ui
         .bx(s().row().items_center().gap(0.75))
         .child(ui.text_s(s().grow().min0(), title.clone(), T::new(Ty::Body).w(600).trunc()))
         .child(ui.text(word, T::new(Ty::Small).c(tok::MUTED)))
         .child(ui.text_s(s().w(3.2), pct, T::new(Ty::Small).w(600).tab().right()));
-    let line = if waiting { if d.total > 0 { format!("Update, {}", gb(d.total)) } else { "Update".into() } } else { detail(d) };
+    let line = if waiting { if d.total > 0 { trf!(tr().features.dl_update_size, size = gb(d.total)) } else { tr().common.update.into() } } else { detail(d) };
     let col = ui
         .bx(s().col().grow().min0().gap(0.45))
         .child(head)
         .child(bar(ui, None, fraction(d), d.paused || !d.active))
         .child(ui.text(if line.is_empty() { " ".to_string() } else { line }, T::new(Ty::Small).c(tok::MUTED).tab().trunc()));
     let el = ui.bx(s().row().items_center().gap(1.1).h(5.5).wp(1.0).px(0.85)).radius(ui.r(0.5)).child(art).child(col);
-    kit::nav(kit::row_look(el), acts.game(Act::Download(d.appid, Ctl::Menu), &id), Some("Options"), None, def).key(key(&id))
+    kit::nav(kit::row_look(el), acts.game(Act::Download(d.appid, Ctl::Menu), &id), Some(tr().common.options), None, def).key(key(&id))
 }
 
 fn asked_row(ui: &mut Ui, st: &State, acts: &mut Acts, id: &str, def: bool) -> El {
@@ -506,10 +507,10 @@ fn asked_row(ui: &mut Ui, st: &State, acts: &mut Acts, id: &str, def: bool) -> E
     let title = g.map(|g| g.title.clone()).unwrap_or_default();
     let sources: Vec<String> = g.map(|g| if g.art.header.is_empty() { g.art.cover.clone() } else { g.art.header.clone() }).unwrap_or_default();
     let art = ui.bx(s().wh(8.6, 4.0)).bg(tok::L3).radius(ui.r(0.4)).clip().child(parts::art(ui, &sources, &title, Variant::Header, 8.6, 4.0, 0.5));
-    let head = ui.bx(s().row().items_center().gap(0.75)).child(ui.text_s(s().grow().min0(), title, T::new(Ty::Body).w(600).trunc())).child(ui.text("Starting", T::new(Ty::Small).c(tok::MUTED))).child(ui.bx(s().w(3.2)));
-    let col = ui.bx(s().col().grow().min0().gap(0.45)).child(head).child(bar(ui, None, 0.0, true)).child(ui.text("Steam is getting it ready", T::new(Ty::Small).c(tok::MUTED).trunc()));
+    let head = ui.bx(s().row().items_center().gap(0.75)).child(ui.text_s(s().grow().min0(), title, T::new(Ty::Body).w(600).trunc())).child(ui.text(tr().features.dl_starting, T::new(Ty::Small).c(tok::MUTED))).child(ui.bx(s().w(3.2)));
+    let col = ui.bx(s().col().grow().min0().gap(0.45)).child(head).child(bar(ui, None, 0.0, true)).child(ui.text(tr().features.dl_steam_getting_ready, T::new(Ty::Small).c(tok::MUTED).trunc()));
     let el = ui.bx(s().row().items_center().gap(1.1).h(5.5).wp(1.0).px(0.85)).radius(ui.r(0.5)).child(art).child(col);
-    kit::nav(kit::row_look(el), acts.game(Act::OpenGame(id.to_string()), id), Some("Game page"), None, def).key(key(id))
+    kit::nav(kit::row_look(el), acts.game(Act::OpenGame(id.to_string()), id), Some(tr().features.dl_game_page), None, def).key(key(id))
 }
 
 impl Page for DownloadsPage {
@@ -528,20 +529,20 @@ impl Page for DownloadsPage {
         } else if rate > 0 {
             fmt_rate(rate)
         } else if items.iter().all(|d| d.paused) && !items.is_empty() {
-            "Paused".into()
+            tr().features.dl_paused.into()
         } else {
             String::new()
         };
         let head = ui
             .bx(s().row().items_center().gap(0.75).h(2.5).mb(1.25))
             .child(kit::icon(ui, "download", 1.5, tok::ICON2))
-            .child(ui.text("Downloads", T::new(Ty::Title).w(700)))
+            .child(ui.text(tr().common.downloads, T::new(Ty::Title).w(700)))
             .child(ui.text_s(s().ml_auto(), note, T::new(Ty::Small).c(tok::MUTED).tab()));
         let mut page = ui.bx(s().col().fill().px(2.5).py(2.0)).bg(tok::BG).enter(Motion::FADE).scrolls_y(key("downloads")).child(head);
         let waiting = &sh.snap.waiting;
         if items.is_empty() && sh.asked.is_empty() && store_jobs.is_empty() && waiting.is_empty() {
-            let lib = kit::button(ui, B::new("Not installed games", acts.tag(Act::Local(1))).primary().def(true));
-            page = page.child(kit::empty(ui, s(), "Nothing is downloading", Some("Games you install and updates Steam fetches show here, with their progress."), vec![lib]));
+            let lib = kit::button(ui, B::new(tr().features.dl_not_installed_games, acts.tag(Act::Local(1))).primary().def(true));
+            page = page.child(kit::empty(ui, s(), tr().features.ask_nothing_downloading, Some(tr().features.dl_empty_body), vec![lib]));
             return page;
         }
         let mut rows: Vec<El> = Vec::new();
@@ -564,11 +565,11 @@ impl Page for DownloadsPage {
             let first = items.is_empty() && sh.asked.is_empty() && store_jobs.is_empty();
             let wrows: Vec<El> = waiting.iter().enumerate().map(|(i, d)| row(ui, st, acts, d, first && i == 0, true)).collect();
             page = page
-                .child(ui.text_s(s().mt(1.5).mb(0.6).ml(0.85), "Waiting", T::new(Ty::Small).w(600).c(tok::MUTED)))
+                .child(ui.text_s(s().mt(1.5).mb(0.6).ml(0.85), tr().features.dl_waiting, T::new(Ty::Small).w(600).c(tok::MUTED)))
                 .child(ui.bx(s().col().gap(0.5)).group(Group::new("downloads-waiting", [0.0; 4]).remember()).kids(wrows));
         }
         if !sh.snap.from_steam {
-            page = page.child(ui.text_s(s().mt(1.25), "Speed and time left come from this device's network while Steam starts up.", T::new(Ty::Small).c(tok::MUTED).wrap()));
+            page = page.child(ui.text_s(s().mt(1.25), tr().features.dl_speed_note, T::new(Ty::Small).c(tok::MUTED).wrap()));
         }
         page
     }
@@ -611,7 +612,7 @@ impl Page for DownloadsPage {
         if (st.feat.downloads.snap.items.is_empty() && st.feat.downloads.snap.waiting.is_empty() && rare_stores::jobs::list().is_empty()) || st.options.is_some() {
             return vec![];
         }
-        vec![hint(Key::X, "Pause, resume or update now")]
+        vec![hint(Key::X, tr().features.dl_hint_control)]
     }
 }
 

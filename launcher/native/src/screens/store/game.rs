@@ -11,6 +11,7 @@ use super::parts::{trunc_text, fact_line, game_logo, price_text, Fact};
 use crate::data::art::src_of;
 use crate::kit::{self, tok, ArtFit, Btn, DotTone, Variant};
 use crate::screens::market::host::*;
+use rare_i18n::{tr, trf};
 use rare_render::input::Pad;
 use rare_render::scene::{layer, GradDir, Gradient};
 use rare_render::view::{key, El, Look};
@@ -100,16 +101,16 @@ fn b(label: impl Into<String>, act: Act, variant: Variant) -> GBtn {
 pub fn link_buttons(g: &StoreGame) -> Vec<GBtn> {
     let mut v = Vec::new();
     if g.links.play.is_some() {
-        v.push(b("Play now", Act::Link("play"), Variant::Secondary));
+        v.push(b(tr().store.play_now, Act::Link("play"), Variant::Secondary));
     }
     if g.links.steam.is_some() {
-        v.push(b("Get it on Steam", Act::Link("steam"), Variant::Secondary));
+        v.push(b(tr().store.get_on_steam, Act::Link("steam"), Variant::Secondary));
     }
     if g.links.epic.is_some() {
-        v.push(b("Get it on Epic Games", Act::Link("epic"), Variant::Secondary));
+        v.push(b(tr().store.get_on_epic, Act::Link("epic"), Variant::Secondary));
     }
     if g.links.website.is_some() {
-        v.push(b("Website", Act::Link("website"), Variant::Secondary));
+        v.push(b(tr().store.website, Act::Link("website"), Variant::Secondary));
     }
     if let Some(f) = v.first_mut() {
         f.variant = Variant::Primary;
@@ -131,70 +132,70 @@ pub fn owned_view(g: &StoreGame, st: &GameState, working: Option<Act>) -> OwnedV
             // Not on sale yet: no buy button at all (a control that can't work isn't shown).
             if !selling {
             } else if price == Some(0) {
-                buttons.push(b("Get for free", Act::Free, Variant::Primary));
+                buttons.push(b(tr().store.get_free, Act::Free, Variant::Primary));
             } else if let Some(p) = price {
-                buttons.push(b(format!("Buy for {}", usd_text(p)), Act::Buy, Variant::Primary));
+                buttons.push(b(trf!(tr().store.buy_for, price = usd_text(p)), Act::Buy, Variant::Primary));
             }
         }
         Some(l) => {
             if st.installed.is_some() && st.lib_game {
                 let v = if decision == Some(UpdateDecision::Update) { Variant::Secondary } else { Variant::Primary };
-                buttons.push(b(if st.running { "Resume" } else { "Play" }, Act::Play, v));
+                buttons.push(b(if st.running { tr().common.resume } else { tr().common.play }, Act::Play, v));
             }
             if decision == Some(UpdateDecision::Update) {
-                buttons.insert(0, b("Update", Act::Update, Variant::Primary));
+                buttons.insert(0, b(tr().common.update, Act::Update, Variant::Primary));
             }
             if st.installed.is_none() && decision != Some(UpdateDecision::Unavailable) {
                 let label = match size {
-                    Some(sz) => format!("Install ({})", size_text(sz)),
-                    None => "Install".into(),
+                    Some(sz) => trf!(tr().store.install_size, size = size_text(sz)),
+                    None => tr().common.install.into(),
                 };
                 buttons.push(b(label, Act::Install, Variant::Primary));
             }
             if refundable(l, now) && can_sell(cfg) {
-                buttons.push(b("Refund", Act::Refund, Variant::Secondary));
+                buttons.push(b(tr().store.refund, Act::Refund, Variant::Secondary));
             }
             if l.kind == "licence" && g.resale.as_ref().is_some_and(|r| r.enabled) && tradable_now(l, now) && can_resell(cfg) {
-                buttons.push(b("Make tradable", Act::Trade, Variant::Secondary));
+                buttons.push(b(tr().store.make_tradable, Act::Trade, Variant::Secondary));
             }
             if l.kind == "resale" {
-                buttons.push(b("List for sale", Act::List, Variant::Secondary));
+                buttons.push(b(tr().store.list_for_sale, Act::List, Variant::Secondary));
             }
             if st.installed.is_some() {
-                buttons.push(b("Uninstall", Act::Uninstall, Variant::Ghost));
+                buttons.push(b(tr().common.uninstall, Act::Uninstall, Variant::Ghost));
             }
         }
     }
     for x in buttons.iter_mut() {
-        x.disabled = x.disabled || working.is_some() || (st.busy.is_some() && x.label != "Play");
+        x.disabled = x.disabled || working.is_some() || (st.busy.is_some() && x.act != Act::Play);
     }
 
     let status = match &st.progress {
-        Some(Progress::Download { done, total }) => Some(format!(
-            "Downloading {}%, {} of {}",
-            ((*done as f64 / (*total).max(1) as f64) * 100.0).floor(),
-            size_text(*done),
-            size_text(*total)
+        Some(Progress::Download { done, total }) => Some(trf!(
+            tr().store.downloading,
+            pct = ((*done as f64 / (*total).max(1) as f64) * 100.0).floor(),
+            done = size_text(*done),
+            total = size_text(*total)
         )),
-        Some(Progress::Verify) => Some("Checking the download against the chain".into()),
-        Some(Progress::Unpack) => Some("Installing".into()),
+        Some(Progress::Verify) => Some(tr().store.verifying.into()),
+        Some(Progress::Unpack) => Some(tr().store.installing.into()),
         None => match (&st.busy, &working) {
             (Some(b), _) => Some(b.clone()),
-            (None, Some(Act::Buy | Act::Free | Act::Refund | Act::Trade | Act::List)) => Some("Review and approve in Rare Wallet.".into()),
+            (None, Some(Act::Buy | Act::Free | Act::Refund | Act::Trade | Act::List)) => Some(tr().store.approve_in_wallet.into()),
             _ => None,
         },
     };
 
     let l = st.licence.as_ref();
     let resale_on = g.resale.as_ref().is_some_and(|r| r.enabled);
-    let hold = l.filter(|l| l.kind == "licence" && resale_on).and_then(|l| l.tradable_from_ms).filter(|t| now < *t).map(|t| format!("Tradable from {}.", month_day(t)));
+    let hold = l.filter(|l| l.kind == "licence" && resale_on).and_then(|l| l.tradable_from_ms).filter(|t| now < *t).map(|t| trf!(tr().store.tradable_from, date = month_day(t)));
     let notes: Vec<String> = [
-        (l.is_none() && selling && price.is_some_and(|p| p > 0)).then(|| "Refundable in full for 48 hours.".to_string()),
-        (l.is_none() && selling && g.price.as_ref().is_some_and(|p| p.accept_sui)).then(|| "Pay in USDC or SUI.".to_string()),
+        (l.is_none() && selling && price.is_some_and(|p| p > 0)).then(|| tr().store.note_refundable.to_string()),
+        (l.is_none() && selling && g.price.as_ref().is_some_and(|p| p.accept_sui)).then(|| tr().store.note_pay_usdc_sui.to_string()),
         hold,
-        (l.is_some_and(|l| refundable(l, now)) && resale_on).then(|| "Making it tradable ends the refund window.".to_string()),
-        (l.is_some() && g.launch_check).then(|| "Checks your licence before each launch. Works offline for 7 days.".to_string()),
-        (l.is_some() && decision == Some(UpdateDecision::Unavailable)).then(|| "No build for your edition yet.".to_string()),
+        (l.is_some_and(|l| refundable(l, now)) && resale_on).then(|| tr().store.note_trade_ends_refund.to_string()),
+        (l.is_some() && g.launch_check).then(|| tr().store.note_launch_check.to_string()),
+        (l.is_some() && decision == Some(UpdateDecision::Unavailable)).then(|| tr().store.note_no_build_edition.to_string()),
     ]
     .into_iter()
     .flatten()
@@ -245,10 +246,10 @@ impl GamePage {
         let act = self.working.take();
         self.note = match result {
             Ok(()) => match act {
-                Some(Act::Install | Act::Update) => Some((format!("{name} is installed."), false)),
-                Some(Act::Free) => Some((format!("{name} is in your library."), false)),
-                Some(Act::Refund) => Some(("Refunded. The payment is back in your wallet.".into(), false)),
-                Some(Act::Trade) => Some(("Tradable. It's in your kiosk, ready to list.".into(), false)),
+                Some(Act::Install | Act::Update) => Some((trf!(tr().store.installed_done, name = name), false)),
+                Some(Act::Free) => Some((trf!(tr().store.in_library_done, name = name), false)),
+                Some(Act::Refund) => Some((tr().store.refunded_done.into(), false)),
+                Some(Act::Trade) => Some((tr().store.tradable_done.into(), false)),
                 _ => None,
             },
             // A rejected signature says nothing (the app passes an empty error).
@@ -264,7 +265,7 @@ impl GamePage {
         match result {
             Ok(()) => {
                 self.buying = None;
-                self.note = Some((format!("{name} is in your library. Install it from here."), false));
+                self.note = Some((trf!(tr().store.bought_done, name = name), false));
             }
             Err(e) => {
                 if let Some(b) = self.buying.as_mut() {
@@ -284,7 +285,7 @@ impl GamePage {
             return Out::None;
         }
         if !self.st.account.can_sign() {
-            let t = if self.st.account == Account::None { "Add a Rare Wallet account in Wallet first." } else { "This account is watch only. Switch to a Rare Wallet account in Wallet." };
+            let t = if self.st.account == Account::None { tr().store.add_wallet_first } else { tr().store.watch_only };
             self.note = Some((t.into(), false));
             return Out::Moved;
         }
@@ -393,9 +394,9 @@ impl GamePage {
     pub fn page_hints(&self) -> Vec<(&'static str, String)> {
         let mut h = Vec::new();
         if self.host.tag().is_some() {
-            h.push(("a", "Select".to_string()));
+            h.push(("a", tr().common.select.to_string()));
         }
-        h.push(("b", "Back".to_string()));
+        h.push(("b", tr().common.back.to_string()));
         h
     }
 }
@@ -426,8 +427,8 @@ pub fn view(ui: &mut Ui, st: &GameState, note: &Note, working: Option<Act>, buyi
         Some(Err(())) => {
             let col = ui
                 .bx(s().fill().col().justify_end().gap(0.5).px(2.5).pb(4.5))
-                .child(ui.text("Couldn't load this game", T::new(Ty::Title).w(600)))
-                .child(ui.text("Check the connection and try again.", T::new(Ty::Small).c(tok::MUTED)));
+                .child(ui.text(tr().store.cant_load_game, T::new(Ty::Title).w(600)))
+                .child(ui.text(tr().store.check_connection, T::new(Ty::Small).c(tok::MUTED)));
             return root.child(col);
         }
         Some(Ok(g)) => g,
@@ -475,14 +476,14 @@ pub fn view(ui: &mut Ui, st: &GameState, note: &Note, working: Option<Act>, buyi
         facts = facts.child(ui.text(tags.join(", "), small));
     }
     if st.licence.is_some() {
-        facts = facts.child(ui.text("In your library", small));
+        facts = facts.child(ui.text(tr().store.in_library, small));
     }
     body = body.child(facts.key(key("g-facts")));
 
     if g.is_link() {
         let btns = link_buttons(g);
         if btns.is_empty() {
-            body = body.child(ui.text("This listing has no links yet.", T::new(Ty::Small).c(tok::MUTED)));
+            body = body.child(ui.text(tr().store.no_links, T::new(Ty::Small).c(tok::MUTED)));
         } else {
             body = body.child(action_row(ui, &btns, s()));
         }
@@ -505,16 +506,16 @@ pub fn view(ui: &mut Ui, st: &GameState, note: &Note, working: Option<Act>, buyi
     let size = ov.size.or_else(|| g.latest.as_ref().and_then(|l| l.builds.first()).map(|b| b.size)).map(|s| Fact::Text(size_text(s)));
     let l = st.licence.as_ref();
     let facts = vec![
-        ("Price", price),
-        ("Version", version),
-        ("Size", size),
-        ("Your licence", l.map(|l| Fact::Text(format!("#{}", l.number)))),
-        ("Refund", l.filter(|l| refundable(l, now)).map(|l| Fact::Text(format!("{} left", time_left(l.refundable_until_ms.unwrap_or(0.0) - now))))),
-        ("Resale", g.resale.as_ref().filter(|r| r.enabled).map(|r| Fact::Text(format!("{}% royalty", crate::screens::trade::fmt::trim_zeros(&format!("{:.2}", r.royalty_bps as f64 / 100.0)))))),
-        ("Sales", (g.sales > 0).then(|| Fact::Text(crate::kit::format::grouped(g.sales as f64, 0, 0)))),
+        (tr().store.fact_price, price),
+        (tr().store.fact_version, version),
+        (tr().store.fact_size, size),
+        (tr().store.fact_licence, l.map(|l| Fact::Text(format!("#{}", l.number)))),
+        (tr().store.fact_refund, l.filter(|l| refundable(l, now)).map(|l| Fact::Text(trf!(tr().store.time_left, time = time_left(l.refundable_until_ms.unwrap_or(0.0) - now))))),
+        (tr().store.fact_resale, g.resale.as_ref().filter(|r| r.enabled).map(|r| Fact::Text(trf!(tr().store.royalty, pct = crate::screens::trade::fmt::trim_zeros(&format!("{:.2}", r.royalty_bps as f64 / 100.0)))))),
+        (tr().store.fact_sales, (g.sales > 0).then(|| Fact::Text(crate::kit::format::grouped(g.sales as f64, 0, 0)))),
     ];
     // The `.num` span (Fira Code) inside the Inter line makes the browser's line box 1px taller.
-    let mono = facts.iter().any(|(l, v)| *l == "Version" && v.is_some());
+    let mono = facts.iter().any(|(l, v)| *l == tr().store.fact_version && v.is_some());
     let line = fact_line(ui, if mono { s().min_h(1.0 + 1.5 + 1.0 / ui.rem) } else { s() }, facts);
     body = body.child(ui.bx(s().col().mt(0.4).max_w(60.0).pt(1.0 + 1.0 / ui.rem)).child(ui.bx(s().abs(Some(0.0), Some(0.0), None, Some(0.0)).h_px(1.0)).bg(tok::HAIR)).maybe(line).key(key("g-stats")));
     root = root.child(body);

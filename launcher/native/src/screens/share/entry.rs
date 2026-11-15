@@ -3,6 +3,7 @@
 //! app (`openShare`, `takeScreenshot`, `saveClip`).
 
 use crate::kit::{self, icon, s, tok, Ty, Ui, T};
+use rare_i18n::{tr, trf};
 use rare_render::view::El;
 
 /// Opens the Share screen (`openShare`).
@@ -23,11 +24,11 @@ pub fn share_entry(ui: &mut Ui, fresh: usize, tag: u32) -> El {
         .bg(tok::L2)
         .radius(ui.r(0.5))
         .child(icon(ui, "images", 1.15, tok::FG))
-        .child(ui.text("Share", T::new(Ty::Small).w(500)));
+        .child(ui.text(tr().common.share, T::new(Ty::Small).w(500)));
     if fresh > 0 {
-        el = el.child(ui.text_s(s().ml_auto(), format!("{fresh} new"), T::new(Ty::Meta).c(tok::MUTED)));
+        el = el.child(ui.text_s(s().ml_auto(), trf!(tr().share.fresh_count, n = fresh), T::new(Ty::Meta).c(tok::MUTED)));
     }
-    kit::nav(kit::row_look(el), tag, Some("Open Share"), None, false)
+    kit::nav(kit::row_look(el), tag, Some(tr().share.open_share), None, false)
 }
 
 /// `?share=grid|detail|clip|uploading|done` (shareDevState): the fixture that shows that state.

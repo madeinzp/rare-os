@@ -1,5 +1,6 @@
 //! PC games as covers (stream/tiles.tsx): the "On your PC" rail on Home and Library > Streaming.
 
+use rare_i18n::{tr, trf};
 use super::logic::*;
 use super::state::StreamState;
 use super::view::*;
@@ -37,7 +38,7 @@ fn tile(cx: &mut Cx, layer: &mut Layer, parent: Id, st: &StreamState, host: &Hos
     let name = text_tr(cx, lines, ty::META, 500, tok::FG.alpha(0.85), &app.name);
     text_tr(cx, lines, ty::LABEL, 400, tok::MUTED, &tile_line(host, state));
     layer.names.push((b, name));
-    let tag = layer.reg(Focusable { id: b, kind: Kind::Tile { scale: 1.06 }, group, hint: "Details".into(), tag: 0, sid: format!("{}:{}", host.uuid, app.id) }, Act::Tile(host.uuid.clone(), app.id));
+    let tag = layer.reg(Focusable { id: b, kind: Kind::Tile { scale: 1.06 }, group, hint: tr().common.details.into(), tag: 0, sid: format!("{}:{}", host.uuid, app.id) }, Act::Tile(host.uuid.clone(), app.id));
     if def {
         layer.default = Some(tag);
     }
@@ -65,7 +66,7 @@ fn rail(cx: &mut Cx, layer: &mut Layer, parent: Id, st: &StreamState) -> bool {
     let r = cx.r();
     let sec = cx.scene.add(parent, s().col().done(), Node::default());
     let name = host.name.clone();
-    section_head(cx, sec, "On your PC", |cx, n| {
+    section_head(cx, sec, tr().stream.on_your_pc, |cx, n| {
         text(cx, n, ty::SMALL, 400, tok::MUTED, &name);
     }, None, 2.5 * r);
     let row_ = cx.scene.add(sec, s().row().items_start().gap(1.0 * r).pad(2.5 * r, 1.4 * r, 2.5 * r, 1.4 * r).done(), Node::default().scrolls());
@@ -81,16 +82,16 @@ fn host_head(cx: &mut Cx, parent: Id, st: &StreamState, host: &Host) {
     let waking = st.waking.as_deref() == Some(host.uuid.as_str());
     let status = if host.online {
         if host.current_game.is_some() {
-            "Playing on the PC"
+            tr().stream.playing_on_pc
         } else {
-            "Online"
+            tr().common.online
         }
     } else if waking {
-        "Waking up"
+        tr().stream.waking_up
     } else if host.can_wake {
-        "Asleep"
+        tr().stream.asleep
     } else {
-        "Off"
+        tr().stream.off
     };
     let online = host.online;
     section_head(cx, parent, &host.name, |cx, n| {
@@ -109,8 +110,8 @@ fn grid(cx: &mut Cx, layer: &mut Layer, parent: Id, st: &StreamState) {
     }
     let paired: Vec<Host> = st.hosts.iter().filter(|h| h.paired).cloned().collect();
     if st.moonlight.is_none() || paired.is_empty() {
-        let act = empty_card(cx, wrap, "Play the games on your PC", Some("Stream from a gaming PC running Sunshine or GeForce Experience, over your home Wi-Fi."));
-        let b = btn(cx, act, "Set up streaming", Variant::Primary, "Set up streaming", false, Some(("monitor", MONITOR, 1.1)));
+        let act = empty_card(cx, wrap, tr().stream.play_games_title, Some(tr().stream.play_games_body));
+        let b = btn(cx, act, tr().stream.set_up_streaming, Variant::Primary, tr().stream.set_up_streaming, false, Some(("monitor", MONITOR, 1.1)));
         reg_btn(layer, b, Act::OpenSetup, 2, true, false);
         return;
     }
@@ -130,17 +131,17 @@ fn grid(cx: &mut Cx, layer: &mut Layer, parent: Id, st: &StreamState) {
                 cx.scene.add(sec, s().h(13.5 * r).done(), Node::default());
             } else {
                 let (title, body) = if host.online {
-                    (format!("No games listed on {}", host.name), "Add games in Sunshine's Applications tab, then look again.")
+                    (trf!(tr().stream.no_games_listed, name = host.name.clone()), tr().stream.no_games_listed_body)
                 } else {
-                    (format!("{} isn't answering", host.name), "Turn it on, or wake it from here if Wake-on-LAN is set up.")
+                    (trf!(tr().stream.host_not_answering, name = host.name.clone()), tr().stream.host_not_answering_body)
                 };
                 let act = empty_card(cx, sec, &title, Some(body));
                 if host.online {
-                    let b = btn(cx, act, "Look again", Variant::Secondary, "", false, None);
+                    let b = btn(cx, act, tr().stream.look_again, Variant::Secondary, "", false, None);
                     reg_btn(layer, b, Act::ListAgain(host.uuid.clone()), group, first, false);
                     first = false;
                 } else if host.can_wake {
-                    let b = btn(cx, act, &format!("Wake {}", host.name), Variant::Primary, "", false, None);
+                    let b = btn(cx, act, &trf!(tr().stream.wake_host, name = host.name.clone()), Variant::Primary, "", false, None);
                     reg_btn(layer, b, Act::Wake(host.uuid.clone()), group, first, false);
                     first = false;
                 }

@@ -4,14 +4,12 @@
 use super::update::{fixture_info, UpdateRows, FIXTURE_NOW_MS};
 use super::{config::Config, rows::*, SectionOut, SectionView};
 use crate::screens::overlay::common::*;
-use rare_render::theme::tok;
 use rare_render::Id;
+use rare_i18n::tr;
 
-/// lib/locales.ts: English only for now.
-pub const LANGUAGES: [(&str, &str); 1] = [("en", "English")];
-
+/// The name of the saved language in itself ("Русский"); the language in use when none is saved.
 pub fn language_name(code: Option<&str>) -> &'static str {
-    LANGUAGES.iter().find(|(c, _)| Some(*c) == code).map(|(_, n)| *n).unwrap_or(LANGUAGES[0].1)
+    code.and_then(rare_i18n::Lang::from_code).unwrap_or_else(rare_i18n::lang).name()
 }
 
 pub struct SystemSection {
@@ -30,18 +28,13 @@ impl SystemSection {
         };
         let update = UpdateRows::build(cx, nav, parent, info, now_ms);
         let p = panel(cx, parent);
-        let body = if LANGUAGES.len() > 1 { "The language of Rare OS." } else { "Rare OS is in English for now." };
-        let row_ = setting_row(cx, p, "Language", Some(body), true);
+        let t = &tr().settings_more;
+        let row_ = setting_row(cx, p, t.language, Some(t.language_body), true);
         let name = language_name(cfg.language.as_deref());
-        let language_btn = if LANGUAGES.len() > 1 {
-            let b = button(cx, row_.right, name, Variant::Secondary, Sz::Md, false).sid("language").tag(10);
-            Some(nav.add(b.group(10)))
-        } else {
-            text(cx, row_.right, ty::SMALL, 400, tok::MUTED, name);
-            None
-        };
-        let row_ = setting_row(cx, p, "Desktop mode", Some("A full desktop for installing apps and managing files."), false);
-        let b = button(cx, row_.right, "Switch", Variant::Secondary, Sz::Md, false).sid("desktop-mode").tag(11);
+        let b = button(cx, row_.right, name, Variant::Secondary, Sz::Md, false).sid("language").tag(10);
+        let language_btn = Some(nav.add(b.group(10)));
+        let row_ = setting_row(cx, p, t.desktop_mode, Some(t.desktop_mode_body), false);
+        let b = button(cx, row_.right, t.switch, Variant::Secondary, Sz::Md, false).sid("desktop-mode").tag(11);
         let desktop_btn = nav.add(b.group(10));
         let info = super::live::get().map(|s| s.ssh).unwrap_or_else(super::remote::fixture_default);
         let mut rows = RowSet::default();
@@ -52,7 +45,7 @@ impl SystemSection {
 }
 
 impl SectionView for SystemSection {
-    fn press(&mut self, cx: &mut Cx, nav: &mut Nav, cfg: &mut Config, now: f64) -> SectionOut {
+    fn press(&mut self, cx: &mut Cx, nav: &mut Nav, _cfg: &mut Config, now: f64) -> SectionOut {
         if self.update.press_details(cx, nav) {
             return SectionOut::None;
         }
@@ -69,9 +62,8 @@ impl SectionView for SystemSection {
         }
         let Some(cur) = nav.cur else { return SectionOut::None };
         if Some(cur) == self.language_btn {
-            let i = LANGUAGES.iter().position(|(c, _)| Some(*c) == cfg.language.as_deref().or(Some("en"))).unwrap_or(0);
-            cfg.language = Some(LANGUAGES[(i + 1) % LANGUAGES.len()].0.into());
-            return SectionOut::Changed;
+            // The language list (supportsheets::LangSheet); picking one switches the whole UI.
+            return SectionOut::Act("support:lang-open".into());
         }
         if cur == self.desktop_btn {
             return SectionOut::Act("power:desktop".into());

@@ -3,6 +3,7 @@
 
 use super::{config::Config, rows::*, SectionOut, SectionView};
 use crate::screens::overlay::common::*;
+use rare_i18n::{tr, trf};
 use rare_render::Id;
 
 /// What `native.inputStatus()` says.
@@ -13,7 +14,14 @@ pub struct PadStatus {
     pub motion: bool,
 }
 
+/// What LC and RC can do: (id, English label). Show `actions()`' labels, which follow the language.
 pub const ACTIONS: [(&str, &str); 5] = [("capture", "Capture"), ("keyboard", "Keyboard"), ("perf", "Performance overlay"), ("shortcut", "Key shortcut"), ("none", "Nothing")];
+
+/// `ACTIONS` with the labels in the current language.
+pub fn actions() -> [(&'static str, &'static str); 5] {
+    let t = &tr().settings;
+    [("capture", t.act_capture), ("keyboard", t.act_keyboard), ("perf", t.act_perf), ("shortcut", t.act_shortcut), ("none", t.act_nothing)]
+}
 
 /// LC or RC is set to Key shortcut in one of its rows (Settings or in games).
 fn uses_shortcut(cfg: &Config, lc: bool) -> bool {
@@ -30,13 +38,14 @@ fn shortcut_label(cfg: &Config, lc: bool) -> Option<String> {
 /// The Key shortcut row for LC or RC: the keys, and Change for the sheet (screens/settings/shortcut.rs).
 fn shortcut_row(cfg: &Config, cx: &mut Cx, nav: &mut Nav, parent: Id, lc: bool) {
     let name = if lc { "LC" } else { "RC" };
+    let t = &tr().settings;
     let body = match shortcut_label(cfg, lc) {
-        Some(l) => format!("{l}. Held down for as long as you hold {name}, in Rare, games and Desktop mode."),
-        None => "No keys picked yet.".to_string(),
+        Some(l) => trf!(t.shortcut_held, keys = l, button = name),
+        None => t.shortcut_none.to_string(),
     };
-    let row = setting_row(cx, parent, &format!("{name} key shortcut"), Some(&body), false);
+    let row = setting_row(cx, parent, &trf!(t.shortcut_title, button = name), Some(&body), false);
     let sid = if lc { "shortcut-lc" } else { "shortcut-rc" };
-    let b = button(cx, row.right, "Change", Variant::Secondary, Sz::Md, false).sid(sid).hint("Change").tag(3);
+    let b = button(cx, row.right, tr().common.change, Variant::Secondary, Sz::Md, false).sid(sid).hint(tr().common.change).tag(3);
     nav.add(b.group(10));
 }
 
@@ -62,36 +71,37 @@ impl ControlsSection {
         let col = cx.scene.parent(parent).map(|_| parent).unwrap_or(parent);
         let _ = r;
         let mut rows = RowSet::default();
-        let labels: Vec<&str> = ACTIONS.iter().map(|(_, l)| *l).collect();
+        let t = &tr().settings;
+        let labels: Vec<&str> = actions().iter().map(|(_, l)| *l).collect();
         let pct = |v: Option<f32>, d: f32| v.unwrap_or(d);
 
         let p1 = panel(cx, col);
-        setting_row(cx, p1, "Buttons", Some("The SuiPlay's own buttons. Rare and Quick always do the same thing, so no game or app can take them."), true);
-        setting_row(cx, p1, "Rare", Some("Press for the Rare menu, press again for Home, hold for the Switcher. Fixed."), false);
-        setting_row(cx, p1, "Quick", Some("Quick Settings. Fixed."), false);
-        rows.choice(cx, nav, p1, "btn-lc", "LC", Some("The small button at the top left. Press."), &labels, action_idx(cfg.lc_action.as_deref().unwrap_or("capture")), false);
-        rows.choice(cx, nav, p1, "btn-rc", "RC", Some("The small button at the top right. Press."), &labels, action_idx(cfg.rc_action.as_deref().unwrap_or("keyboard")), false);
+        setting_row(cx, p1, t.row_buttons, Some(t.buttons_body), true);
+        setting_row(cx, p1, t.row_rare_btn, Some(t.rare_btn_body), false);
+        setting_row(cx, p1, t.row_quick_btn, Some(t.quick_btn_body), false);
+        rows.choice(cx, nav, p1, "btn-lc", "LC", Some(t.lc_body), &labels, action_idx(cfg.lc_action.as_deref().unwrap_or("capture")), false);
+        rows.choice(cx, nav, p1, "btn-rc", "RC", Some(t.rc_body), &labels, action_idx(cfg.rc_action.as_deref().unwrap_or("keyboard")), false);
         for lc in [true, false] {
             if uses_shortcut(cfg, lc) {
                 shortcut_row(cfg, cx, nav, p1, lc);
             }
         }
         layout_row(cx, nav, p1);
-        setting_row(cx, p1, "Back paddles", Some("This device has none."), false);
-        setting_row(cx, p1, "Holds", Some("Holding LC saves the last 30 seconds and holding RC changes the performance overlay, unless the button is set to Nothing or a key shortcut. A key shortcut holds its keys down while you hold the button, for push-to-talk apps like dictation. In games both do nothing until you pick something below, except the keyboard: a button set to Keyboard opens it over games and apps too. Inside Steam Game Mode Steam keeps Rare and Quick."), false);
+        setting_row(cx, p1, t.row_paddles, Some(t.paddles_body), false);
+        setting_row(cx, p1, t.row_holds, Some(t.holds_body), false);
 
         // In games: the standard map (features/gamebuttons.rs), and LC and RC there (nothing until picked).
         let pg = panel(cx, col);
-        let row = setting_row(cx, pg, "In games", Some("Menu is Start, View is Select, A B X Y are the console's buttons by where they sit. Rare and Quick never reach the game. Every emulator follows it."), true);
-        let b = button(cx, row.right, "Show", Variant::Secondary, Sz::Md, false).sid("game-buttons").hint("Show").tag(2);
+        let row = setting_row(cx, pg, t.row_in_games, Some(t.in_games_body), true);
+        let b = button(cx, row.right, t.show, Variant::Secondary, Sz::Md, false).sid("game-buttons").hint(t.show).tag(2);
         nav.add(b.group(10));
-        rows.choice(cx, nav, pg, "btn-lc-game", "LC in games", Some("Press, while a game has the screen. A game's own page can pick its own."), &labels, action_idx(cfg.lc_game_action.as_deref().unwrap_or(crate::side::game_default(rare_input::side::Key::Lc, cfg.lc_action.as_deref()))), false);
-        rows.choice(cx, nav, pg, "btn-rc-game", "RC in games", Some("Press, while a game or app has the screen. Keyboard types into it, Steam's sign-in too."), &labels, action_idx(cfg.rc_game_action.as_deref().unwrap_or(crate::side::game_default(rare_input::side::Key::Rc, cfg.rc_action.as_deref()))), false);
+        rows.choice(cx, nav, pg, "btn-lc-game", t.row_lc_game, Some(t.lc_game_body), &labels, action_idx(cfg.lc_game_action.as_deref().unwrap_or(crate::side::game_default(rare_input::side::Key::Lc, cfg.lc_action.as_deref()))), false);
+        rows.choice(cx, nav, pg, "btn-rc-game", t.row_rc_game, Some(t.rc_game_body), &labels, action_idx(cfg.rc_game_action.as_deref().unwrap_or(crate::side::game_default(rare_input::side::Key::Rc, cfg.rc_action.as_deref()))), false);
 
         // Desktop mode (features/desktop.rs): what the controller does there. Nothing to set.
         let pd = panel(cx, col);
-        setting_row(cx, pd, "In Desktop mode", Some("The right stick moves the pointer and the left stick scrolls. A clicks, B right-clicks, Y opens the keyboard, the d-pad is the arrow keys. Rare opens the app menu. LC and RC do what you picked above."), true);
-        setting_row(cx, pd, "Games in Desktop mode", Some("A game or app in full screen gets the controller as a normal controller. Press Quick to switch between the two yourself."), false);
+        setting_row(cx, pd, t.row_desktop, Some(t.desktop_body), true);
+        setting_row(cx, pd, t.row_games_desktop, Some(t.games_desktop_body), false);
 
         // Rows InputPlumber can't apply yet are left out (rare_input::ip::controls_support), so
         // nothing here saves a value that does nothing.
@@ -103,35 +113,35 @@ impl ControlsSection {
             let mut first = true;
             let mut lead = || std::mem::replace(&mut first, false);
             if applies("deadzoneLeft") {
-                rows.slider(cx, nav, p2, "deadzone-left", "Left stick deadzone", None, pct(cfg.deadzone_left, 10.0), 0.0, 40.0, 1.0, "%", lead());
+                rows.slider(cx, nav, p2, "deadzone-left", t.row_deadzone_left, None, pct(cfg.deadzone_left, 10.0), 0.0, 40.0, 1.0, "%", lead());
             }
             if applies("deadzoneRight") {
-                rows.slider(cx, nav, p2, "deadzone-right", "Right stick deadzone", None, pct(cfg.deadzone_right, 10.0), 0.0, 40.0, 1.0, "%", lead());
+                rows.slider(cx, nav, p2, "deadzone-right", t.row_deadzone_right, None, pct(cfg.deadzone_right, 10.0), 0.0, 40.0, 1.0, "%", lead());
             }
             if applies("invertLeftY") {
-                rows.switch(cx, nav, p2, "invert-left", "Invert left stick, up and down", "Pushing up moves down.", cfg.invert_left_y.unwrap_or(false), lead());
+                rows.switch(cx, nav, p2, "invert-left", t.row_invert_left, t.invert_left_body, cfg.invert_left_y.unwrap_or(false), lead());
             }
             if applies("invertRightY") {
-                rows.switch(cx, nav, p2, "invert-right", "Invert right stick, up and down", "For looking around in games.", cfg.invert_right_y.unwrap_or(false), lead());
+                rows.switch(cx, nav, p2, "invert-right", t.row_invert_right, t.invert_right_body, cfg.invert_right_y.unwrap_or(false), lead());
             }
         }
 
         let p3 = panel(cx, col);
         let gyro_body = match pad {
-            None => "Motion controls.",
-            Some(p) if p.available && p.motion => "On. The controller carries motion right now.",
-            Some(p) if p.available => "Tilt the device to aim in games that support it.",
-            Some(_) => "The controller service isn't running. Restart the device and try again.",
+            None => t.gyro_none,
+            Some(p) if p.available && p.motion => t.gyro_active,
+            Some(p) if p.available => t.gyro_tilt,
+            Some(_) => t.gyro_down,
         };
-        rows.switch(cx, nav, p3, "gyro-on", "Gyro", gyro_body, cfg.gyro_enabled.unwrap_or(true), true);
+        rows.switch(cx, nav, p3, "gyro-on", t.row_gyro, gyro_body, cfg.gyro_enabled.unwrap_or(true), true);
         if applies("gyroSensitivity") {
-            rows.slider(cx, nav, p3, "gyro-sens", "Gyro sensitivity", None, pct(cfg.gyro_sensitivity, 100.0), 25.0, 200.0, 5.0, "%", false);
+            rows.slider(cx, nav, p3, "gyro-sens", t.row_gyro_sens, None, pct(cfg.gyro_sensitivity, 100.0), 25.0, 200.0, 5.0, "%", false);
         }
-        rows.switch(cx, nav, p3, "gyro", "Gyro in Steam games", "Motion controls in Steam games. The controller shows up as a Steam Deck while a Steam game runs. Set the sensitivity in the game's Steam controller settings.", cfg.gyro_in_steam.unwrap_or(false), false);
+        rows.switch(cx, nav, p3, "gyro", t.row_gyro_steam, t.gyro_steam_body, cfg.gyro_in_steam.unwrap_or(false), false);
 
         let p4 = panel(cx, col);
-        rows.switch(cx, nav, p4, "rumble", "Rumble", "A light buzz on the same moves, on controllers that support it.", cfg.rumble.unwrap_or(true), true);
-        rows.slider(cx, nav, p4, "rumble-strength", "Rumble strength", None, pct(cfg.rumble_strength, 100.0), 0.0, 100.0, 10.0, "%", false);
+        rows.switch(cx, nav, p4, "rumble", t.row_rumble, t.rumble_body, cfg.rumble.unwrap_or(true), true);
+        rows.slider(cx, nav, p4, "rumble-strength", t.row_rumble_strength, None, pct(cfg.rumble_strength, 100.0), 0.0, 100.0, 10.0, "%", false);
         ControlsSection { rows }
     }
 }
@@ -141,16 +151,17 @@ fn layout_row(cx: &mut Cx, nav: &mut Nav, parent: Id) {
     use rare_input::remap::{self, Status};
     let live = super::live::get().is_some();
     let layout = if live { remap::load() } else { remap::Layout::default() };
-    let mut body = format!("{} Applies to all games and the launcher.", layout.summary());
+    let t = &tr().settings;
+    let mut body = trf!(t.layout_applies, summary = layout.summary());
     if live && !layout.is_default() {
         match remap::status() {
-            Status::NeedsUpdate => body = format!("{} Takes effect after the next system update.", layout.summary()),
-            Status::TooOld => body = format!("{} This version of Rare OS can't change buttons yet. An update brings it.", layout.summary()),
+            Status::NeedsUpdate => body = trf!(t.layout_after_update, summary = layout.summary()),
+            Status::TooOld => body = trf!(t.layout_too_old, summary = layout.summary()),
             _ => {}
         }
     }
-    let row = setting_row(cx, parent, "Button layout", Some(&body), false);
-    let b = button(cx, row.right, "Change", Variant::Secondary, Sz::Md, false).sid("remap").hint("Change").tag(1);
+    let row = setting_row(cx, parent, t.row_layout, Some(&body), false);
+    let b = button(cx, row.right, tr().common.change, Variant::Secondary, Sz::Md, false).sid("remap").hint(tr().common.change).tag(1);
     nav.add(b.group(10));
 }
 

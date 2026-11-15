@@ -1,6 +1,7 @@
 //! The player's own library organisation: collections and hidden games, kept in
 //! ~/.local/state/rare-native/userlib.json next to favourites.json. Ids are library game ids.
 
+use rare_i18n::tr;
 use serde::{Deserialize, Serialize};
 
 /// ~/.local/state/rare-native (XDG_STATE_HOME when set).
@@ -120,10 +121,10 @@ impl UserLib {
     pub fn create(&mut self, name: &str, game: Option<&str>) -> Result<String, &'static str> {
         let name = UserLib::clean(name);
         if name.is_empty() {
-            return Err("Type a name for the collection.");
+            return Err(tr().data.collection_name_empty);
         }
         if self.collections.iter().any(|c| c.name.eq_ignore_ascii_case(&name)) {
-            return Err("You already have a collection with that name.");
+            return Err(tr().data.collection_name_taken);
         }
         self.collections.push(Collection { name: name.clone(), games: game.map(|g| vec![g.to_string()]).unwrap_or_default() });
         Ok(name)
@@ -132,12 +133,12 @@ impl UserLib {
     pub fn rename(&mut self, old: &str, new: &str) -> Result<String, &'static str> {
         let new = UserLib::clean(new);
         if new.is_empty() {
-            return Err("Type a name for the collection.");
+            return Err(tr().data.collection_name_empty);
         }
         if new != old && self.collections.iter().any(|c| c.name.eq_ignore_ascii_case(&new) && c.name != old) {
-            return Err("You already have a collection with that name.");
+            return Err(tr().data.collection_name_taken);
         }
-        let c = self.collections.iter_mut().find(|c| c.name == old).ok_or("That collection is gone.")?;
+        let c = self.collections.iter_mut().find(|c| c.name == old).ok_or(tr().data.collection_gone)?;
         c.name = new.clone();
         self.renamed = Some((old.to_string(), new.clone()));
         Ok(new)

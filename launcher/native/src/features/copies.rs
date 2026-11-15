@@ -3,6 +3,7 @@
 //! applies them.
 
 use crate::act::Act;
+use rare_i18n::{tr, trf};
 use crate::data::groups::copy_label;
 use crate::page::{Feedback, Fx};
 use crate::state::{OptionItem, OptionsSpec, State, Tone};
@@ -40,24 +41,24 @@ pub fn candidates<'a>(st: &'a State, id: &str, q: Option<&str>) -> Vec<&'a crate
 /// The Same game as sheet: Search by name first, then the games.
 fn sheet(st: &mut State, fx: &mut Fx, id: &str, q: Option<&str>, now: f64) {
     let Some(title) = st.game(id).map(|g| st.shown(g).title.clone()) else { return };
-    let mut items = vec![OptionItem { label: if q.is_some() { "Search again".into() } else { "Search by name".into() }, on: None, act: Act::SameGameFind(id.to_string(), String::new()) }];
+    let mut items = vec![OptionItem { label: if q.is_some() { tr().features.copies_search_again.into() } else { tr().features.copies_search_by_name.into() }, on: None, act: Act::SameGameFind(id.to_string(), String::new()) }];
     let found: Vec<OptionItem> = candidates(st, id, q).into_iter().map(|g| OptionItem { label: format!("{} \u{b7} {}", g.title, copy_label(g)), on: None, act: Act::MergeGames(id.to_string(), g.id.clone()) }).collect();
     if let (true, Some(q)) = (found.is_empty(), q) {
-        st.toast(format!("No game in your library matches {q}"), Tone::Info, now);
+        st.toast(trf!(tr().features.copies_no_match, query = q), Tone::Info, now);
     }
     items.extend(found);
     let sub = match q {
-        Some(q) => format!("{title} \u{b7} names with {q}"),
+        Some(q) => trf!(tr().features.copies_sub_names_with, title = title, query = q),
         None => title,
     };
     fx.fb(Feedback::Open);
-    st.options = Some(OptionsSpec { title: "Same game as".into(), sub: Some(sub), items });
+    st.options = Some(OptionsSpec { title: tr().features.copies_same_game_as.into(), sub: Some(sub), items });
 }
 
 /// Search by name: the keyboard, then the sheet with what matches.
 fn ask(st: &mut State, id: &str) {
     st.options = None;
-    st.osk = Some(crate::state::OskReq::new("Name of the other game", "", Some("Borderlands"), crate::state::OskFor::SameGame(id.to_string())));
+    st.osk = Some(crate::state::OskReq::new(tr().features.copies_name_prompt, "", Some("Borderlands"), crate::state::OskFor::SameGame(id.to_string())));
 }
 
 pub fn run(st: &mut State, fx: &mut Fx, a: Act, now: f64) {
@@ -71,14 +72,14 @@ pub fn run(st: &mut State, fx: &mut Fx, a: Act, now: f64) {
             st.user.merge(&ga, &gb);
             st.user_changed();
             let title = st.game(&a).map(|g| st.shown(g).title.clone()).unwrap_or_default();
-            st.toast(format!("{title} shows as one game now. Pick a copy under Play on."), Tone::Info, now);
+            st.toast(trf!(tr().features.copies_merged, title = title), Tone::Info, now);
         }
         Act::NotSame(id) => {
             let ids = st.copy_ids(&id);
             if ids.len() > 2 {
                 let items: Vec<OptionItem> = ids.iter().filter_map(|c| st.game(c)).map(|g| OptionItem { label: format!("{} \u{b7} {}", g.title, copy_label(g)), on: None, act: Act::SplitCopy(g.id.clone()) }).collect();
                 fx.fb(Feedback::Open);
-                st.options = Some(OptionsSpec { title: "Which one is a different game?".into(), sub: Some("It gets its own tile again".into()), items });
+                st.options = Some(OptionsSpec { title: tr().features.copies_which_different.into(), sub: Some(tr().features.copies_own_tile.into()), items });
             } else if ids.len() == 2 {
                 split(st, &id, now);
             }
@@ -94,8 +95,8 @@ fn split(st: &mut State, id: &str, now: f64) {
     st.user.split(id, &ids);
     st.user_changed();
     let text = match names.as_slice() {
-        [a, b] if a != b => format!("{a} and {b} show apart now"),
-        _ => format!("{} shows on its own now", st.run_name(id)),
+        [a, b] if a != b => trf!(tr().features.copies_split_two, a = a, b = b),
+        _ => trf!(tr().features.copies_split_one, name = st.run_name(id)),
     };
     st.toast(text, Tone::Info, now);
 }

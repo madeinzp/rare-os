@@ -3,6 +3,7 @@
 //! the still frame gamescope took when you left it; then up to four recent games, smaller.
 //! A switches, X closes (X again confirms), B goes back.
 
+use rare_i18n::tr;
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::fixtures::{self, Session};
 use crate::screens::overlay::lay::s;
@@ -68,42 +69,42 @@ impl Switcher {
         let row_ = cx.scene.add(mid, s().row().items_start().gap(1.25 * r).py(0.75 * r).done(), Node::default());
         // Home.
         {
-            let c = card_shell(cx, row_, "Home", "", &mut nav, 0, Some(("Home", None)), true);
+            let c = card_shell(cx, row_, tr().common.home, "", &mut nav, 0, Some((tr().common.home, None)), true);
             let face = cx.scene.add(c.1, s().fill().items_center().justify_center().done(), Node::bg(tok::L2));
-            cx.scene.add_text(cx.t, face, s().done(), "Home", ts(r, 1.375, 1.75, 600), tok::FG.alpha(0.9));
+            cx.scene.add_text(cx.t, face, s().done(), tr().common.home, ts(r, 1.375, 1.75, 600), tok::FG.alpha(0.9));
             cards.push(Card { rid: None, id: c.0, status: c.2, base_status: String::new() });
         }
         for (i, it) in items.iter().enumerate() {
             let c = st.card(&it.rid);
             let status = if c.map(|c| c.paused).unwrap_or(false) {
-                "Paused"
+                tr().overlay.paused
             } else if it.app {
-                "Open"
+                tr().common.open
             } else {
-                "Running"
+                tr().overlay.status_running
             };
-            let (id, face_parent, status_id) = card_shell(cx, row_, &it.name, status, &mut nav, (i + 1) as u32, Some(("Switch", Some("Close"))), false);
+            let (id, face_parent, status_id) = card_shell(cx, row_, &it.name, status, &mut nav, (i + 1) as u32, Some((tr().overlay.switch, Some(tr().common.close))), false);
             card_art(cx, face_parent, it, c.and_then(|c| c.frame.clone()), 22.0 * r, 13.75 * r);
             cards.push(Card { rid: Some(it.rid.clone()), id, status: status_id, base_status: status.into() });
         }
 
         if !recent.is_empty() {
             let sec = cx.scene.add(mid, s().col().gap(0.6 * r).done(), Node::default());
-            text(cx, sec, ty::LABEL, 500, tok::MUTED, "Recent");
+            text(cx, sec, ty::LABEL, 500, tok::MUTED, tr().overlay.recent);
             let rr = cx.scene.add(sec, s().row().gap(1.0 * r).done(), Node::default());
             for (k, g) in recent.iter().enumerate() {
                 let tile = cx.scene.add(rr, s().wh(7.5 * r, 11.25 * r).done(), Node::bg(tok::L3).radius(0.5 * r).clip());
                 if let Some(src) = g.cover.clone() {
                     art(cx, tile, src, 7.5 * r, 11.25 * r, 0.5 * r);
                 }
-                nav.add(Focusable { id: tile, kind: Kind::Tile { scale: 1.06 }, group: 2, hint: "Play".into(), tag: 1000 + k as u32, sid: g.id.clone() });
+                nav.add(Focusable { id: tile, kind: Kind::Tile { scale: 1.06 }, group: 2, hint: tr().common.play.into(), tag: 1000 + k as u32, sid: g.id.clone() });
             }
         }
 
         // Footer.
         let foot = cx.scene.add(page, s().row().items_center().gap(1.25 * r).h(3.0 * r).px(2.5 * r).done(), Node::bg(tok::BG.alpha(0.6)));
         edge(cx, foot, 0, tok::HAIR);
-        for (g2, label) in [(G::Y, "Screenshot"), (G::Select, "Save clip")] {
+        for (g2, label) in [(G::Y, tr().overlay.screenshot), (G::Select, tr().overlay.save_clip_short)] {
             let c = cx.scene.add(foot, s().row().items_center().gap(0.35 * r).done(), Node::default());
             glyph(cx, c, G::Rare, true);
             text(cx, c, ty::SMALL, 400, tok::FG.alpha(0.75), "+");
@@ -111,9 +112,9 @@ impl Switcher {
             text(cx, c, ty::SMALL, 400, tok::FG.alpha(0.75), label);
         }
         let right = cx.scene.add(foot, s().row().items_center().gap(1.25 * r).ml_auto().done(), Node::default());
-        hint(cx, right, G::A, "Switch");
-        hint(cx, right, G::X, "Close");
-        hint(cx, right, G::B, "Back");
+        hint(cx, right, G::A, tr().overlay.switch);
+        hint(cx, right, G::X, tr().common.close);
+        hint(cx, right, G::B, tr().common.back);
 
         // Focus lands on the game you were in (one A is "back"), else on Home.
         let start = session.game_id.as_ref().and_then(|g| cards.iter().find(|c| c.rid.as_deref() == Some(g)).map(|c| c.id)).unwrap_or(cards[0].id);
@@ -206,7 +207,7 @@ impl Screen for Switcher {
                         self.disarm(cx);
                         if let Some(c) = self.cards.iter().find(|c| c.rid.as_deref() == Some(rid.as_str())) {
                             if let Some(st) = c.status {
-                                cx.scene.set_text(cx.t, st, "Press X again to close");
+                                cx.scene.set_text(cx.t, st, tr().overlay.press_x_again);
                             }
                         }
                         self.armed = Some((rid, now + ARM_SECS));

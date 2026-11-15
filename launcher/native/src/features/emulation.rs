@@ -18,6 +18,7 @@ use crate::kit::{self, s, tok, Btn as B, BtnIcon, DotTone, Ty, Ui, T};
 use crate::page::{hash, Acts, Btn, Feedback, Fx, Page};
 use crate::state::{Overlay, State, Tone};
 use rare_emu::bios::{self, SystemBios};
+use rare_i18n::{tr, trf, trn};
 use rare_emu::retro::{self, GameProgress};
 use rare_emu::setup::Status;
 use rare_render::focus::hints::{hint, Hint, Key};
@@ -120,15 +121,15 @@ fn now_secs() -> i64 {
 pub fn ago(t: i64) -> String {
     let d = now_secs() - t;
     if d < 60 {
-        "Just now".into()
+        tr().common.just_now.into()
     } else if d < 3600 {
-        format!("{} min ago", d / 60)
+        trf!(tr().features.emu_min_ago, n = d / 60)
     } else if d < 86400 {
-        format!("{} h ago", d / 3600)
+        trf!(tr().features.emu_h_ago, n = d / 3600)
     } else if d < 2 * 86400 {
-        "Yesterday".into()
+        tr().features.emu_yesterday.into()
     } else if d < 7 * 86400 {
-        format!("{} days ago", d / 86400)
+        trn!(tr().features.emu_days_ago, d / 86400)
     } else {
         crate::screens::emulators::date_text(Some(t)).rsplit_once(',').map(|(a, _)| a.to_string()).unwrap_or_default()
     }
@@ -259,8 +260,8 @@ pub fn on_setup_event(st: &mut State, fx: &mut Fx, p: &serde_json::Value, now: f
         with(|s| s.bios = None);
         fx.run(Act::Scan);
         match err {
-            None => st.toast("Emulation is set up", Tone::Info, now),
-            Some(e) => st.toast(format!("Setup finished with problems: {e}"), Tone::Error, now),
+            None => st.toast(tr().features.emu_set_up, Tone::Info, now),
+            Some(e) => st.toast(trf!(tr().features.emu_setup_problems, error = e), Tone::Error, now),
         }
     }
 }
@@ -318,7 +319,7 @@ fn issue_token(k: &rare_friends::sign::DeviceKey) -> Result<serde_json::Value, S
 /// friends on first when the device has no key (the player pressed Turn on; it can ask the wallet
 /// for one signature). Blocking.
 fn ensure_token(link: bool) -> Result<retro::Sign, String> {
-    let address = crate::data::account::current().map(|(a, _)| a).ok_or("Make a Rare Wallet account first.")?;
+    let address = crate::data::account::current().map(|(a, _)| a).ok_or(tr().features.emu_make_account)?;
     if let Some(s) = retro::sign().filter(|s| s.address == address) {
         return Ok(s);
     }
@@ -326,12 +327,12 @@ fn ensure_token(link: bool) -> Result<retro::Sign, String> {
         Some(k) => k,
         None if link => {
             crate::social::link_device_key()?;
-            crate::social::device_key().ok_or("Friends couldn't turn on here.")?
+            crate::social::device_key().ok_or(tr().features.emu_friends_failed)?
         }
-        None => return Err("Turn on retro trophies first.".into()),
+        None => return Err(tr().features.emu_turn_on_first.into()),
     };
     let v = issue_token(&key)?;
-    let s = retro::from_token_answer(&v, &address, retro::hardcore()).ok_or("rare.market didn't answer with a token.")?;
+    let s = retro::from_token_answer(&v, &address, retro::hardcore()).ok_or(tr().features.emu_no_token)?;
     retro::save(Some(&s))?;
     Ok(s)
 }
@@ -389,7 +390,7 @@ pub fn retro_turn_on() {
         match r {
             Ok(a) => {
                 set_retro(Some(a));
-                super::bus::note("Retro trophies are on", false);
+                super::bus::note(tr().features.emu_retro_on, false);
             }
             Err(e) => with(|s| {
                 s.retro_error = Some(e);
@@ -609,7 +610,7 @@ pub fn poll(st: &State, now: f64) {
             return;
         }
         for u in &fresh {
-            let body = format!("{} \u{b7} {} {}", u.description, u.points, if u.points == 1 { "point" } else { "points" });
+            let body = trf!(tr().features.emu_unlock_body, description = u.description, points = trn!(tr().features.emu_points, u.points));
             if !rare_system::host::get().launcher_front() {
                 rare_system::hud::toast_icon(&u.title, Some(&body), badge_icon(&u.badge_url));
             }
@@ -633,23 +634,23 @@ pub fn library_head(ui: &mut Ui, acts: &mut Acts, def: bool) -> El {
     let status = status();
     let run = setup_run();
     let (title, line) = match (&run, &status) {
-        (Some(r), _) => ("Setting up emulation".to_string(), run_line(r)),
-        (None, Some(s)) if s.ready => ("Emulation is ready".into(), format!("{} emulators. ROMs go in {}", s.emulators.len(), crate::data::model::pretty_path(&s.folders.first().map(|f| f.roms.clone()).unwrap_or_default()))),
+        (Some(r), _) => (tr().features.emu_setting_up_title.to_string(), run_line(r)),
+        (None, Some(s)) if s.ready => (tr().features.emu_ready_title.into(), trf!(tr().features.emu_ready_line, n = s.emulators.len(), folder = crate::data::model::pretty_path(&s.folders.first().map(|f| f.roms.clone()).unwrap_or_default()))),
         (None, Some(s)) => {
             let missing = s.emulators.iter().filter(|e| e.installed.is_none()).count();
-            ("Set up emulation".into(), if missing == s.emulators.len() { "Installs RetroArch and the standalone emulators from Flathub, and makes the ROM folders on this device and your SD card.".into() } else { format!("{missing} of {} emulators to install. Rare installs them from Flathub and makes the ROM folders.", s.emulators.len()) })
+            (tr().features.emu_set_up_title.into(), if missing == s.emulators.len() { tr().features.emu_install_all_line.into() } else { trf!(tr().features.emu_install_some_line, missing = missing, total = s.emulators.len()) })
         }
-        (None, None) => ("Emulation".into(), "Checking what is installed".into()),
+        (None, None) => (tr().features.emu_title.into(), tr().features.emu_checking_installed.into()),
     };
     let ready = status.as_ref().is_some_and(|s| s.ready) && run.is_none();
-    let setup_label = if run.is_some() { "Setting up" } else if ready { "Emulators" } else { "Set up" };
+    let setup_label = if run.is_some() { tr().features.emu_setting_up } else if ready { tr().features.emu_emulators } else { tr().features.emu_set_up_btn };
     let mut setup_b = B::new(setup_label, acts.tag(Act::Open(Overlay::Other(SETUP)))).sm().def(def).icon(BtnIcon::Lucide(if ready { "gamepad-2" } else { "download" }, 1.0, false));
     if !ready && run.is_none() {
         setup_b = setup_b.primary();
     }
     let bios_missing = bios().map(|b| b.iter().filter(|s| s.has_games && !s.ready).count()).unwrap_or(0);
-    let bios_label = if bios_missing > 0 { format!("BIOS ({bios_missing} missing)") } else { "BIOS".into() };
-    let ra_label = if retro_view().is_some() { "Retro trophies: on" } else { "Retro trophies" };
+    let bios_label = if bios_missing > 0 { trf!(tr().features.emu_bios_missing, n = bios_missing) } else { tr().features.emu_bios.into() };
+    let ra_label = if retro_view().is_some() { tr().features.emu_retro_trophies_on } else { tr().features.emu_retro_trophies };
     let buttons = vec![
         kit::button(ui, setup_b),
         kit::button(ui, B::new(bios_label, acts.tag(Act::Open(Overlay::Other(BIOS)))).sm().icon(BtnIcon::Lucide("cpu", 1.0, false))),
@@ -668,10 +669,10 @@ pub fn library_head(ui: &mut Ui, acts: &mut Acts, def: bool) -> El {
 fn run_line(r: &SetupRun) -> String {
     let pct = r.progress.map(|p| format!(" {}%", (p * 100.0).floor() as u32)).unwrap_or_default();
     match r.step.as_str() {
-        "folders" => "Making the ROM and BIOS folders".into(),
-        "install" => format!("Installing {}{pct}", r.name),
-        "cores" => format!("Getting RetroArch's cores{pct}"),
-        _ => "Working".into(),
+        "folders" => tr().features.emu_making_folders.into(),
+        "install" => trf!(tr().features.emu_installing_name, name = r.name, pct = pct),
+        "cores" => trf!(tr().features.emu_getting_cores, pct = pct),
+        _ => tr().features.emu_working.into(),
     }
 }
 
@@ -682,8 +683,8 @@ pub fn game_panel(ui: &mut Ui, acts: &mut Acts, g: &Game) -> Option<El> {
     let sys = rare_emu::roms::system_of(&g.id)?;
     let (emu, inst) = rare_emu::roms::runner_of(sys, &rare_emu::roms::home());
     let line = match inst {
-        Some(_) => format!("{} \u{b7} plays in {}", sys.name, emu.name),
-        None => format!("{} \u{b7} needs {}, set it up in Library, Emulation", sys.name, emu.name),
+        Some(_) => trf!(tr().features.emu_plays_in, system = sys.name, emulator = emu.name),
+        None => trf!(tr().features.emu_needs, system = sys.name, emulator = emu.name),
     };
     let mut col = ui.bx(s().col().gap(0.6).max_w(52.0)).child(ui.text(line, T::new(Ty::Small).c(tok::fg(0.8)).trunc()));
     if sys.ra == 0 {
@@ -691,21 +692,21 @@ pub fn game_panel(ui: &mut Ui, acts: &mut Acts, g: &Game) -> Option<El> {
     }
     match retro_view() {
         None => {
-            let b = kit::button(ui, B::new("Turn on", acts.tag(Act::Open(Overlay::Other(RA)))).sm());
-            col = col.child(ui.bx(s().row().items_center().gap(0.75)).child(ui.text_s(s().shrink().min0(), "Turn on retro trophies to earn Rare trophies in this game.", T::new(Ty::Small).c(tok::MUTED).trunc())).child(b));
+            let b = kit::button(ui, B::new(tr().common.turn_on, acts.tag(Act::Open(Overlay::Other(RA)))).sm());
+            col = col.child(ui.bx(s().row().items_center().gap(0.75)).child(ui.text_s(s().shrink().min0(), tr().features.emu_turn_on_to_earn, T::new(Ty::Small).c(tok::MUTED).trunc())).child(b));
         }
         Some(_) => match progress(&g.id) {
-            None => col = col.child(ui.text("Looking up trophies", T::new(Ty::Small).c(tok::MUTED))),
+            None => col = col.child(ui.text(tr().features.emu_looking_up, T::new(Ty::Small).c(tok::MUTED))),
             Some(None) => {
                 let hashed = rare_emu::roms::find(&g.id).is_some_and(|r| retro::rom_hash(&r).is_some());
-                let msg = if hashed { "No trophies for this game yet." } else { "Trophies show here after you play it once." };
+                let msg = if hashed { tr().features.emu_no_trophies } else { tr().features.emu_trophies_after_play };
                 col = col.child(ui.text(msg, T::new(Ty::Small).c(tok::MUTED)));
             }
             Some(Some(p)) => {
                 let earned = p.earned();
                 let pts: u32 = p.achievements.iter().filter(|a| a.earned_at.is_some()).map(|a| a.points).sum();
                 let total_pts: u32 = p.achievements.iter().map(|a| a.points).sum();
-                let head = format!("{earned} of {} trophies \u{b7} {pts} of {total_pts} points", p.achievements.len());
+                let head = trf!(tr().features.emu_progress, earned = earned, total = p.achievements.len(), pts = pts, total_pts = total_pts);
                 let badges: Vec<El> = p
                     .achievements
                     .iter()
@@ -723,7 +724,7 @@ pub fn game_panel(ui: &mut Ui, acts: &mut Acts, g: &Game) -> Option<El> {
                 if more > 0 {
                     strip = strip.child(ui.text(format!("+{more}"), T::new(Ty::Small).c(tok::MUTED)));
                 }
-                let open = kit::button(ui, B::new("Trophies", acts.tag(Act::Trophies(Some(CASE_BASE + p.game_id)))).sm().icon(BtnIcon::Lucide("trophy", 1.0, false)));
+                let open = kit::button(ui, B::new(tr().common.trophies, acts.tag(Act::Trophies(Some(CASE_BASE + p.game_id)))).sm().icon(BtnIcon::Lucide("trophy", 1.0, false)));
                 col = col.child(ui.bx(s().row().items_center().gap(0.75)).child(ui.text_s(s().shrink().min0(), head, T::new(Ty::Small).w(500).trunc())).child(open)).child(strip);
             }
         },
@@ -774,8 +775,7 @@ fn choice_sub(c: &rare_emu::setup::Choice, fallback: &str) -> String {
     }
     match c.roms {
         0 => {}
-        1 => s.push_str("  \u{b7}  1 game"),
-        n => s.push_str(&format!("  \u{b7}  {n} games")),
+        n => s.push_str(&format!("  \u{b7}  {}", trn!(tr().common.games_n, n))),
     }
     s
 }
@@ -796,27 +796,26 @@ impl Page for SetupPage {
         let picked = self.picked.clone().unwrap_or_default();
         let note = match (&run, &status) {
             (Some(r), _) => run_line(r),
-            (None, Some(s)) if s.ready => "Everything is installed".into(),
-            (None, Some(s)) => format!("{} of {} installed", s.emulators.iter().filter(|e| e.installed.is_some()).count(), s.emulators.len()),
+            (None, Some(s)) if s.ready => tr().features.emu_all_installed.into(),
+            (None, Some(s)) => trf!(tr().features.emu_n_of_installed, n = s.emulators.iter().filter(|e| e.installed.is_some()).count(), total = s.emulators.len()),
             _ => String::new(),
         };
-        let mut p = page(ui, "gamepad-2", "Emulation", &note, "emu-setup");
+        let mut p = page(ui, "gamepad-2", tr().features.emu_title, &note, "emu-setup");
         let Some(status) = status else { return p };
         if !status.flatpak {
-            p = p.child(kit::empty(ui, s().mb(1.0), "Flatpak isn't on this system", Some("Rare installs emulators with Flatpak. Emulators you put in Applications as AppImages still work."), vec![]));
+            p = p.child(kit::empty(ui, s().mb(1.0), tr().features.emu_no_flatpak, Some(tr().features.emu_no_flatpak_body), vec![]));
         }
         // Set up the ticked ones, or all of them.
         let missing: Vec<String> = status.emulators.iter().filter(|e| e.installed.is_none()).map(|e| e.id.clone()).collect();
         let todo: Vec<String> = picked.iter().filter(|id| missing.contains(id)).cloned().collect();
         let label = if run.is_some() {
-            "Setting up".to_string()
+            tr().features.emu_setting_up.to_string()
         } else if missing.is_empty() {
-            if status.cores_missing > 0 { "Install the cores".into() } else { "Check again".into() }
+            if status.cores_missing > 0 { tr().features.emu_install_cores.into() } else { tr().features.emu_check_again.into() }
         } else {
             match todo.len() {
-                0 => "Set up".to_string(),
-                1 => "Set up 1 emulator".into(),
-                n => format!("Set up {n} emulators"),
+                0 => tr().features.emu_set_up_btn.to_string(),
+                n => trn!(tr().features.emu_set_up_n, n),
             }
         };
         let mut b = B::new(label, acts.tag(Act::Local(1))).lg().def(true).disabled(run.is_some() || (!missing.is_empty() && todo.is_empty()));
@@ -825,12 +824,12 @@ impl Page for SetupPage {
         }
         let mut top = ui.bx(s().row().items_center().gap(1.0).mb(1.5)).child(kit::button(ui, b));
         if !missing.is_empty() {
-            top = top.child(kit::button(ui, B::new("All", acts.tag(Act::Local(2))).lg().disabled(run.is_some())));
+            top = top.child(kit::button(ui, B::new(tr().common.all, acts.tag(Act::Local(2))).lg().disabled(run.is_some())));
         }
         let size = if missing.is_empty() {
             String::new()
         } else if todo.is_empty() {
-            "Tick the systems you play, or set up everything.".into()
+            tr().features.emu_tick_systems.into()
         } else {
             rare_emu::setup::size_text(&choices, &todo)
         };
@@ -846,9 +845,9 @@ impl Page for SetupPage {
             let busy = run.as_ref().is_some_and(|r| r.step == "install" && r.name == e.name);
             let failed = run.as_ref().and_then(|r| r.done.iter().find(|(n, _)| *n == e.name).and_then(|(_, err)| err.clone()));
             let right = match (&e.installed, busy, &failed) {
-                (_, true, _) => state_word(ui, &format!("Installing{}", run.as_ref().and_then(|r| r.progress).map(|p| format!(" {}%", (p * 100.0).floor() as u32)).unwrap_or_default()), DotTone::Primary),
-                (Some(k), _, _) => state_word(ui, if k == "flatpak" { "Installed" } else { "Installed (AppImage)" }, DotTone::Positive),
-                (None, _, Some(_)) => state_word(ui, "Didn't install", DotTone::Negative),
+                (_, true, _) => state_word(ui, &trf!(tr().features.emu_installing_pct, pct = run.as_ref().and_then(|r| r.progress).map(|p| format!(" {}%", (p * 100.0).floor() as u32)).unwrap_or_default()), DotTone::Primary),
+                (Some(k), _, _) => state_word(ui, if k == "flatpak" { tr().common.installed } else { tr().features.emu_installed_appimage }, DotTone::Positive),
+                (None, _, Some(_)) => state_word(ui, tr().features.emu_didnt_install, DotTone::Negative),
                 (None, _, None) => kit::toggle(ui, picked.contains(&e.id)),
             };
             let sub = match (&failed, choices.iter().find(|c| c.id == e.id)) {
@@ -857,50 +856,50 @@ impl Page for SetupPage {
                 (None, None) => e.plays.clone(),
             };
             let tag = acts.tag(Act::Local(100 + i as u32));
-            let hint = if e.installed.is_some() { "Installed" } else if picked.contains(&e.id) { "Untick" } else { "Tick" };
+            let hint = if e.installed.is_some() { tr().common.installed } else if picked.contains(&e.id) { tr().features.emu_untick } else { tr().features.emu_tick };
             rows.push(line(ui, &e.name, &sub, Some(right), Some((tag, hint)), false).key(key(&e.id)));
         }
-        p = p.child(kit::section_head(ui, s().mb(0.6), "Emulators", Some("Ticked for the systems you have games for"), None));
+        p = p.child(kit::section_head(ui, s().mb(0.6), tr().features.emu_emulators, Some(tr().features.emu_emulators_sub), None));
         p = p.child(ui.bx(s().col().gap(0.25).mb(1.5)).group(Group::new("emu-setup-list", [0.0; 4]).remember()).kids(rows));
         // Controls: Rare's profiles, and the player's own settings it leaves alone until asked.
         if let Some(rev) = controls_review() {
             let own: Vec<&rare_emu::controls::Review> = rev.iter().filter(|r| r.state == rare_emu::controls::State::Own).collect();
-            p = p.child(kit::section_head(ui, s().mb(0.6), "Controls", Some("Every button set for the SuiPlay, hotkeys in the Rare menu"), None));
+            p = p.child(kit::section_head(ui, s().mb(0.6), tr().features.emu_controls, Some(tr().features.emu_controls_sub), None));
             if own.is_empty() {
-                let cw = state_word(ui, "Ready", DotTone::Positive);
+                let cw = state_word(ui, tr().features.emu_ready, DotTone::Positive);
                 let names = rev.iter().map(|r| r.name.as_str()).collect::<Vec<_>>().join(", ");
-                let sub = if names.is_empty() { "Set when an emulator is installed".to_string() } else { names };
-                p = p.child(ui.bx(s().mb(1.5)).child(line(ui, "Rare's controls", &sub, Some(cw), None, false)));
+                let sub = if names.is_empty() { tr().features.emu_set_when_installed.to_string() } else { names };
+                p = p.child(ui.bx(s().mb(1.5)).child(line(ui, tr().features.emu_rares_controls, &sub, Some(cw), None, false)));
             } else {
                 let ids: Vec<String> = own.iter().map(|r| r.id.clone()).collect();
                 let names = own.iter().map(|r| r.name.as_str()).collect::<Vec<_>>().join(", ");
                 let asking = self.confirm.as_ref() == Some(&ids);
-                let label = if with(|s| s.controls_busy) { "Replacing" } else if asking { "Replace my settings" } else { "Use Rare's controls" };
+                let label = if with(|s| s.controls_busy) { tr().features.emu_replacing } else if asking { tr().features.emu_replace_mine } else { tr().features.emu_use_rares };
                 let btn = kit::button(ui, B::new(label, acts.tag(Act::Local(3))).sm());
                 let sub = if asking {
-                    format!("{names}: press again to replace them. Yours stay next to them as .before-rare files.")
+                    trf!(tr().features.emu_replace_confirm, names = names)
                 } else {
-                    format!("{names}: your own settings, kept as they are")
+                    trf!(tr().features.emu_own_kept, names = names)
                 };
-                p = p.child(ui.bx(s().mb(1.5)).child(line(ui, "Your own controller settings", &sub, Some(btn), None, false)));
+                p = p.child(ui.bx(s().mb(1.5)).child(line(ui, tr().features.emu_own_settings, &sub, Some(btn), None, false)));
             }
         }
         // RetroArch's cores.
-        let cores = if status.cores_missing == 0 { format!("All {} cores installed", status.cores) } else { format!("{} of {} to download from libretro", status.cores_missing, status.cores) };
-        p = p.child(kit::section_head(ui, s().mb(0.6), "RetroArch cores", Some("NES, SNES, Game Boy, Genesis, arcade and more"), None));
-        let cw = state_word(ui, if status.cores_missing == 0 { "Ready" } else { "Missing" }, if status.cores_missing == 0 { DotTone::Positive } else { DotTone::Muted });
-        let cl = line(ui, "Cores", &cores, Some(cw), None, false);
+        let cores = if status.cores_missing == 0 { trf!(tr().features.emu_all_cores, n = status.cores) } else { trf!(tr().features.emu_cores_missing, missing = status.cores_missing, total = status.cores) };
+        p = p.child(kit::section_head(ui, s().mb(0.6), tr().features.emu_cores_head, Some(tr().features.emu_cores_sub), None));
+        let cw = state_word(ui, if status.cores_missing == 0 { tr().features.emu_ready } else { tr().features.emu_missing }, if status.cores_missing == 0 { DotTone::Positive } else { DotTone::Muted });
+        let cl = line(ui, tr().features.emu_cores, &cores, Some(cw), None, false);
         p = p.child(ui.bx(s().mb(1.5)).child(cl));
         // Folders.
-        p = p.child(kit::section_head(ui, s().mb(0.6), "ROM folders", Some("Copy games you own into the folder for their system"), None));
+        p = p.child(kit::section_head(ui, s().mb(0.6), tr().features.emu_rom_folders, Some(tr().features.emu_rom_folders_sub), None));
         let mut fl = Vec::new();
         for f in &status.folders {
-            let sub = format!("{}  \u{b7}  BIOS: {}", crate::data::model::pretty_path(&f.roms), crate::data::model::pretty_path(&f.bios));
-            let right = state_word(ui, if f.exists { "Ready" } else { "Made by setup" }, if f.exists { DotTone::Positive } else { DotTone::Muted });
+            let sub = trf!(tr().features.emu_folder_line, roms = crate::data::model::pretty_path(&f.roms), bios = crate::data::model::pretty_path(&f.bios));
+            let right = state_word(ui, if f.exists { tr().features.emu_ready } else { tr().features.emu_made_by_setup }, if f.exists { DotTone::Positive } else { DotTone::Muted });
             fl.push(line(ui, &f.label, &sub, Some(right), None, false));
         }
         p = p.child(ui.bx(s().col().gap(0.25).mb(1.5)).kids(fl));
-        p.child(ui.text_s(s().max_w(56.0), "Saves and states are kept under Emulation/saves, which Rare's cloud saves back up. Rare never downloads games or BIOS files.", T::new(Ty::Small).c(tok::MUTED).wrap()))
+        p.child(ui.text_s(s().max_w(56.0), tr().features.emu_saves_note, T::new(Ty::Small).c(tok::MUTED).wrap()))
     }
 
     fn act(&mut self, st: &mut State, fx: &mut Fx, code: u32) {
@@ -945,7 +944,7 @@ impl Page for SetupPage {
                     } else {
                         // Installed: nothing to pick. Say so instead of a row that seems dead.
                         let name = status().and_then(|s| s.emulators.iter().find(|e| &e.id == id).map(|e| e.name.clone())).unwrap_or_else(|| id.clone());
-                        st.toast(format!("{name} is installed. Set up checks it again."), crate::state::Tone::Info, rare_render::clock::secs());
+                        st.toast(trf!(tr().features.emu_installed_toast, name = name), crate::state::Tone::Info, rare_render::clock::secs());
                     }
                 }
             }
@@ -976,33 +975,33 @@ impl Page for BiosPage {
         }
         let list = bios();
         let folder = list.as_ref().and_then(|l| l.first()).map(|b| crate::data::model::pretty_path(&b.folder)).unwrap_or_default();
-        let note = list.as_ref().map(|l| format!("{} of {} systems ready", l.iter().filter(|b| b.ready).count(), l.len())).unwrap_or_default();
-        let mut p = page(ui, "cpu", "BIOS files", &note, "emu-bios");
-        p = p.child(ui.text_s(s().mb(1.25).max_w(60.0), format!("Some systems need files from the console itself. Copy the ones you dumped from your own consoles into {folder} (or Emulation/bios on your SD card). Rare checks each file against the known good copies."), T::new(Ty::Small).c(tok::fg(0.8)).wrap()));
+        let note = list.as_ref().map(|l| trf!(tr().features.emu_systems_ready, n = l.iter().filter(|b| b.ready).count(), total = l.len())).unwrap_or_default();
+        let mut p = page(ui, "cpu", tr().features.emu_bios_files, &note, "emu-bios");
+        p = p.child(ui.text_s(s().mb(1.25).max_w(60.0), trf!(tr().features.emu_bios_intro, folder = folder), T::new(Ty::Small).c(tok::fg(0.8)).wrap()));
         let Some(list) = list else {
-            return p.child(ui.text("Checking", T::new(Ty::Small).c(tok::MUTED)));
+            return p.child(ui.text(tr().features.emu_checking, T::new(Ty::Small).c(tok::MUTED)));
         };
         let mut cards = Vec::new();
         for (i, b) in list.iter().enumerate() {
-            let (word, tone) = if b.ready { ("Ready", DotTone::Positive) } else if b.entries.iter().any(|e| e.state == bios::State::Wrong) { ("Wrong file", DotTone::Attention) } else { ("Missing", DotTone::Muted) };
+            let (word, tone) = if b.ready { (tr().features.emu_ready, DotTone::Positive) } else if b.entries.iter().any(|e| e.state == bios::State::Wrong) { (tr().features.emu_wrong_file, DotTone::Attention) } else { (tr().features.emu_missing, DotTone::Muted) };
             let head = ui
                 .bx(s().row().items_center().gap(0.75))
                 .child(ui.text_s(s().shrink().min0(), b.name.clone(), T::new(Ty::Body).w(600).trunc()))
-                .child(ui.text_s(s().shrink(), if b.has_games { "You have games for it".to_string() } else { String::new() }, T::new(Ty::Small).c(tok::MUTED).trunc()))
+                .child(ui.text_s(s().shrink(), if b.has_games { tr().features.emu_have_games.to_string() } else { String::new() }, T::new(Ty::Small).c(tok::MUTED).trunc()))
                 .child(ui.bx(s().ml_auto()).child(state_word(ui, word, tone)));
             let mut col = ui.bx(s().col().gap(0.35).wp(1.0).px(1.0).py(0.85)).child(head);
             for e in &b.entries {
                 let st_word = match e.state {
-                    bios::State::Found => "Found",
-                    bios::State::Missing => "Missing",
-                    bios::State::Wrong => "Not the right file",
+                    bios::State::Found => tr().features.emu_found,
+                    bios::State::Missing => tr().features.emu_missing,
+                    bios::State::Wrong => tr().features.emu_not_right_file,
                 };
                 let mut what = format!("{}  \u{b7}  {}", e.name, e.note);
                 if !e.or.is_empty() {
-                    what.push_str(&format!("  \u{b7}  or {}", e.or.join(", ")));
+                    what.push_str(&format!("  \u{b7}  {}", trf!(tr().features.emu_or, names = e.or.join(", "))));
                 }
                 if !e.required {
-                    what.push_str("  \u{b7}  optional");
+                    what.push_str(&format!("  \u{b7}  {}", tr().features.emu_optional));
                 }
                 let c = match e.state {
                     bios::State::Found => tok::fg(0.85),
@@ -1031,7 +1030,7 @@ impl Page for BiosPage {
     }
 
     fn hints(&self, _st: &State) -> Vec<Hint> {
-        vec![hint(Key::Y, "Check again")]
+        vec![hint(Key::Y, tr().features.emu_check_again)]
     }
 }
 
@@ -1051,41 +1050,41 @@ impl Page for RetroPage {
     fn view(&mut self, ui: &mut Ui, _st: &State, acts: &mut Acts) -> El {
         let view = retro_view();
         let (busy, err) = with(|s| (s.retro_busy, s.retro_error.clone()));
-        let note = view.as_ref().map(|v| format!("Emulators show you as {}", v.user)).unwrap_or_default();
-        let mut p = page(ui, "trophy", "Retro trophies", &note, "emu-ra");
-        p = p.child(ui.text_s(s().mb(1.25).max_w(60.0), "Classic games earn Rare trophies as you play, with no other account. Achievement sets come from RetroAchievements; your unlocks stay with your Rare account.", T::new(Ty::Small).c(tok::fg(0.8)).wrap()));
+        let note = view.as_ref().map(|v| trf!(tr().features.emu_show_as, user = v.user)).unwrap_or_default();
+        let mut p = page(ui, "trophy", tr().features.emu_retro_trophies, &note, "emu-ra");
+        p = p.child(ui.text_s(s().mb(1.25).max_w(60.0), tr().features.emu_retro_intro, T::new(Ty::Small).c(tok::fg(0.8)).wrap()));
         match view {
             None => {
-                let off = state_word(ui, "Off", DotTone::Muted);
-                let rows = vec![line(ui, "Retro trophies", "Off on this device. Turning them on lets this device act for your Rare account.", Some(off), None, false).key(key("state"))];
+                let off = state_word(ui, tr().common.off, DotTone::Muted);
+                let rows = vec![line(ui, tr().features.emu_retro_trophies, tr().features.emu_retro_off_line, Some(off), None, false).key(key("state"))];
                 p = p.child(ui.bx(s().col().gap(0.25).mb(1.25).max_w(56.0)).kids(rows));
-                let on = kit::button(ui, B::new(if busy { "Turning on" } else { "Turn on" }, acts.tag(Act::Local(ACT_TURN_ON))).primary().lg().disabled(busy).def(true));
+                let on = kit::button(ui, B::new(if busy { tr().features.emu_turning_on } else { tr().common.turn_on }, acts.tag(Act::Local(ACT_TURN_ON))).primary().lg().disabled(busy).def(true));
                 p = p.child(ui.bx(s().row()).child(on));
             }
             Some(v) => {
                 let hc = kit::toggle(ui, v.hardcore);
-                let on = state_word(ui, "On", DotTone::Positive);
+                let on = state_word(ui, tr().common.on, DotTone::Positive);
                 let rows = vec![
-                    line(ui, "Hardcore", "No save state loads, rewind or slow motion. Unlocks are marked hardcore.", Some(hc), Some((acts.tag(Act::Local(ACT_HARDCORE)), "Toggle")), true).key(key("hc")),
-                    line(ui, "Works in", "RetroArch, DuckStation, PCSX2, PPSSPP and Dolphin", Some(on), None, false).key(key("tok")),
+                    line(ui, tr().features.emu_hardcore, tr().features.emu_hardcore_line, Some(hc), Some((acts.tag(Act::Local(ACT_HARDCORE)), tr().features.emu_toggle)), true).key(key("hc")),
+                    line(ui, tr().features.emu_works_in, tr().features.emu_works_in_list, Some(on), None, false).key(key("tok")),
                 ];
                 p = p.child(ui.bx(s().col().gap(0.25).mb(1.5).max_w(56.0)).group(Group::new("emu-ra-rows", [0.0; 4])).kids(rows));
                 match played() {
                     Some(list) if !list.is_empty() => {
-                        p = p.child(kit::section_head(ui, s().mb(0.6), "Recently played", None, None));
+                        p = p.child(kit::section_head(ui, s().mb(0.6), tr().features.emu_recently_played, None, None));
                         let mut rows = Vec::new();
                         for g in list.iter().take(8) {
                             let fb = ui.bx(s().size(2.75).items_center().justify_center()).bg(tok::L3).child(kit::icon(ui, "trophy", 1.2, tok::ICON2));
                             let srcs: Vec<String> = Some(g.icon_url.clone()).filter(|i| !i.is_empty()).into_iter().collect();
                             let icon = ui.bx(s().size(2.75)).radius(ui.r(0.35)).clip().child(kit::art(ui, s().size(2.75), &srcs, 2.75, 2.75, kit::ArtFit::Cover(0.5), Some(fb)));
                             let console = retro::console_name(g.console_id);
-                            let sub = if console.is_empty() { format!("{} of {}", g.earned, g.total) } else { format!("{console} \u{b7} {} of {}", g.earned, g.total) };
+                            let sub = if console.is_empty() { trf!(tr().features.emu_earned_of, earned = g.earned, total = g.total) } else { trf!(tr().features.emu_console_earned_of, console = console, earned = g.earned, total = g.total) };
                             let el = ui.bx(s().row().items_center().gap(0.9).h(3.75).px(1.0)).child(icon).child(ui.bx(s().col().grow().min0()).child(ui.text(retro::display_title(&g.title), T::new(Ty::Body).w(500).trunc())).child(ui.text(sub, T::new(Ty::Small).c(tok::MUTED).trunc())));
-                            rows.push(kit::nav(kit::row_look(el.radius(ui.r(0.5))), acts.tag(Act::Trophies(Some(CASE_BASE + g.game_id))), Some("Trophies"), None, false).key(key(&g.game_id)));
+                            rows.push(kit::nav(kit::row_look(el.radius(ui.r(0.5))), acts.tag(Act::Trophies(Some(CASE_BASE + g.game_id))), Some(tr().common.trophies), None, false).key(key(&g.game_id)));
                         }
                         p = p.child(ui.bx(s().col().gap(0.25).max_w(56.0)).group(Group::new("emu-ra-games", [0.0; 4])).kids(rows));
                     }
-                    Some(_) => p = p.child(ui.text_s(s().max_w(56.0), "Play a game from Library, Emulation and its trophies show here.", T::new(Ty::Small).c(tok::MUTED).wrap())),
+                    Some(_) => p = p.child(ui.text_s(s().max_w(56.0), tr().features.emu_play_to_show, T::new(Ty::Small).c(tok::MUTED).wrap())),
                     None => {}
                 }
             }

@@ -6,6 +6,7 @@
 //! Captures run on their own threads. Anything that needs the app (a toast, the keyboard) is
 //! queued here and taken by `App::update` through [`take`].
 
+use rare_i18n::{tr, trf};
 use rare_input::side::{Action, Fire, HoldAction, Key};
 use rare_share::ShareHost;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -144,10 +145,9 @@ pub fn capture(clip: bool) {
                 if host.rumble_enabled() {
                     host.rumble();
                 }
-                let what = if clip { "Clip saved" } else { "Screenshot saved" };
                 push(Req::Toast(match cap.game.as_ref().map(|g| g.name.trim()).filter(|n| !n.is_empty()) {
-                    Some(n) => format!("{what}: {n}"),
-                    None => what.to_string(),
+                    Some(n) => trf!(if clip { tr().app.clip_saved_game } else { tr().app.screenshot_saved_game }, game = n),
+                    None => (if clip { tr().app.clip_saved } else { tr().app.screenshot_saved }).to_string(),
                 }, false));
             }
             Err(e) => push(Req::Toast(e, true)),
@@ -173,12 +173,12 @@ pub fn perf_next() {
         }
         perfhud::apply(next);
         let name = match next {
-            HudLevel::Off => "Off",
-            HudLevel::Fps => "FPS",
-            HudLevel::Basic => "Basic",
-            HudLevel::Full => "Full",
+            HudLevel::Off => tr().common.off,
+            HudLevel::Fps => tr().app.hud_fps,
+            HudLevel::Basic => tr().app.hud_basic,
+            HudLevel::Full => tr().app.hud_full,
         };
-        push(Req::Toast(format!("Performance overlay: {name}"), false));
+        push(Req::Toast(trf!(tr().app.perf_overlay, level = name), false));
     });
 }
 
@@ -286,7 +286,7 @@ pub fn press(k: Key, down: bool) {
                         h[i] = Some(keys);
                     }
                 }
-                None => toast("Pick the keys for this button in Settings > Controls.", false),
+                None => toast(&trf!(tr().app.pick_keys, path = format!("{} > {}", tr().common.settings, tr().settings.sec_controls)), false),
             }
             return;
         }

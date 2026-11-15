@@ -23,6 +23,7 @@ use rare_system::power::GamePower;
 use rare_system::upscale::Upscale;
 use std::collections::HashMap;
 use std::sync::Mutex;
+use rare_i18n::tr;
 
 pub const PICK: &str = "gm-pick";
 pub const ART: &str = "gm-art";
@@ -142,8 +143,8 @@ pub fn show_custom(st: &mut crate::state::State, id: &str, c: &Custom) {
 
 pub fn kind_name(k: ArtKind) -> &'static str {
     match k {
-        ArtKind::Cover => "Cover",
-        ArtKind::Hero => "Hero",
-        ArtKind::Logo => "Logo",
+        ArtKind::Cover => tr().features_more.art_cover,
+        ArtKind::Hero => tr().features_more.art_hero,
+        ArtKind::Logo => tr().features_more.art_logo,
     }
 }

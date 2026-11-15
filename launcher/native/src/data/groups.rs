@@ -4,6 +4,7 @@
 //! default copy (the installed one played last) with the best art, the latest last played and
 //! the playtime of all copies. The game page lists the copies under "Play on".
 
+use rare_i18n::{tr, trf};
 use crate::data::model::{Game, Library};
 use crate::data::userlib::UserLib;
 use std::collections::HashMap;
@@ -155,17 +156,16 @@ pub fn copy_label(g: &Game) -> String {
                         ext.to_ascii_uppercase()
                     }
                 }
-                _ => "folder".to_string(),
+                _ => tr().data.copy_folder.to_string(),
             };
-            let sd = if g.id.starts_with("emu:sd/") { " on SD card" } else { "" };
-            format!("{sys} {kind}{sd}")
+            trf!(if g.id.starts_with("emu:sd/") { tr().data.copy_emu_sd } else { tr().data.copy_emu }, system = sys, kind = kind)
         }
         s => crate::data::model::source_label(s).to_string(),
     };
     if g.installed || matches!(g.source.as_str(), "cloud" | "web") {
         base
     } else {
-        format!("{base} \u{b7} Not installed")
+        trf!(tr().data.copy_not_installed, base = base)
     }
 }
 

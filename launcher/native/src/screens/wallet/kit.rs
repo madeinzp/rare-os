@@ -4,6 +4,7 @@
 //! builds from these, so a look changes in one place, as on the web.
 
 use super::fmt;
+use rare_i18n::{tr, trn};
 use super::markup::*;
 
 // ------------------------------------------------------------------ rare.market parts
@@ -281,7 +282,7 @@ pub fn field<M>(f: FieldSpec, on: M) -> El<M> {
             Some(on),
         )
         .def(f.def)
-        .hint_a("Type")
+        .hint_a(tr().wallet.hint_type)
         .kid(span(cn(&["min-w-0 flex-1 truncate", if f.value.is_empty() { "text-secondary" } else { "text-primary" }])).text(shown)),
     );
     if let Some(e) = f.error {
@@ -332,7 +333,7 @@ pub fn sheet<M: Clone>(s: SheetSpec<M>, body: Vec<El<M>>) -> El<M> {
     head_left = head_left.kid(titles);
     let mut head = div("flex shrink-0 items-start justify-between gap-4 border-b border-border-primary px-8 pb-4 pt-6").kid(head_left);
     if let Some(c) = &s.close {
-        head = head.kid(button("-mr-1 mt-1 flex size-10 items-center justify-center rounded text-icon-primary", Some(c.clone())).label("Close").kid(icon("x", "").attr("size", "1.25rem")));
+        head = head.kid(button("-mr-1 mt-1 flex size-10 items-center justify-center rounded text-icon-primary", Some(c.clone())).label(tr().common.close).kid(icon("x", "").attr("size", "1.25rem")));
     }
     let mut dialog = div("fade-in relative flex max-h-full w-full flex-col overflow-hidden rounded-modal border border-border-light bg-background")
         .attr("data-nav-scope", "")
@@ -370,7 +371,7 @@ pub struct PinPadSpec<'a> {
 
 impl Default for PinPadSpec<'_> {
     fn default() -> Self {
-        PinPadSpec { length: None, value: "", min_length: 6, masked: true, disabled: false, ok_label: "OK" }
+        PinPadSpec { length: None, value: "", min_length: 6, masked: true, disabled: false, ok_label: tr().common.ok }
     }
 }
 
@@ -399,13 +400,13 @@ pub fn pin_pad<M: Clone>(s: PinPadSpec, on_key: impl Fn(&'static str) -> M) -> E
     let n = s.value.chars().count();
     let shown = s.length.unwrap_or(s.min_length.max(n));
     let dots = if s.masked {
-        div("flex h-6 items-center gap-3").label(&format!("{n} digits")).kids((0..shown).map(|i| span(cn(&["size-3.5 rounded-full transition-colors", if i < n { "bg-primary" } else { "bg-layer-04" }]))))
+        div("flex h-6 items-center gap-3").label(&trn!(tr().wallet.digits, n)).kids((0..shown).map(|i| span(cn(&["size-3.5 rounded-full transition-colors", if i < n { "bg-primary" } else { "bg-layer-04" }]))))
     } else {
-        div("flex h-6 items-center gap-3").label(&format!("{n} digits")).kid(span("font-mono text-2xl tabular-nums").text(if s.value.is_empty() { " " } else { s.value }))
+        div("flex h-6 items-center gap-3").label(&trn!(tr().wallet.digits, n)).kid(span("font-mono text-2xl tabular-nums").text(if s.value.is_empty() { " " } else { s.value }))
     };
     let keys = div("grid grid-cols-3 gap-2").kids(PIN_KEYS.iter().map(|k| {
         let label = match *k {
-            "back" => "Del",
+            "back" => tr().wallet.key_delete,
             "ok" => s.ok_label,
             d => d,
         };

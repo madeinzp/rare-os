@@ -2,6 +2,7 @@
 //! Twitch), with its art and Previous, Play or Pause, Next, so music keeps going under a game and
 //! is one press away. Shown on the Game tab under Resume, and on the Rare tab over the launcher.
 
+use rare_i18n::tr;
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
 use rare_render::theme::tok;
@@ -69,7 +70,7 @@ pub fn card(cx: &mut Cx, nav: &mut Nav, parent: Id, n: &NowPlaying) {
     let sub = if n.artist.is_empty() { n.app.clone() } else { format!("{} · {}", n.artist, n.app) };
     text_tr(cx, names, ty::LABEL, 400, tok::MUTED, &sub);
     let row = cx.scene.add(c, s().row().gap(0.5 * r).done(), Node::default());
-    ibtn(cx, nav, row, "media-prev", "skip-back", "Previous", n.can_previous);
-    ibtn(cx, nav, row, "media-play", if n.playing { "pause" } else { "play" }, if n.playing { "Pause" } else { "Play" }, n.can_play_pause);
-    ibtn(cx, nav, row, "media-next", "skip-forward", "Next", n.can_next);
+    ibtn(cx, nav, row, "media-prev", "skip-back", tr().overlay.media_previous, n.can_previous);
+    ibtn(cx, nav, row, "media-play", if n.playing { "pause" } else { "play" }, if n.playing { tr().overlay.media_pause } else { tr().common.play }, n.can_play_pause);
+    ibtn(cx, nav, row, "media-next", "skip-forward", tr().overlay.media_next, n.can_next);
 }

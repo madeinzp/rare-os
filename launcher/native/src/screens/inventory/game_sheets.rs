@@ -4,6 +4,7 @@
 //! Anything signed goes through Rare Wallet's review as always. B (or Not now) answers the game
 //! "cancelled". While a sheet is up the launcher's tab and panel buttons do nothing.
 
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::kit::{sheet, SheetSpec};
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::ui::{button_el, dot, BSize, ButtonSpec, BVariant, Tone};
@@ -19,7 +20,7 @@ pub struct Asker {
 /// `askedBy`: "<game> asked Rare", or None for a link.
 pub fn asked_by(a: &Asker) -> Option<String> {
     match (&a.req_id, &a.game_title) {
-        (Some(_), Some(t)) if !t.is_empty() => Some(format!("{t} asked Rare")),
+        (Some(_), Some(t)) if !t.is_empty() => Some(trf!(tr().inventory.asked_rare, game = t)),
         _ => None,
     }
 }
@@ -35,12 +36,15 @@ pub enum Voucher {
 /// What the claim sheet says it gives.
 pub fn voucher_line(v: &Voucher) -> String {
     match v {
-        Voucher::Trophy { trophy_id } => format!("Trophy {trophy_id}"),
+        Voucher::Trophy { trophy_id } => trf!(tr().inventory.voucher_trophy, id = trophy_id),
         Voucher::Item { kind, keys, vals } => {
-            let with = if keys.is_empty() { String::new() } else { format!(" with {}", keys.iter().zip(vals).map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", ")) };
-            format!("Item kind {kind}{with}")
+            if keys.is_empty() {
+                trf!(tr().inventory.voucher_item, kind = kind)
+            } else {
+                trf!(tr().inventory.voucher_item_with, kind = kind, list = keys.iter().zip(vals).map(|(k, v)| format!("{k} {v}")).collect::<Vec<_>>().join(", "))
+            }
         }
-        Voucher::Stats { keys, vals } => keys.iter().zip(vals).map(|(k, v)| format!("{k} becomes {v}")).collect::<Vec<_>>().join(", "),
+        Voucher::Stats { keys, vals } => keys.iter().zip(vals).map(|(k, v)| trf!(tr().inventory.stat_becomes, key = k, value = v)).collect::<Vec<_>>().join(", "),
     }
 }
 
@@ -85,38 +89,38 @@ pub fn claim_view(title: &str, asker: &Asker, v: &Voucher, phase: &ClaimPhase, h
         vec![div("flex gap-[0.6rem]")
             .kid(button_el(
                 ButtonSpec::new(match phase {
-                    ClaimPhase::Working => "Waiting for approval",
-                    ClaimPhase::Error(_) => "Try again",
-                    _ => "Claim",
+                    ClaimPhase::Working => tr().inventory.waiting_approval,
+                    ClaimPhase::Error(_) => tr().common.try_again,
+                    _ => tr().inventory.claim,
                 })
                 .v(BVariant::Primary)
                 .size(BSize::Md)
                 .def(true)
                 .class("flex-1")
                 .disabled(*phase == ClaimPhase::Working || !has_account)
-                .hint("Claim"),
+                .hint(tr().inventory.claim),
                 Some(Msg::Claim),
             ))
-            .kid(button_el(ButtonSpec::new("Not now").size(BSize::Md), Some(Msg::Close)))]
+            .kid(button_el(ButtonSpec::new(tr().inventory.not_now).size(BSize::Md), Some(Msg::Close)))]
     });
     let mut body = div("flex flex-col gap-[0.8rem] px-8 py-6 text-small").kid(p("text-body").text(voucher_line(v))).kid(p("text-secondary").text(if matches!(v, Voucher::Trophy { .. }) {
-        "Goes to your Rare profile. Rare covers the network fee when your wallet is short."
+        tr().inventory.goes_to_profile
     } else {
-        "Goes to your Rare Wallet. You review it before anything is signed."
+        tr().inventory.goes_to_wallet
     }));
     if done {
-        body = body.kid(p("flex items-center gap-[0.6rem]").kid(dot(Tone::Positive, false, "")).kid(text(" Done. It can take a minute to show.")));
+        body = body.kid(p("flex items-center gap-[0.6rem]").kid(dot(Tone::Positive, false, "")).kid(text(tr().inventory.claim_done)));
     }
     if let ClaimPhase::Error(m) = phase {
         body = body.kid(p("text-negative").text(m));
     }
     if !has_account {
-        body = body.kid(p("text-secondary").text("Add a Rare Wallet account to claim."));
+        body = body.kid(p("text-secondary").text(tr().inventory.add_account_claim));
     }
     let s = sheet(
         SheetSpec {
-            title: if done { "Claimed".into() } else { title.into() },
-            subtitle: Some(asked_by(asker).unwrap_or_else(|| "From a Rare link".into())),
+            title: if done { tr().inventory.claimed.into() } else { title.into() },
+            subtitle: Some(asked_by(asker).unwrap_or_else(|| tr().inventory.from_link.into())),
             icon: None,
             footer,
             close: Some(Msg::Close),
@@ -156,7 +160,7 @@ pub fn claimed(phase: &mut ClaimPhase, r: ClaimResult) -> Option<Answer> {
         ClaimResult::Done(d) => *phase = ClaimPhase::Done(d),
         ClaimResult::Rejected => *phase = ClaimPhase::Idle,
         ClaimResult::Unavailable(m) => return Some(Answer::Unavailable(m)),
-        ClaimResult::Failed(m) => *phase = ClaimPhase::Error(m.filter(|s| !s.is_empty()).unwrap_or_else(|| "The claim didn't go through".into())),
+        ClaimResult::Failed(m) => *phase = ClaimPhase::Error(m.filter(|s| !s.is_empty()).unwrap_or_else(|| tr().inventory.claim_failed.into())),
     }
     None
 }
@@ -174,7 +178,7 @@ pub fn sell_view(short_name: &str, asker: &Asker, collection: Option<&str>, game
     let sub = asked_by(asker).or(collection.map(str::to_string)).unwrap_or_else(|| game_title.to_string());
     swallow(
         sheet(
-            SheetSpec { title: format!("Sell {short_name}"), subtitle: Some(sub), icon: None, footer: None, close: Some(Msg::Close), width: "34rem" },
+            SheetSpec { title: trf!(tr().inventory.sell_title, name = short_name), subtitle: Some(sub), icon: None, footer: None, close: Some(Msg::Close), width: "34rem" },
             vec![div("py-[0.6rem]").kid(slot("overlay-item-detail"))],
         )
         .attr("data-ready", if done { "done" } else { "open" }),
@@ -196,7 +200,7 @@ mod tests {
         let v = Voucher::Item { kind: 3, keys: vec!["level".into()], vals: vec!["2".into()] };
         let mut ph = ClaimPhase::Idle;
         let s = claim_view("Claim your reward", &asker, &v, &ph, true);
-        assert_eq!(s.texts(), ["Claim your reward", "ACT asked Rare", "Item kind 3 with level 2", "Goes to your Rare Wallet. You review it before anything is signed.", "Claim", "Not now"]);
+        assert_eq!(s.texts(), ["Claim your reward", "ACT asked Rare", "Item kind 3 with level 2", tr().inventory.goes_to_wallet, "Claim", "Not now"]);
         assert_eq!(s.landing().as_deref(), Some("Claim"));
         assert_eq!(s.pad("lb"), Some(&Msg::Swallow));
         assert!(claim_press(&mut ph, true));
@@ -211,7 +215,7 @@ mod tests {
         let link = Asker { req_id: None, game_title: Some("ACT".into()) };
         let s = claim_view("Trophy", &link, &Voucher::Trophy { trophy_id: 12 }, &ClaimPhase::Idle, false);
         assert_eq!(s.texts()[1], "From a Rare link");
-        assert!(s.contains_text("Goes to your Rare profile. Rare covers the network fee when your wallet is short."));
+        assert!(s.contains_text(tr().inventory.goes_to_profile));
         assert!(s.contains_text("Add a Rare Wallet account to claim."));
         assert_eq!(voucher_line(&Voucher::Stats { keys: vec!["hp".into(), "xp".into()], vals: vec!["10".into(), "5".into()] }), "hp becomes 10, xp becomes 5");
     }

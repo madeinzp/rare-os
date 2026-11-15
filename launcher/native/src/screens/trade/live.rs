@@ -5,6 +5,7 @@
 //! its transaction (router swap, perps order, close, mirror) and Confirm hands it to Rare Wallet
 //! (`crate::sign::sign_trade`) on a worker. The Market tab's `LiveMarket` hands every Trade act here.
 
+use rare_i18n::{tr, trf};
 use super::fmt::normalize_type;
 use super::model::*;
 use super::perp::{order_view, PerpData, PerpPage, Sheet};
@@ -302,7 +303,7 @@ impl Store {
         TokenData {
             now_ms: wall_ms(),
             coin_type: t.clone(),
-            token_error: (token.is_none() && self.bad(&p::tok::token(&t))).then(|| "This coin is not available right now.".to_string()),
+            token_error: (token.is_none() && self.bad(&p::tok::token(&t))).then(|| tr().trade.coin_unavailable.to_string()),
             token,
             sui: self.get(&p::tok::lean(SUI_TYPE)),
             candles: self.get::<Value>(&p::tok::candles(&t, TIMEFRAMES[tf], 300)).and_then(|v| v.get("candles").cloned()).and_then(|c| serde_json::from_value(c).ok()).unwrap_or_default(),
@@ -326,7 +327,7 @@ impl Store {
         let (preview, preview_error) = match t {
             Some(t) => {
                 let k = preview_key(market, t.side, t.margin, t.lev);
-                (self.get::<OrderPreview>(&k), self.failed.contains(&k).then(|| "Couldn't price this order right now.".to_string()))
+                (self.get::<OrderPreview>(&k), self.failed.contains(&k).then(|| tr().trade.price_order_failed.to_string()))
             }
             None => (None, None),
         };
@@ -658,7 +659,7 @@ impl TradeLive {
             "alert" => {
                 match tab.top_coin() {
                     Some((coin_type, symbol, price)) => post(AppAct::PriceAlert { coin_type, symbol, price }),
-                    None => post(AppAct::Toast("Price alerts need a price for this coin.".into())),
+                    None => post(AppAct::Toast(tr().trade.alert_needs_price.into())),
                 }
                 return true;
             }
@@ -834,7 +835,7 @@ impl TradeLive {
                 Msg::Search(q, rows) => {
                     let mut s = self.store.borrow_mut();
                     if rows.is_empty() {
-                        post(AppAct::Toast(format!("No coins found for {q}")));
+                        post(AppAct::Toast(trf!(tr().trade.no_coins_found, query = q)));
                     }
                     s.search = Some((q, rows));
                     s.ver += 1;
@@ -878,7 +879,7 @@ impl TradeLive {
                         }
                         Err(e) => {
                             log::warn!("trade build: {e}");
-                            job.phase = Phase::Failed(format!("Couldn't build this trade. {}", rare_trade::chain::plain_chain_error(&e)));
+                            job.phase = Phase::Failed(trf!(tr().trade.build_failed, error = rare_trade::chain::plain_chain_error(&e)));
                         }
                     }
                     self.show_phase(tab, cx, now);
@@ -892,11 +893,11 @@ impl TradeLive {
                             review::set_live(None);
                             close_review(tab, cx, now);
                             post(AppAct::Toast(if dry_run {
-                                "Signed as a test and checked against the network. Nothing was sent.".into()
+                                tr().trade.signed_test_note.into()
                             } else if perp {
-                                "Sent. It shows in Positions once the network has it.".into()
+                                tr().trade.sent_note.into()
                             } else {
-                                "Swap sent. Your balance updates in a moment.".into()
+                                tr().trade.swap_sent.into()
                             }));
                             self.after_trade();
                         }
@@ -905,7 +906,7 @@ impl TradeLive {
                             self.show_phase(tab, cx, now);
                         }
                         SignOutcome::Failed(e) => {
-                            job.phase = Phase::Failed(format!("The trade didn't go through: {}", rare_trade::chain::plain_chain_error(&e)));
+                            job.phase = Phase::Failed(trf!(tr().trade.trade_failed, error = rare_trade::chain::plain_chain_error(&e)));
                             self.show_phase(tab, cx, now);
                         }
                     }
@@ -1025,7 +1026,7 @@ impl TradeLive {
 
     fn build(&mut self, key: String, kind: Kind) {
         let Some(owner) = self.store.borrow().wallet().map(str::to_string) else {
-            let _ = self.tx.send(Msg::Built(key, Err("Add a wallet first.".into())));
+            let _ = self.tx.send(Msg::Built(key, Err(tr().trade.add_wallet_first_period.into())));
             return;
         };
         let (tx, n, sw) = (self.tx.clone(), self.net.clone(), self.swap_client());
@@ -1062,7 +1063,7 @@ impl TradeLive {
         };
         if stale {
             if let Some(job) = self.review.as_mut() {
-                job.phase = Phase::Failed("The active account changed. Close this and start the trade again.".into());
+                job.phase = Phase::Failed(tr().trade.account_changed.into());
             }
             self.show_phase(tab, cx, now);
             return;
@@ -1159,7 +1160,7 @@ fn review_kind(st: &Store, page: &mut dyn Page) -> Option<Kind> {
         let (from, to) = sides(&p.data, p.st.side);
         let (from, to) = (from?, to?);
         let sym = p.data.token.as_ref().map(|t| t.symbol.clone()).unwrap_or_default();
-        return Some(Kind::Swap { amount_in: p.st.ticket.amount_in(Some(&from)), coin_in: from.coin_type, coin_out: to.coin_type, title: format!("{} {sym}", if p.st.side == Side::Buy { "Buy" } else { "Sell" }) });
+        return Some(Kind::Swap { amount_in: p.st.ticket.amount_in(Some(&from)), coin_in: from.coin_type, coin_out: to.coin_type, title: trf!(if p.st.side == Side::Buy { tr().trade.buy_title } else { tr().trade.sell_title }, symbol = sym) });
     }
     if let Some(p) = a.downcast_mut::<SwapPage>() {
         if !p.st.reviewing {
@@ -1167,17 +1168,17 @@ fn review_kind(st: &Store, page: &mut dyn Page) -> Option<Kind> {
         }
         let from = p.data.coin(&p.st.from)?;
         let to = p.data.coin(&p.st.to)?;
-        return Some(Kind::Swap { amount_in: p.st.ticket.amount_in(Some(&from)), coin_in: from.coin_type, coin_out: to.coin_type.clone(), title: format!("Swap {} for {}", from.symbol, to.symbol) });
+        return Some(Kind::Swap { amount_in: p.st.ticket.amount_in(Some(&from)), coin_in: from.coin_type, coin_out: to.coin_type.clone(), title: trf!(tr().trade.swap_for, from = from.symbol, to = to.symbol) });
     }
     if let Some(p) = a.downcast_mut::<PerpPage>() {
         let sheet = p.t.sheet?;
         let m = p.data.market.as_ref()?;
         return Some(match sheet {
-            Sheet::Close => Kind::Perp { req: rare_trade::perps::PerpTxRequest::Close { market_id: m.market_id.clone(), fraction: None }, title: format!("Close {}", m.symbol) },
+            Sheet::Close => Kind::Perp { req: rare_trade::perps::PerpTxRequest::Close { market_id: m.market_id.clone(), fraction: None }, title: trf!(tr().trade.close_symbol, symbol = m.symbol) },
             Sheet::Open => {
                 let ov = order_view(&p.data, &p.t);
                 if ov.plan.needs_account {
-                    Kind::Perp { req: rare_trade::perps::PerpTxRequest::CreateAccount, title: "Set up perps".into() }
+                    Kind::Perp { req: rare_trade::perps::PerpTxRequest::CreateAccount, title: tr().trade.set_up_perps.into() }
                 } else {
                     Kind::Perp { req: rare_trade::perps::open_request(&m.market_id, side_of(p.t.side), p.t.margin, p.t.lev, ov.plan.short_by), title: format!("{} {} {}x", p.t.side.word(), m.symbol, p.t.lev) }
                 }
@@ -1187,14 +1188,14 @@ fn review_kind(st: &Store, page: &mut dyn Page) -> Option<Kind> {
     if let Some(p) = a.downcast_mut::<RootPage>() {
         let i = p.closing?;
         let pos = p.data.positions().get(i).map(|x| (x.market_id.clone(), x.symbol.clone()))?;
-        return Some(Kind::Perp { req: rare_trade::perps::PerpTxRequest::Close { market_id: pos.0, fraction: None }, title: format!("Close {}", pos.1) });
+        return Some(Kind::Perp { req: rare_trade::perps::PerpTxRequest::Close { market_id: pos.0, fraction: None }, title: trf!(tr().trade.close_symbol, symbol = pos.1) });
     }
     if let Some(p) = a.downcast_mut::<TraderPage>() {
         let i = p.mirroring?;
         let t = p.data.trades.as_ref()?.items.get(i)?.clone();
         let held = st.wallet().map(|_| st.balances().get(&normalize_type(&t.coin)).copied().unwrap_or(0));
         return match mirror_plan(&t, p.size, 9, held) {
-            MirrorPlan::Ok { buy, coin_in, coin_out, amount_in, .. } => Some(Kind::Swap { coin_in, coin_out, amount_in, title: if buy { "Mirror a buy".into() } else { "Mirror a sell".into() } }),
+            MirrorPlan::Ok { buy, coin_in, coin_out, amount_in, .. } => Some(Kind::Swap { coin_in, coin_out, amount_in, title: if buy { tr().trade.mirror_a_buy.into() } else { tr().trade.mirror_a_sell.into() } }),
             MirrorPlan::No(_) => None,
         };
     }

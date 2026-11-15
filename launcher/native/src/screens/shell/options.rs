@@ -6,6 +6,7 @@ use crate::act::Act;
 use crate::kit::{self, s, Btn as B, BtnIcon, Ui};
 use crate::page::{hash, Acts, Btn, Feedback, Fx, Page};
 use crate::state::{OptionItem, OptionsSpec, State};
+use rare_i18n::{tr, trf};
 use rare_render::focus::hints::{hint, Hint, Key};
 use rare_render::focus::Focusable;
 use rare_render::focus::Group;
@@ -56,7 +57,7 @@ impl Page for Options {
     }
 
     fn hints(&self, _st: &State) -> Vec<Hint> {
-        vec![hint(Key::B, "Close")]
+        vec![hint(Key::B, tr().common.close)]
     }
 }
 
@@ -69,53 +70,53 @@ pub fn game_options(st: &State, id: &str) -> Option<OptionsSpec> {
     // An Epic or GOG game that is not installed: Install (the drive sheet) instead of Play.
     let install = !g.installed && !running && crate::screens::game::stores::managed(g);
     let mut items = vec![if install {
-        OptionItem { label: "Install".into(), on: None, act: Act::Legacy(format!("stores:install:{id}")) }
+        OptionItem { label: tr().common.install.into(), on: None, act: Act::Legacy(format!("stores:install:{id}")) }
     } else {
-        OptionItem { label: if running { "Resume" } else if g.source == "apps" { "Open" } else { "Play" }.into(), on: None, act: Act::Launch(id.into()) }
+        OptionItem { label: if running { tr().common.resume } else if g.source == "apps" { tr().common.open } else { tr().common.play }.into(), on: None, act: Act::Launch(id.into()) }
     }];
     if running {
-        items.push(OptionItem { label: if g.source == "apps" { "Close" } else { "Quit game" }.into(), on: None, act: Act::QuitGame(id.into()) });
+        items.push(OptionItem { label: if g.source == "apps" { tr().common.close } else { tr().shell.quit_game }.into(), on: None, act: Act::QuitGame(id.into()) });
     }
     // Uninstall right under Play (Menu, Down, A), as on the game page.
     if crate::features::uninstall::can_uninstall(g) && !running {
-        let label = if g.source == "web" { "Remove".to_string() } else { crate::features::uninstall::label(g) };
+        let label = if g.source == "web" { tr().common.remove.to_string() } else { crate::features::uninstall::label(g) };
         items.push(OptionItem { label, on: None, act: Act::Uninstall(id.into()) });
     }
     if g.installed && !running && matches!(g.source.as_str(), "steam" | "epic" | "gog" | "local" | "itch") {
-        items.push(OptionItem { label: "Move".into(), on: None, act: Act::Legacy(format!("storage:move-game:{id}")) });
+        items.push(OptionItem { label: tr().shell.move_game.into(), on: None, act: Act::Legacy(format!("storage:move-game:{id}")) });
     }
-    items.push(OptionItem { label: "Details".into(), on: None, act: Act::OpenGame(id.into()) });
-    items.push(OptionItem { label: if fav { "Remove from favourites" } else { "Add to favourites" }.into(), on: None, act: Act::ToggleFav(id.into()) });
-    items.push(OptionItem { label: "Add to collection".into(), on: None, act: Act::Collections(id.into()) });
+    items.push(OptionItem { label: tr().common.details.into(), on: None, act: Act::OpenGame(id.into()) });
+    items.push(OptionItem { label: if fav { tr().shell.remove_favourite } else { tr().shell.add_favourite }.into(), on: None, act: Act::ToggleFav(id.into()) });
+    items.push(OptionItem { label: tr().shell.add_to_collection.into(), on: None, act: Act::Collections(id.into()) });
     // Copies of one game: split a wrong group, merge one the matcher missed (features/copies.rs).
     if g.source != "apps" {
         if st.copy_ids(id).len() > 1 {
-            items.push(OptionItem { label: "Not the same game".into(), on: None, act: Act::NotSame(id.into()) });
+            items.push(OptionItem { label: tr().shell.not_same_game.into(), on: None, act: Act::NotSame(id.into()) });
         }
-        items.push(OptionItem { label: "Same game as another".into(), on: None, act: Act::SameGame(id.into()) });
+        items.push(OptionItem { label: tr().shell.same_game_as_another.into(), on: None, act: Act::SameGame(id.into()) });
     }
     if g.source == "steam" {
         let act = id.strip_prefix("steam:").and_then(|a| a.parse::<u32>().ok()).map(Act::SteamGamePage).unwrap_or(Act::SteamBigPicture);
-        items.push(OptionItem { label: "Open in Steam".into(), on: None, act });
+        items.push(OptionItem { label: tr().shell.open_in_steam.into(), on: None, act });
     }
-    items.push(OptionItem { label: if st.is_hidden(id) { "Show in library" } else { "Hide from library" }.into(), on: None, act: Act::ToggleHidden(id.into()) });
-    Some(OptionsSpec { title: st.shown(g).title.clone(), sub: Some("Options".into()), items })
+    items.push(OptionItem { label: if st.is_hidden(id) { tr().shell.show_in_library } else { tr().shell.hide_from_library }.into(), on: None, act: Act::ToggleHidden(id.into()) });
+    Some(OptionsSpec { title: st.shown(g).title.clone(), sub: Some(tr().common.options.into()), items })
 }
 
 /// Add to collection: every collection with a check when the game is in it, then New collection.
 pub fn collection_options(st: &State, id: &str) -> Option<OptionsSpec> {
     let g = st.game(id)?;
     let mut items: Vec<OptionItem> = st.user.collections.iter().map(|c| OptionItem { label: c.name.clone(), on: Some(st.in_collection(&c.name, id)), act: Act::CollectionToggle(c.name.clone(), id.into()) }).collect();
-    items.push(OptionItem { label: "New collection".into(), on: None, act: Act::NewCollection(Some(id.into())) });
-    Some(OptionsSpec { title: "Add to collection".into(), sub: Some(g.title.clone()), items })
+    items.push(OptionItem { label: tr().shell.new_collection.into(), on: None, act: Act::NewCollection(Some(id.into())) });
+    Some(OptionsSpec { title: tr().shell.add_to_collection.into(), sub: Some(g.title.clone()), items })
 }
 
 /// Quit game? (the Rare menu's armed second press, as a sheet).
 pub fn quit_options(st: &State, id: &str) -> OptionsSpec {
     let name = st.run_name(id);
     OptionsSpec {
-        title: format!("Quit {name}?"),
-        sub: Some("Progress the game has not saved is lost.".into()),
-        items: vec![OptionItem { label: "Quit game".into(), on: None, act: Act::QuitNow(id.into()) }, OptionItem { label: "Keep playing".into(), on: None, act: Act::None }],
+        title: trf!(tr().shell.quit_title, name = name),
+        sub: Some(tr().shell.quit_body.into()),
+        items: vec![OptionItem { label: tr().shell.quit_game.into(), on: None, act: Act::QuitNow(id.into()) }, OptionItem { label: tr().shell.keep_playing.into(), on: None, act: Act::None }],
     }
 }

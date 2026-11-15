@@ -4,9 +4,10 @@
 //! shell shows the toast and closes the sheet. Typing a price reports `Out::Act("alert:type")`
 //! and the shell answers with `AlertSheet::set_typed`.
 
+use rare_i18n::{tr, trf};
 use super::backend::{AlertsApi, AlertsState, NewAlert};
 use super::data::types::AlertDir;
-use super::ui::{amount_text, usd_price};
+use super::ui::{amount_text, dir_word, usd_price};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
 use rare_render::input::Pad;
@@ -57,12 +58,12 @@ pub fn preset_label(p: i32) -> String {
 }
 
 pub fn pct_line(pct: f64) -> String {
-    format!("{}{}% from now", if pct >= 0.0 { "+" } else { "\u{2212}" }, amount_text(pct.abs()))
+    trf!(tr().notify.pct_from_now, sign = if pct >= 0.0 { "+" } else { "\u{2212}" }, pct = amount_text(pct.abs()))
 }
 
 /// The "Alert when" line.
 pub fn when_line(symbol: &str, dir: AlertDir, target: f64) -> String {
-    format!("{symbol} goes {} {}", dir.as_str(), usd_price(target))
+    trf!(tr().notify.goes_dir, symbol = symbol, dir = dir_word(dir), price = usd_price(target))
 }
 
 /// Parses what a person types: "$1,05" style noise stripped; positive numbers only.
@@ -115,7 +116,7 @@ impl AlertSheet {
         let root = cx.scene.root;
         let layer = cx.scene.layer(rare_render::scene::layer::SHEET);
         let _ = root;
-        let parts = sheet(cx, layer, &format!("Price alert for {symbol}"), Some("One notice when the price crosses your target."), true, false, now);
+        let parts = sheet(cx, layer, &trf!(tr().notify.alert_title, symbol = symbol), Some(tr().notify.alert_sub), true, false, now);
         let mut nav = Nav::default();
         let body = cx.scene.add(parts.body, s().col().gap(1.0 * r).done(), Node::default());
         // Stepper.
@@ -127,11 +128,11 @@ impl AlertSheet {
             nav.add(Focusable { id: b, kind: Kind::Row, group: 1, hint: hint.into(), tag, sid: String::new() });
             b
         };
-        step_btn(cx, &mut nav, "\u{2212}", T_LESS, "Less price");
+        step_btn(cx, &mut nav, "\u{2212}", T_LESS, tr().notify.less_price);
         let mid = cx.scene.add(st, s().col().items_center().grow().done(), Node::default());
         let price_text = cx.scene.add_text(cx.t, mid, s().done(), &usd_price(target), ts(r, 2.0, 2.25, 600).tracking(-0.02).tabular(), tok::FG);
         let pct_text = cx.scene.add_text(cx.t, mid, s().done(), &pct_line(pct_from(price, target)), ts(r, ty::SMALL.0, ty::SMALL.1, 400).tabular(), tok::MUTED);
-        step_btn(cx, &mut nav, "+", T_MORE, "More price");
+        step_btn(cx, &mut nav, "+", T_MORE, tr().notify.more_price);
         // Presets.
         let pr = cx.scene.add(body, s().row().gap(0.4 * r).done(), Node::default());
         let mut chips = Vec::new();
@@ -146,20 +147,20 @@ impl AlertSheet {
         }
         // Lines.
         let lines = cx.scene.add(body, s().col().done(), Node::default());
-        line(cx, lines, "Price now", &usd_price(price), false, false);
-        let when_text = line(cx, lines, "Alert when", &when_line(symbol, dir_of(price, target), target), true, true);
-        let error_text = cx.scene.add_text(cx.t, body, s().done(), "Could not set the alert. Try again in a moment.", ts(r, ty::SMALL.0, ty::SMALL.1, 400), tok::NEG);
+        line(cx, lines, tr().notify.price_now, &usd_price(price), false, false);
+        let when_text = line(cx, lines, tr().notify.alert_when, &when_line(symbol, dir_of(price, target), target), true, true);
+        let error_text = cx.scene.add_text(cx.t, body, s().done(), tr().notify.alert_failed, ts(r, ty::SMALL.0, ty::SMALL.1, 400), tok::NEG);
         cx.scene.n(error_text).hidden = true;
         // Footer.
         let f = parts.footer.unwrap();
-        let mut save = button(cx, f, "Set alert", Variant::Primary, Sz::Lg, false).hint("Set alert").tag(T_SAVE).group(3);
+        let mut save = button(cx, f, tr().notify.set_alert, Variant::Primary, Sz::Lg, false).hint(tr().notify.set_alert).tag(T_SAVE).group(3);
         let mut st_ = cx.scene.style(save.id);
         st_.flex_grow = 1.0;
         cx.scene.set_style(save.id, st_);
         save.group = 3;
         let save_id = nav.add(save);
-        nav.add(button(cx, f, "Type a price", Variant::Secondary, Sz::Lg, false).hint("Type a price").tag(T_TYPE).group(3));
-        nav.add(button(cx, f, "Cancel", Variant::Secondary, Sz::Lg, false).tag(T_CANCEL).group(3));
+        nav.add(button(cx, f, tr().notify.type_price, Variant::Secondary, Sz::Lg, false).hint(tr().notify.type_price).tag(T_TYPE).group(3));
+        nav.add(button(cx, f, tr().common.cancel, Variant::Secondary, Sz::Lg, false).tag(T_CANCEL).group(3));
         nav.focus(cx.scene, save_id, now, false);
         let state = AlertsState::default();
         AlertSheet { nav, symbol: symbol.into(), coin_type: coin_type.into(), price, target, addr, busy: false, error: None, price_text, pct_text, chips, when_text, error_text, save: save_id, api, state }
@@ -167,7 +168,7 @@ impl AlertSheet {
 
     /// Hint-bar entries (useSheetPad): A Select, LT Lower, RT Higher, B Cancel.
     pub fn hints() -> [(&'static str, &'static str); 4] {
-        [("a", "Select"), ("lt", "Lower"), ("rt", "Higher"), ("b", "Cancel")]
+        [("a", tr().common.select), ("lt", tr().notify.lower), ("rt", tr().notify.higher), ("b", tr().common.cancel)]
     }
 
     fn set_target(&mut self, cx: &mut Cx, t: f64, now: f64) {
@@ -204,9 +205,9 @@ impl AlertSheet {
         let res = self.api.add(&a).map(|_| ());
         self.busy = false;
         match res {
-            Ok(()) => Out::Act(format!("toast:Price alert set: {} {} {}", self.symbol, a.dir.as_str(), usd_price(self.target))),
+            Ok(()) => Out::Act(format!("toast:{}", trf!(tr().notify.alert_set_toast, symbol = self.symbol, dir = dir_word(a.dir), price = usd_price(self.target)))),
             Err(_) => {
-                self.error = Some("Could not set the alert. Try again in a moment.".into());
+                self.error = Some(tr().notify.alert_failed.into());
                 cx.scene.n(self.error_text).hidden = false;
                 Out::None
             }

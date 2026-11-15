@@ -22,6 +22,7 @@ use rare_market::inventory::trade::{Quote, RealTrade, TradeApi};
 use rare_market::net::Net;
 use serde_json::{json, Value};
 use std::sync::{Arc, Mutex};
+use rare_i18n::{tr, trf};
 
 // ---------------------------------------------------------------- state
 
@@ -682,7 +683,7 @@ fn open_collection(fx: &mut Fx, id: String) {
                 st.set_tab(Tab::Market, false);
                 crate::screens::market::live::open_on(format!("collection:{slug}"));
             }
-            None => st.toast("That collection isn't on Rare.", Tone::Info, now),
+            None => st.toast(tr().features_more.localapi_no_collection, Tone::Info, now),
         })
     });
 }
@@ -752,7 +753,7 @@ fn prepare_sheet(fx: &mut Fx, req: Option<u64>, who: Who, f: impl FnOnce(&GameIn
             }
             Ok(Prepared::Answer(v)) => match req {
                 Some(id) => reply_ok(id, v),
-                None => st.toast(v["reason"].as_str().unwrap_or("That isn't available").to_string(), Tone::Info, now),
+                None => st.toast(v["reason"].as_str().unwrap_or(tr().features_more.localapi_unavailable).to_string(), Tone::Info, now),
             },
             Err(Fail(c, m)) => match req {
                 Some(id) => reply_err(id, c, m),
@@ -1089,60 +1090,60 @@ pub fn view(s: &Sheet) -> El<Msg> {
     let mut go_off = false;
     match &s.kind {
         Kind::Claim { voucher, .. } => {
-            title = if matches!(&s.phase, Phase::Done(v) if v["status"].as_str() == Some("claimed")) { "Claimed".to_string() } else { voucher.title().to_string() };
-            sub = Some("From a Rare link".to_string());
+            title = if matches!(&s.phase, Phase::Done(v) if v["status"].as_str() == Some("claimed")) { tr().features_more.localapi_claimed.to_string() } else { voucher.title().to_string() };
+            sub = Some(tr().features_more.localapi_from_link.to_string());
             body = body.kid(p("text-body").text(voucher.what()));
             body = body.kid(p("text-secondary").text(if matches!(voucher, super::claim::Voucher::Trophy { .. }) {
-                "Goes to your Rare profile. Rare covers the network fee when your wallet is short."
+                tr().features_more.localapi_goes_profile
             } else {
-                "Goes to your Rare Wallet. You review it before anything is signed."
+                tr().features_more.localapi_goes_wallet
             }));
-            go = "Claim".into();
+            go = tr().features_more.localapi_claim.into();
             other = None;
         }
         Kind::Sell { item, list, price, floor, quote } => {
-            title = format!("Sell {}", item.name);
+            title = trf!(tr().features_more.localapi_sell_title, name = item.name);
             sub = Some(item.collection.as_ref().map(|c| c.name.clone()).unwrap_or_else(|| s.game_title.clone()));
             let list_price = price.or(*floor);
             if *list {
                 body = body.kid(p("text-body").text(match list_price {
-                    Some(m) => format!("List for {}", sui(Some(m as u128))),
-                    None => "Set a price in the marketplace to list this item.".into(),
+                    Some(m) => trf!(tr().features_more.localapi_list_for, price = sui(Some(m as u128))),
+                    None => tr().features_more.localapi_set_price.into(),
                 }));
                 go_off = list_price.is_none();
-                go = "List".into();
-                other = quote_label(quote).map(|_| "Sell to the best offer".to_string());
+                go = tr().common.list.into();
+                other = quote_label(quote).map(|_| tr().features_more.localapi_sell_best.to_string());
             } else {
                 match quote {
                     Some(q) => {
-                        body = body.kid(p("text-body").text(format!("Best offer {}", sui(mist(&Some(q.offer.price_mist.clone())).map(u128::from)))));
-                        body = body.kid(p("text-secondary").text(format!("You receive {}", sui(Some(q.net_mist.max(0) as u128)))));
+                        body = body.kid(p("text-body").text(trf!(tr().features_more.localapi_best_offer, price = sui(mist(&Some(q.offer.price_mist.clone())).map(u128::from)))));
+                        body = body.kid(p("text-secondary").text(trf!(tr().features_more.localapi_you_receive, price = sui(Some(q.net_mist.max(0) as u128)))));
                         if let Some(b) = &q.blocked {
                             body = body.kid(p("text-negative").text(b.clone()));
                             go_off = true;
                         } else if q.sponsored {
-                            body = body.kid(p("text-secondary").text("Rare covers the network fee."));
+                            body = body.kid(p("text-secondary").text(tr().features_more.localapi_fee_covered));
                         }
                     }
                     None => {
-                        body = body.kid(p("text-body").text("No offers on this item right now."));
+                        body = body.kid(p("text-body").text(tr().features_more.localapi_no_offers));
                         go_off = true;
                     }
                 }
                 go = match quote {
-                    Some(q) => format!("Sell for {}", sui(Some(q.net_mist.max(0) as u128))),
-                    None => "Sell".into(),
+                    Some(q) => trf!(tr().features_more.localapi_sell_for, price = sui(Some(q.net_mist.max(0) as u128))),
+                    None => tr().common.sell.into(),
                 };
-                other = list_price.map(|m| format!("List for {}", sui(Some(m as u128))));
+                other = list_price.map(|m| trf!(tr().features_more.localapi_list_for, price = sui(Some(m as u128))));
             }
         }
         Kind::Buy { item, listing } => {
-            title = format!("Buy {}", item.name);
+            title = trf!(tr().features_more.localapi_buy_title, name = item.name);
             sub = Some(item.collection.as_ref().map(|c| c.name.clone()).unwrap_or_else(|| s.game_title.clone()));
             let price = mist(&listing.all_in_mist).or_else(|| listing.price_mist.parse().ok());
-            body = body.kid(p("text-body").text(format!("Price {}", sui(price.map(u128::from)))));
-            body = body.kid(p("text-secondary").text("You review it before anything is signed."));
-            go = "Buy".into();
+            body = body.kid(p("text-body").text(trf!(tr().features_more.localapi_price, price = sui(price.map(u128::from)))));
+            body = body.kid(p("text-secondary").text(tr().features_more.localapi_you_review));
+            go = tr().common.buy.into();
             other = None;
         }
     }
@@ -1151,26 +1152,26 @@ pub fn view(s: &Sheet) -> El<Msg> {
     }
     match &s.phase {
         Phase::Error(m) => body = body.kid(p("text-negative").text(m.clone())),
-        Phase::Done(v) if v["status"].as_str() == Some("unavailable") => body = body.kid(p("text-negative").text(v["reason"].as_str().unwrap_or("That isn't available").to_string())),
+        Phase::Done(v) if v["status"].as_str() == Some("unavailable") => body = body.kid(p("text-negative").text(v["reason"].as_str().unwrap_or(tr().features_more.localapi_unavailable).to_string())),
         Phase::Done(v) => {
             let word = match v["status"].as_str() {
-                Some("sold") => "Sold",
-                Some("listed") => "Listed",
-                Some("claimed") => "Done",
-                _ => "Bought",
+                Some("sold") => tr().features_more.localapi_done_sold,
+                Some("listed") => tr().features_more.localapi_done_listed,
+                Some("claimed") => tr().features_more.localapi_done_claimed,
+                _ => tr().features_more.localapi_done_bought,
             };
-            body = body.kid(p("flex items-center gap-[0.6rem]").kid(dot(UiTone::Positive, false, "")).kid(text(format!(" {word}. It can take a minute to show."))));
+            body = body.kid(p("flex items-center gap-[0.6rem]").kid(dot(UiTone::Positive, false, "")).kid(text(format!(" {word}"))));
         }
         _ => {}
     }
     let mut footer = Vec::new();
     if !done {
-        let label = if busy { "Waiting for approval".to_string() } else if matches!(s.phase, Phase::Error(_)) { "Try again".to_string() } else { go };
-        footer.push(button_el(ButtonSpec::new(&label).v(BVariant::Primary).size(BSize::Md).def(true).class("flex-1").disabled(busy || go_off).hint("Confirm"), Some(Msg::Go)));
+        let label = if busy { tr().features_more.localapi_waiting.to_string() } else if matches!(s.phase, Phase::Error(_)) { tr().common.try_again.to_string() } else { go };
+        footer.push(button_el(ButtonSpec::new(&label).v(BVariant::Primary).size(BSize::Md).def(true).class("flex-1").disabled(busy || go_off).hint(tr().common.confirm), Some(Msg::Go)));
         if let Some(o) = other {
             footer.push(button_el(ButtonSpec::new(&o).size(BSize::Md).disabled(busy), Some(Msg::Other)));
         }
-        footer.push(button_el(ButtonSpec::new("Not now").size(BSize::Md), Some(Msg::Close)));
+        footer.push(button_el(ButtonSpec::new(tr().features_more.localapi_not_now).size(BSize::Md), Some(Msg::Close)));
     }
     let mut el = sheet(SheetSpec { title, subtitle: sub, icon: None, footer: (!footer.is_empty()).then_some(footer), close: Some(Msg::Close), width: "34rem" }, vec![body]);
     for b in ["lb", "rb", "lt", "rt", "x", "y", "select", "start", "qam"] {
@@ -1293,7 +1294,7 @@ fn go(st: &mut State, fx: &mut Fx) {
         return;
     }
     let Some(acct) = crate::sign::account().filter(|a| a.signer) else {
-        sh.phase = Phase::Error(crate::sign::NO_SIGNER.into());
+        sh.phase = Phase::Error(crate::sign::no_signer().into());
         st.feat.localapi.ver += 1;
         return;
     };

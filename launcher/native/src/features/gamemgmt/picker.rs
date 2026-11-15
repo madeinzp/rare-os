@@ -14,6 +14,7 @@ use rare_render::focus::{Focusable, Group};
 use rare_render::view::{key, El, Motion};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use rare_i18n::{tr, trf};
 
 /// What the picker is for.
 #[derive(Clone, Debug, PartialEq)]
@@ -70,15 +71,15 @@ const IMAGE_EXT: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
 fn label_of(p: &Path, mode: &Mode) -> Option<&'static str> {
     match mode {
         Mode::AddGame => match kind_of(p)? {
-            PickKind::Exe => Some("Windows game"),
-            PickKind::AppImage => Some("AppImage"),
-            PickKind::Script => Some("Script"),
-            PickKind::Program => Some("Linux game"),
+            PickKind::Exe => Some(tr().features_more.pick_windows_game),
+            PickKind::AppImage => Some(tr().features_more.pick_appimage),
+            PickKind::Script => Some(tr().features_more.pick_script),
+            PickKind::Program => Some(tr().features_more.pick_linux_game),
             PickKind::Folder => None,
         },
         Mode::Image { .. } => {
             let ext = p.extension()?.to_string_lossy().to_lowercase();
-            IMAGE_EXT.contains(&ext.as_str()).then_some("Picture")
+            IMAGE_EXT.contains(&ext.as_str()).then_some(tr().features_more.pick_picture)
         }
         Mode::Folder => None,
     }
@@ -89,22 +90,22 @@ fn places(mode: &Mode) -> Vec<Entry> {
     use rare_library::storage::DriveKind;
     let home = rare_core::paths::home();
     let drives: Vec<_> = rare_library::storage::drives().into_iter().filter(|d| d.kind != DriveKind::Internal).collect();
-    let drive_name = |d: &rare_library::storage::Drive| if d.kind == DriveKind::Sd { "SD card".to_string() } else { d.label.clone() };
+    let drive_name = |d: &rare_library::storage::Drive| if d.kind == DriveKind::Sd { tr().features_more.sd_card.to_string() } else { d.label.clone() };
     let pretty = |p: &Path| crate::data::model::pretty_path(&p.to_string_lossy());
     let place = |name: String, p: PathBuf| {
-        let sub = if p.is_dir() { pretty(&p) } else { format!("{} (made when you pick it)", pretty(&p)) };
+        let sub = if p.is_dir() { pretty(&p) } else { trf!(tr().features_more.pick_made_when_picked, path = pretty(&p)) };
         Entry { name, path: p, kind: Kind::Place, sub: Some(sub) }
     };
     let mut v = Vec::new();
     if *mode == Mode::Folder {
-        v.push(place("Games on this device".into(), home.join("Games")));
+        v.push(place(tr().features_more.pick_games_on_device.into(), home.join("Games")));
         for d in &drives {
-            v.push(place(format!("Games on {}", if d.kind == DriveKind::Sd { "the SD card".to_string() } else { d.label.clone() }), d.mount.join("Games")));
+            v.push(place(if d.kind == DriveKind::Sd { tr().features_more.pick_games_on_sd.to_string() } else { trf!(tr().features_more.pick_games_on_drive, drive = d.label) }, d.mount.join("Games")));
         }
-        v.push(place("Home folder".into(), home.clone()));
+        v.push(place(tr().features_more.pick_home_folder.into(), home.clone()));
     } else {
-        v.push(place("Home folder".into(), home.clone()));
-        for (name, sub) in [("Games", "Games"), ("Downloads", "Downloads"), ("Pictures", "Pictures"), ("Desktop", "Desktop")] {
+        v.push(place(tr().features_more.pick_home_folder.into(), home.clone()));
+        for (name, sub) in [(tr().common.games, "Games"), (tr().common.downloads, "Downloads"), (tr().features_more.pick_pictures, "Pictures"), (tr().features_more.pick_desktop, "Desktop")] {
             let p = home.join(sub);
             if p.is_dir() {
                 v.push(place(name.into(), p));
@@ -139,8 +140,8 @@ fn list(dir: &Path, mode: &Mode) -> Vec<Entry> {
     files.sort_by(by_name);
     let mut v = Vec::new();
     match mode {
-        Mode::AddGame if rare_library::local::pick_program(dir).is_some() => v.push(entry("Add this folder as a game", dir.to_path_buf(), Kind::ThisFolder)),
-        Mode::Folder => v.push(entry("Use this folder", dir.to_path_buf(), Kind::UseFolder)),
+        Mode::AddGame if rare_library::local::pick_program(dir).is_some() => v.push(entry(tr().features_more.pick_add_folder, dir.to_path_buf(), Kind::ThisFolder)),
+        Mode::Folder => v.push(entry(tr().features_more.pick_use_folder, dir.to_path_buf(), Kind::UseFolder)),
         _ => {}
     }
     // Files first: they are what the player came for.
@@ -179,11 +180,11 @@ impl Picker {
 
     fn title(&self) -> &'static str {
         match self.mode {
-            Mode::AddGame => "Add a game",
-            Mode::Image { kind: ArtKind::Cover, .. } => "Pick a cover",
-            Mode::Image { kind: ArtKind::Hero, .. } => "Pick a hero image",
-            Mode::Image { kind: ArtKind::Logo, .. } => "Pick a logo",
-            Mode::Folder => "Pick a games folder",
+            Mode::AddGame => tr().features_more.pick_title_add,
+            Mode::Image { kind: ArtKind::Cover, .. } => tr().features_more.pick_title_cover,
+            Mode::Image { kind: ArtKind::Hero, .. } => tr().features_more.pick_title_hero,
+            Mode::Image { kind: ArtKind::Logo, .. } => tr().features_more.pick_title_logo,
+            Mode::Folder => tr().features_more.pick_title_folder,
         }
     }
 
@@ -192,7 +193,7 @@ impl Picker {
             Mode::AddGame => {
                 self.busy = true;
                 self.ver += 1;
-                st.toast("Adding the game and looking for its art", Tone::Info, rare_render::clock::secs());
+                st.toast(tr().features_more.pick_adding, Tone::Info, rare_render::clock::secs());
                 fx.spawn(move |b| {
                     let r = b.add_game(&e.path);
                     let lib = r.is_ok().then(|| b.scan().ok()).flatten();
@@ -201,7 +202,7 @@ impl Picker {
                             if let Some(l) = lib {
                                 st.set_library(l);
                             }
-                            st.toast(format!("Added {title}"), Tone::Info, now);
+                            st.toast(trf!(tr().features_more.pick_added, title = title), Tone::Info, now);
                             if st.overlay == Some(Overlay::Other(super::PICK)) {
                                 st.open(Some(Overlay::Game(id)));
                             }
@@ -231,9 +232,9 @@ impl Page for Picker {
     fn view(&mut self, ui: &mut Ui, _st: &State, acts: &mut Acts) -> El {
         let sub = match &self.dir {
             None => match self.mode {
-                Mode::AddGame => "Pick a Windows .exe, an AppImage, a .sh script, or a game's folder".to_string(),
-                Mode::Image { .. } => "Pick a PNG, JPG or WebP picture".to_string(),
-                Mode::Folder => "Rare looks for one game in each folder inside it".to_string(),
+                Mode::AddGame => tr().features_more.pick_sub_add.to_string(),
+                Mode::Image { .. } => tr().features_more.pick_sub_image.to_string(),
+                Mode::Folder => tr().features_more.pick_sub_folder.to_string(),
             },
             Some(d) => crate::data::model::pretty_path(&d.to_string_lossy()),
         };
@@ -249,9 +250,9 @@ impl Page for Picker {
             self.tags.push(tag);
             let (icon, right) = match &e.kind {
                 Kind::Place => ("folder", String::new()),
-                Kind::Dir => ("folder", "Folder".into()),
+                Kind::Dir => ("folder", tr().features_more.pick_folder.into()),
                 Kind::ThisFolder | Kind::UseFolder => ("check", String::new()),
-                Kind::File("Picture") => ("images", "Picture".into()),
+                Kind::File(l) if *l == tr().features_more.pick_picture => ("images", l.to_string()),
                 Kind::File(l) => ("play", l.to_string()),
             };
             let strong = matches!(e.kind, Kind::ThisFolder | Kind::UseFolder | Kind::File(_));
@@ -265,16 +266,16 @@ impl Page for Picker {
                 kit::cell(ui, true).child(ui.text(right, T::new(Ty::Small).c(tok::MUTED))),
             ];
             let hint_a = match e.kind {
-                Kind::Place | Kind::Dir => "Open",
-                _ => "Pick",
+                Kind::Place | Kind::Dir => tr().common.open,
+                _ => tr().features_more.pick,
             };
             rows.push(kit::row(ui, &cols, tag, Some(hint_a), cells).key(key(&e.path)));
         }
         if rows.is_empty() {
             let note = match self.mode {
-                Mode::AddGame => "Nothing here starts a game. B goes back a folder.",
-                Mode::Image { .. } => "No pictures here. B goes back a folder.",
-                Mode::Folder => "No folders in here. B goes back a folder.",
+                Mode::AddGame => tr().features_more.pick_empty_add,
+                Mode::Image { .. } => tr().features_more.pick_empty_image,
+                Mode::Folder => tr().features_more.pick_empty_folder,
             };
             rows.push(ui.text_s(s().py(1.0), note, T::new(Ty::Body).c(tok::MUTED)));
         }
@@ -320,7 +321,7 @@ impl Page for Picker {
     }
 
     fn hints(&self, _st: &State) -> Vec<Hint> {
-        vec![hint(Key::B, if self.dir.is_some() { "Up a folder" } else { "Close" })]
+        vec![hint(Key::B, if self.dir.is_some() { tr().features_more.pick_up_folder } else { tr().common.close })]
     }
 }
 

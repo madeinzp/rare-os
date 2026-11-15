@@ -19,6 +19,7 @@ use rare_render::focus::{Focusable, Group};
 use rare_render::view::El;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use rare_i18n::{tr, trf};
 
 pub const KIND: &str = "uninstall";
 
@@ -67,8 +68,8 @@ pub fn can_uninstall(g: &crate::data::model::Game) -> bool {
 /// The button's label on the game page: "Uninstall (12.3 GB)" when the size is known.
 pub fn label(g: &crate::data::model::Game) -> String {
     match fmt_size(g.size_bytes) {
-        z if z.is_empty() => "Uninstall".into(),
-        z => format!("Uninstall ({z})"),
+        z if z.is_empty() => tr().common.uninstall.into(),
+        z => trf!(tr().features_more.uninstall_button_size, size = z),
     }
 }
 
@@ -128,47 +129,47 @@ fn size(b: u64) -> String {
 /// The sheet's sentence about the saves.
 fn saves_line(kind: &str, sz: u64) -> String {
     match kind {
-        "web" => format!("Its saves on this device ({}). Keep them to pick up where you left off if you add it again.", size(sz)),
-        "app" => format!("Its settings and data ({}). Keep them to have them back if you install it again.", size(sz)),
-        _ => format!("Its saves and settings live in its Windows folder ({}). Keep them to pick up where you left off if you install it again.", size(sz)),
+        "web" => trf!(tr().features_more.uninstall_saves_web, size = size(sz)),
+        "app" => trf!(tr().features_more.uninstall_saves_app, size = size(sz)),
+        _ => trf!(tr().features_more.uninstall_saves_windows, size = size(sz)),
     }
 }
 
 impl UninstallPage {
     fn body(&self, ui: &mut Ui, acts: &mut Acts, ask: &Ask) -> (String, Option<String>, Vec<El>, Vec<El>) {
-        let title = format!("Uninstall {}?", ask.title);
+        let title = trf!(tr().features_more.uninstall_title, title = ask.title);
         let muted = |ui: &mut Ui, t: String| ui.text_s(s().wp(1.0), t, T::new(Ty::Body).c(tok::MUTED).wrap());
         match self.sh.phase() {
             Phase::Loading => {
-                let cancel = kit::button(ui, B::new("Cancel", acts.tag(Act::Local(CANCEL))).def(true).hint("Cancel"));
-                (title, None, vec![muted(ui, "Checking its size".into())], vec![cancel])
+                let cancel = kit::button(ui, B::new(tr().common.cancel, acts.tag(Act::Local(CANCEL))).def(true).hint(tr().common.cancel));
+                (title, None, vec![muted(ui, tr().features_more.uninstall_checking.into())], vec![cancel])
             }
             Phase::Failed(e) => {
-                let close = kit::button(ui, B::new("Close", acts.tag(Act::Local(CANCEL))).def(true).hint("Close"));
-                (format!("Couldn't uninstall {}", ask.title), None, vec![muted(ui, e)], vec![close])
+                let close = kit::button(ui, B::new(tr().common.close, acts.tag(Act::Local(CANCEL))).def(true).hint(tr().common.close));
+                (trf!(tr().features_more.uninstall_failed_title, title = ask.title), None, vec![muted(ui, e)], vec![close])
             }
             Phase::Ready(info) => {
-                let sub = info.free.map(|f| format!("{} free on this device", size(f)));
+                let sub = info.free.map(|f| trf!(tr().features_more.uninstall_free, size = size(f)));
                 let mut body = Vec::new();
                 let n = frees(&info, self.keep);
                 let line = if info.steam {
-                    format!("This frees {}. Saves in Steam Cloud are kept. Steam asks you to confirm.", size(n))
+                    trf!(tr().features_more.uninstall_frees_steam, size = size(n))
                 } else if n > 0 {
-                    format!("This frees {}.", size(n))
+                    trf!(tr().features_more.uninstall_frees, size = size(n))
                 } else {
-                    "It leaves your library.".into()
+                    tr().features_more.uninstall_leaves.into()
                 };
                 body.push(ui.text_s(s().wp(1.0), line, T::new(Ty::Body).wrap()));
                 if let Some(p) = &info.place {
-                    body.push(ui.text_s(s().wp(1.0).mt(0.35), format!("Installed in {}", crate::data::model::pretty_path(p)), T::new(Ty::Small).c(tok::MUTED).trunc()));
+                    body.push(ui.text_s(s().wp(1.0).mt(0.35), trf!(tr().features_more.uninstall_installed_in, path = crate::data::model::pretty_path(p)), T::new(Ty::Small).c(tok::MUTED).trunc()));
                 }
                 if let Some((sz, kind)) = info.saves {
                     body.push(ui.text_s(s().wp(1.0).mt(1.0), saves_line(kind, sz), T::new(Ty::Small).c(tok::MUTED).wrap()));
-                    let keep = kit::button(ui, B::new("Keep saves", acts.tag(Act::Local(KEEP))).full_start().gap(0.75).icon(BtnIcon::Check(self.keep)).hint(if self.keep { "Delete them too" } else { "Keep them" }));
+                    let keep = kit::button(ui, B::new(tr().features_more.uninstall_keep_saves, acts.tag(Act::Local(KEEP))).full_start().gap(0.75).icon(BtnIcon::Check(self.keep)).hint(if self.keep { tr().features_more.uninstall_delete_them } else { tr().features_more.uninstall_keep_them }));
                     body.push(ui.bx(s().col().mt(0.6)).group(Group::new("uninstall-keep", [0.0; 4])).child(keep));
                 }
-                let go = kit::button(ui, B::new("Uninstall", acts.tag(Act::Local(GO))).primary().hint("Uninstall"));
-                let cancel = kit::button(ui, B::new("Cancel", acts.tag(Act::Local(CANCEL))).def(true).hint("Cancel"));
+                let go = kit::button(ui, B::new(tr().common.uninstall, acts.tag(Act::Local(GO))).primary().hint(tr().common.uninstall));
+                let cancel = kit::button(ui, B::new(tr().common.cancel, acts.tag(Act::Local(CANCEL))).def(true).hint(tr().common.cancel));
                 (title, sub, body, vec![go, cancel])
             }
             Phase::Working { steam } => {
@@ -183,14 +184,14 @@ impl UninstallPage {
                     ui.bx(s().wp(1.0).h_px(3.0)).bg(tok::fg(0.15)).radius(ui.r(0.15)).clip().child(seg)
                 };
                 let text = if steam {
-                    "Confirm in Steam. Rare comes back when Steam is done.".to_string()
+                    tr().features_more.uninstall_confirm_steam.to_string()
                 } else if total > 0 {
-                    format!("Removed {} of {}", size(done), size(total))
+                    trf!(tr().features_more.uninstall_removed, done = size(done), total = size(total))
                 } else {
-                    "Removing".to_string()
+                    tr().features_more.uninstall_removing.to_string()
                 };
-                let hide = kit::button(ui, B::new("Hide", acts.tag(Act::Local(HIDE))).def(true).hint("Hide"));
-                (format!("Uninstalling {}", ask.title), None, vec![track, ui.text_s(s().mt(0.6), text, T::new(Ty::Small).c(tok::MUTED))], vec![hide])
+                let hide = kit::button(ui, B::new(tr().features_more.uninstall_hide, acts.tag(Act::Local(HIDE))).def(true).hint(tr().features_more.uninstall_hide));
+                (trf!(tr().features_more.uninstall_working_title, title = ask.title), None, vec![track, ui.text_s(s().mt(0.6), text, T::new(Ty::Small).c(tok::MUTED))], vec![hide])
             }
         }
     }
@@ -226,14 +227,14 @@ impl UninstallPage {
                         st.close();
                     }
                     *ASK.lock().unwrap() = None;
-                    let msg = if freed > 0 { format!("{} uninstalled. Freed {}.", ask.title, size(freed)) } else { format!("{} uninstalled.", ask.title) };
+                    let msg = if freed > 0 { trf!(tr().features_more.uninstall_done_freed, title = ask.title, size = size(freed)) } else { trf!(tr().features_more.uninstall_done, title = ask.title) };
                     st.toast(msg, Tone::Info, now);
                 }
                 Err(e) => {
                     log::warn!("uninstall {}: {e}", ask.id);
                     sh.set(Phase::Failed(e.clone()));
                     if st.overlay != Some(Overlay::Other(KIND)) {
-                        st.toast(format!("Couldn't uninstall {}. {e}", ask.title), Tone::Error, now);
+                        st.toast(trf!(tr().features_more.uninstall_failed_toast, title = ask.title, error = e), Tone::Error, now);
                     }
                 }
             })
@@ -292,7 +293,7 @@ impl Page for UninstallPage {
                 Box::new(move |_, _| {
                     sh.set(match r {
                         Ok(i) => Phase::Ready(i),
-                        Err(e) if e == crate::data::backend::NOT_WIRED => Phase::Failed("Uninstalling isn't available on this device yet.".into()),
+                        Err(e) if e == crate::data::backend::NOT_WIRED => Phase::Failed(tr().features_more.uninstall_not_wired.into()),
                         Err(e) => Phase::Failed(e),
                     })
                 })
@@ -342,7 +343,7 @@ impl Page for UninstallPage {
     }
 
     fn hints(&self, _st: &State) -> Vec<Hint> {
-        vec![hint(Key::B, if matches!(self.sh.phase(), Phase::Working { .. }) { "Hide" } else { "Cancel" })]
+        vec![hint(Key::B, if matches!(self.sh.phase(), Phase::Working { .. }) { tr().features_more.uninstall_hide } else { tr().common.cancel })]
     }
 }
 

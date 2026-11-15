@@ -2,6 +2,7 @@
 //! (portfolio, trending, top movers, new launches, perps), Perps (trade/PerpsSection.tsx) and
 //! Positions (trade/PositionsSection.tsx). Traders lives in `traders`.
 
+use rare_i18n::{tr, trf};
 use super::cards::{perp_card, token_card, token_list_row, token_meta};
 use super::fmt::*;
 use super::model::*;
@@ -15,7 +16,9 @@ use rare_render::view::El;
 use rare_render::Id;
 
 /// The four sections along the Market tab's front pages (market/area.ts).
-pub const MARKET_SECTIONS: [&str; 4] = ["Collections", "Coins", "Perps", "Traders"];
+pub fn market_sections() -> [&'static str; 4] {
+    [tr().trade.collections, tr().trade.coins, tr().trade.perps, tr().trade.traders]
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Section {
@@ -192,15 +195,15 @@ impl RootPage {
 
     pub fn page_hints(&self) -> Vec<(&'static str, String)> {
         if self.closing.is_some() {
-            return vec![("a", "Select".into()), ("b", "Cancel".into())];
+            return vec![("a", tr().common.select.into()), ("b", tr().common.cancel.into())];
         }
-        let mut h = vec![("a", "Open".to_string())];
+        let mut h = vec![("a", tr().common.open.to_string())];
         if self.section == Section::Traders {
-            h.push(("x", if self.board.0 == super::traders::Window::D7 { "30 days" } else { "7 days" }.into()));
+            h.push(("x", if self.board.0 == super::traders::Window::D7 { tr().trade.days_30 } else { tr().trade.days_7 }.into()));
         }
-        h.push(("ltrt", "Sections".into()));
-        h.push(("y", "Search".into()));
-        h.push(("qam", "Quick settings".into()));
+        h.push(("ltrt", tr().common.sections.into()));
+        h.push(("y", tr().common.search.into()));
+        h.push(("qam", tr().common.quick_settings.into()));
         h
     }
 
@@ -318,7 +321,7 @@ fn step_out(moved: bool) -> Out {
 
 /// RootPage: the sections and the search button over the section's page.
 pub fn view(ui: &mut Ui, d: &RootData, sec: Section, closing: Option<usize>, board: (super::traders::Window, super::traders::Sort)) -> El {
-    let items: Vec<TabItem> = MARKET_SECTIONS.iter().map(|l| TabItem::new(*l)).collect();
+    let items: Vec<TabItem> = market_sections().iter().map(|l| TabItem::new(*l)).collect();
     let lt = glyph(ui, Pb::Lt, GSize::Sm);
     let rt = glyph(ui, Pb::Rt, GSize::Sm);
     let tabs_el = tabs(ui, s(), &items, sec.tab(), true);
@@ -330,8 +333,8 @@ pub fn view(ui: &mut Ui, d: &RootData, sec: Section, closing: Option<usize>, boa
         .border(1.0, tok::BORDER_LIGHT)
         .radius(ui.r(0.25))
         .child(search_icon)
-        .child(ui.text("Search any coin", T::new(Ty::Small).c(tok::MUTED)).focus_color(tok::FG));
-    let search = fill_nav(search, T_SEARCH, Some("Search coins"), None, false);
+        .child(ui.text(tr().trade.search_any_coin_short, T::new(Ty::Small).c(tok::MUTED)).focus_color(tok::FG));
+    let search = fill_nav(search, T_SEARCH, Some(tr().trade.search_coins), None, false);
     let head = ui.bx(s().row().items_center().gap(2.0).px(2.5).pb(1.0)).child(sections).child(ui.bx(s().ml_auto()).group(crate::kit::group("tr-search", false)).child(search));
     let body = match sec {
         Section::Home => home(ui, d),
@@ -355,7 +358,7 @@ fn home(ui: &mut Ui, d: &RootData) -> El {
     let mut summary = ui.bx(s().col().min0());
     match &d.wallet {
         Some(w) => {
-            summary = summary.child(ui.text("Portfolio", T::new(Ty::Small).c(tok::MUTED)));
+            summary = summary.child(ui.text(tr().trade.portfolio, T::new(Ty::Small).c(tok::MUTED)));
             let mut line = ui.bx(s().row().items_end().gap(0.75).mt(0.25));
             match &d.portfolio {
                 Some(p) => {
@@ -369,23 +372,23 @@ fn home(ui: &mut Ui, d: &RootData) -> El {
                     if let Some(n) = num(ui, s(), NumKind::Change, Some(p.change24h_pct), NumOptions::default(), T::new(Ty::Small).c(tok::MUTED), false) {
                         today = today.child(n);
                     }
-                    line = line.child(today.child(ui.text("today", T::new(Ty::Small).c(tok::MUTED))));
+                    line = line.child(today.child(ui.text(tr().trade.today_lower, T::new(Ty::Small).c(tok::MUTED))));
                 }
                 None => {
-                    line = line.child(ui.text(if d.portfolio_error { "Unavailable" } else { "" }, T::new(Ty::Display).w(600).c(tok::MUTED)));
+                    line = line.child(ui.text(if d.portfolio_error { tr().trade.unavailable } else { "" }, T::new(Ty::Display).w(600).c(tok::MUTED)));
                 }
             }
             let who = if w.label.is_empty() { format!("{}...{}", &w.address[..6.min(w.address.len())], &w.address[w.address.len().saturating_sub(4)..]) } else { w.label.clone() };
-            summary = summary.child(line).child(ui.text_s(s().mt(0.25), format!("{who}{}", if w.watch { ", watch only" } else { "" }), T::new(Ty::Label).c(tok::MUTED).trunc()));
+            summary = summary.child(line).child(ui.text_s(s().mt(0.25), if w.watch { trf!(tr().trade.who_watch_only, who = who) } else { who }, T::new(Ty::Label).c(tok::MUTED).trunc()));
         }
         None => {
             summary = summary
-                .child(ui.text("Trade any coin on Sui", T::new(Ty::Row).w(600)))
-                .child(ui.text_s(s().mt(0.25), "Add a Rare Wallet account to buy, sell and open perps from here.", T::new(Ty::Small).c(tok::MUTED)));
+                .child(ui.text(tr().trade.trade_any_coin, T::new(Ty::Row).w(600)))
+                .child(ui.text_s(s().mt(0.25), tr().trade.add_account_to_trade, T::new(Ty::Small).c(tok::MUTED)));
         }
     }
-    let swap = action(ui, s(), Action::new("Swap", Tone::Primary, T_SWAP));
-    let second = action(ui, s(), Action::new(if d.wallet.is_some() { "Positions" } else { "Open Wallet" }, Tone::Secondary, T_SECOND));
+    let swap = action(ui, s(), Action::new(tr().trade.swap, Tone::Primary, T_SWAP));
+    let second = action(ui, s(), Action::new(if d.wallet.is_some() { tr().trade.positions } else { tr().trade.open_wallet }, Tone::Secondary, T_SECOND));
     let actions = ui.bx(s().row().gap(0.5).ml_auto()).group(crate::kit::group("tr-actions", true)).child(swap).child(second);
     let top = panel(ui, s().row().items_center().gap(2.0).mx(2.5).px(1.5).py(1.25)).child(summary).child(actions);
 
@@ -393,33 +396,33 @@ fn home(ui: &mut Ui, d: &RootData) -> El {
     // Trending.
     if !d.trending.is_empty() {
         let cards: Vec<El> = d.trending.iter().enumerate().map(|(i, t)| token_card(ui, t, T_TRENDING + i as u32, i == 0)).collect();
-        pg = pg.child(rail(ui, s().mt(2.25), "tr-trending", Some("Trending"), None, cards));
+        pg = pg.child(rail(ui, s().mt(2.25), "tr-trending", Some(tr().trade.trending), None, cards));
     } else if d.trending_error {
-        let sec = ui.bx(s().col().mt(2.25)).child(section_head(ui, s().mb(0.9).px(2.5), "Trending", None, None)).child(quiet(ui, "Could not load trending coins. This page refreshes on its own.", 2.0));
+        let sec = ui.bx(s().col().mt(2.25)).child(section_head(ui, s().mb(0.9).px(2.5), tr().trade.trending, None, None)).child(quiet(ui, tr().trade.trending_failed, 2.0));
         pg = pg.child(sec);
     }
     // Top movers and new launches.
     let movers: Vec<El> = d.gainers.iter().enumerate().map(|(i, t)| token_list_row(ui, t, Some(token_meta(t, false, d.now_ms)), T_GAINERS + i as u32, false)).collect();
     let fresh: Vec<El> = d.fresh.iter().enumerate().map(|(i, t)| token_list_row(ui, t, Some(token_meta(t, true, d.now_ms)), T_FRESH + i as u32, false)).collect();
-    let right24 = ui.text("24h", T::new(Ty::Small).c(tok::MUTED));
-    let mut left = panel(ui, s().col().p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), "Top movers", None, Some(right24))).child(ui.bx(s().col()).group(crate::kit::group("tr-gainers", false)).kids(movers));
+    let right24 = ui.text(tr().trade.h24, T::new(Ty::Small).c(tok::MUTED));
+    let mut left = panel(ui, s().col().p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), tr().trade.top_movers, None, Some(right24))).child(ui.bx(s().col()).group(crate::kit::group("tr-gainers", false)).kids(movers));
     if d.gainers_error && d.gainers.is_empty() {
-        left = left.child(quiet(ui, "Could not load movers.", 2.0));
+        left = left.child(quiet(ui, tr().trade.movers_failed, 2.0));
     }
-    let mut right = panel(ui, s().col().p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), "New launches", None, None)).child(ui.bx(s().col()).group(crate::kit::group("tr-new", false)).kids(fresh));
+    let mut right = panel(ui, s().col().p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), tr().trade.new_launches, None, None)).child(ui.bx(s().col()).group(crate::kit::group("tr-new", false)).kids(fresh));
     if d.fresh_error && d.fresh.is_empty() {
-        right = right.child(quiet(ui, "Could not load new launches.", 2.0));
+        right = right.child(quiet(ui, tr().trade.new_launches_failed, 2.0));
     }
     pg = pg.child(ui.bx(s().grid(&[Track::Fr(1.0), Track::Fr(1.0)]).gap(1.25).mx(2.5).mt(2.25).items_start()).child(left).child(right));
     // Perps.
     let markets: Vec<&PerpMarket> = d.markets_by_volume().into_iter().take(12).collect();
     if !markets.is_empty() {
         let mut cards: Vec<El> = markets.iter().enumerate().map(|(i, m)| perp_card(ui, m, d.logo(m).as_deref(), T_PERP_CARD + i as u32)).collect();
-        let all = ui.bx(s().row().items_center().justify_center().w(10.0).self_stretch()).bg(tok::BUTTON_SECONDARY).radius(ui.r(0.5)).child(ui.text("All markets", T::new(Ty::Body).w(500)));
+        let all = ui.bx(s().row().items_center().justify_center().w(10.0).self_stretch()).bg(tok::BUTTON_SECONDARY).radius(ui.r(0.5)).child(ui.text(tr().trade.all_markets, T::new(Ty::Body).w(500)));
         cards.push(nav(tile(all, 1.06), T_ALL_MARKETS, None, None, false));
-        pg = pg.child(rail(ui, s().mt(2.25), "tr-perps", Some("Perps"), Some("Long or short with leverage"), cards));
+        pg = pg.child(rail(ui, s().mt(2.25), "tr-perps", Some(tr().trade.perps), Some(tr().trade.perps_tagline), cards));
     } else if d.perps_error {
-        let sec = ui.bx(s().col().mt(2.25)).child(section_head(ui, s().mb(0.9).px(2.5), "Perps", Some("Long or short with leverage"), None)).child(quiet(ui, "Perps markets are unavailable right now.", 2.0));
+        let sec = ui.bx(s().col().mt(2.25)).child(section_head(ui, s().mb(0.9).px(2.5), tr().trade.perps, Some(tr().trade.perps_tagline), None)).child(quiet(ui, tr().trade.perps_unavailable, 2.0));
         pg = pg.child(sec);
     }
     pg
@@ -465,17 +468,17 @@ fn perps(ui: &mut Ui, d: &RootData) -> El {
             ui,
             s(),
             vec![
-                ("Perps balance", Stat::Num(NumKind::Money, Some(a.equity_usd), o)),
-                ("Available", Stat::Num(NumKind::Money, Some(a.available_usd), o)),
-                ("Unrealized P/L", Stat::Num(NumKind::Pnl, Some(a.unrealized_pnl_usd), o)),
-                ("Open positions", Stat::Text(a.positions.len().to_string())),
+                (tr().trade.perps_balance, Stat::Num(NumKind::Money, Some(a.equity_usd), o)),
+                (tr().trade.available, Stat::Num(NumKind::Money, Some(a.available_usd), o)),
+                (tr().trade.unrealized_pnl, Stat::Num(NumKind::Pnl, Some(a.unrealized_pnl_usd), o)),
+                (tr().trade.open_positions, Stat::Text(a.positions.len().to_string())),
             ],
             true,
             false,
         );
         pg = pg.child(panel(ui, s().col().mx(2.5).mb(1.25).px(1.5).py(1.0)).maybe(sl));
     }
-    let head = head_cells(ui, &["Market", "Price", "24h", "Volume", "Open interest", "Funding 1h", "Max"]);
+    let head = head_cells(ui, &[tr().common.market, tr().trade.price, tr().trade.h24, tr().trade.volume, tr().trade.open_interest, tr().trade.funding_1h, tr().trade.max]);
     let mut table = panel(ui, s().col().mx(2.5).p(1.0)).child(head_row(ui, &PERP_COLS, head));
     let mut rows = Vec::new();
     for (i, m) in d.markets_by_volume().into_iter().enumerate() {
@@ -489,14 +492,14 @@ fn perps(ui: &mut Ui, d: &RootData) -> El {
             text_cell(ui, m.funding_rate.map(|f| funding_pct(f, 1.0)).unwrap_or_default(), small.c(tok::MUTED)),
             text_cell(ui, fmt_leverage(m.max_leverage.unwrap_or(1.0)), small),
         ];
-        let r = row(ui, &PERP_COLS, T_PERP_ROW + i as u32, Some("Trade"), cells);
+        let r = row(ui, &PERP_COLS, T_PERP_ROW + i as u32, Some(tr().common.trade), cells);
         // useLandingFocus: the section's first focusable, not the search above it.
         rows.push(if i == 0 { default_nav(r) } else { r });
     }
     let empty = rows.is_empty();
     table = table.child(ui.bx(s().col()).group(crate::kit::group("tr-perp-table", false)).kids(rows));
     if d.perps_error && empty {
-        table = table.child(quiet(ui, "Perps markets are unavailable right now. This page refreshes on its own.", 2.0));
+        table = table.child(quiet(ui, tr().trade.perps_unavailable_refresh, 2.0));
     }
     pg.child(table)
 }
@@ -507,7 +510,7 @@ const POS_COLS: [Track; 6] = [Track::Fr(1.0), Track::Rem(7.0), Track::Rem(7.0), 
 /// Positions: the wallet's coins and its open perps positions, each with a way out.
 fn positions(ui: &mut Ui, d: &RootData, closing: Option<usize>) -> El {
     if d.ready && d.wallet.is_none() {
-        let e = crate::kit::empty(ui, s(), "No wallet yet", Some("Add a Rare Wallet account on the Wallet tab to see your coins and positions here."), vec![]);
+        let e = crate::kit::empty(ui, s(), tr().trade.no_wallet_yet, Some(tr().trade.no_wallet_yet_body), vec![]);
         return ui.bx(s().col().px(2.5)).child(e);
     }
     let pf = d.portfolio.as_ref();
@@ -517,10 +520,10 @@ fn positions(ui: &mut Ui, d: &RootData, closing: Option<usize>) -> El {
         ui,
         s(),
         vec![
-            ("Coins", Stat::Num(NumKind::Money, pf.map(|p| p.total_usd), o)),
-            ("Today", Stat::Num(NumKind::Pnl, pf.map(|p| p.change24h_usd), o)),
-            ("Perps balance", Stat::Num(NumKind::Money, acct.map(|a| a.equity_usd), o)),
-            ("Unrealized P/L", Stat::Num(NumKind::Pnl, acct.map(|a| a.unrealized_pnl_usd), o)),
+            (tr().trade.coins, Stat::Num(NumKind::Money, pf.map(|p| p.total_usd), o)),
+            (tr().trade.today, Stat::Num(NumKind::Pnl, pf.map(|p| p.change24h_usd), o)),
+            (tr().trade.perps_balance, Stat::Num(NumKind::Money, acct.map(|a| a.equity_usd), o)),
+            (tr().trade.unrealized_pnl, Stat::Num(NumKind::Pnl, acct.map(|a| a.unrealized_pnl_usd), o)),
         ],
         true,
         false,
@@ -529,11 +532,11 @@ fn positions(ui: &mut Ui, d: &RootData, closing: Option<usize>) -> El {
 
     // Perps positions.
     let watch = d.wallet.as_ref().is_some_and(|w| w.watch);
-    let right = watch.then(|| ui.text("Watch only", T::new(Ty::Small).c(tok::MUTED)));
-    let mut pp = panel(ui, s().col().mx(2.5).mt(1.25).p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), "Perps positions", None, right));
+    let right = watch.then(|| ui.text(tr().trade.watch_only, T::new(Ty::Small).c(tok::MUTED)));
+    let mut pp = panel(ui, s().col().mx(2.5).mt(1.25).p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), tr().trade.perps_positions, None, right));
     let positions = d.positions();
     if !positions.is_empty() {
-        let head = head_cells(ui, &["Market", "Size", "Entry", "Mark", "Liquidation", "P/L"]);
+        let head = head_cells(ui, &[tr().common.market, tr().trade.size, tr().trade.entry, tr().trade.mark, tr().trade.liquidation, tr().trade.pnl]);
         pp = pp.child(ui.bx(s().mr(6.5)).child(head_row(ui, &POS_COLS, head)));
         for (i, p) in positions.iter().enumerate() {
             let small = T::new(Ty::Small);
@@ -545,17 +548,17 @@ fn positions(ui: &mut Ui, d: &RootData, closing: Option<usize>) -> El {
                 text_cell(ui, liq_text(p.liquidation_price, p.entry_price), small.c(tok::MUTED)),
                 num_cell(ui, NumKind::Pnl, Some(p.pnl_usd), NumOptions { live: true, ..Default::default() }, small.w(600)),
             ];
-            let r = row(ui, &POS_COLS, T_POS_ROW + i as u32, Some("Open market"), cells);
+            let r = row(ui, &POS_COLS, T_POS_ROW + i as u32, Some(tr().trade.open_market), cells);
             let r = if i == 0 { default_nav(r) } else { r };
             let r = r.with_style(s().grid(&POS_COLS).items_center().h(3.25).gap_xy(0.5, 0.0).px(0.75).flex(1.0).min0().to_style(ui.rem));
-            let close = action(ui, s().w(6.0), Action { lg: false, hint: Some("Close position".into()), ..Action::new("Close", Tone::Secondary, T_POS_CLOSE + i as u32) });
+            let close = action(ui, s().w(6.0), Action { lg: false, hint: Some(tr().trade.close_position.into()), ..Action::new(tr().common.close, Tone::Secondary, T_POS_CLOSE + i as u32) });
             pp = pp.child(ui.bx(s().row().items_center().gap(0.5)).group(crate::kit::group(&format!("tr-pos-{}", p.market_id), true)).child(r).child(close));
         }
     } else {
         let msg = if d.account.is_some() {
-            "No open perps positions."
+            tr().trade.no_perps_positions
         } else if d.account_error {
-            "Could not load perps positions."
+            tr().trade.perps_positions_failed
         } else {
             ""
         };
@@ -566,9 +569,9 @@ fn positions(ui: &mut Ui, d: &RootData, closing: Option<usize>) -> El {
 
     // Coins.
     let coins = d.coins();
-    let mut cp = panel(ui, s().col().mx(2.5).mt(1.25).p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), "Coins", None, None));
+    let mut cp = panel(ui, s().col().mx(2.5).mt(1.25).p(1.0)).child(section_head(ui, s().mb(0.5).px(0.75).pt(0.25), tr().trade.coins, None, None));
     if !coins.is_empty() {
-        let head = head_cells(ui, &["Coin", "Balance", "Value", "Price", "24h"]);
+        let head = head_cells(ui, &[tr().trade.coin, tr().trade.balance, tr().trade.value, tr().trade.price, tr().trade.h24]);
         cp = cp.child(head_row(ui, &COIN_COLS, head));
     }
     let mut rows = Vec::new();
@@ -581,30 +584,30 @@ fn positions(ui: &mut Ui, d: &RootData, closing: Option<usize>) -> El {
             num_cell(ui, NumKind::Price, h.price_usd, NumOptions::default(), small),
             num_cell(ui, NumKind::Change, h.change24h, NumOptions::default(), small),
         ];
-        let r = row(ui, &COIN_COLS, T_COIN_ROW + i as u32, Some("Trade"), cells);
+        let r = row(ui, &COIN_COLS, T_COIN_ROW + i as u32, Some(tr().common.trade), cells);
         rows.push(if i == 0 && positions.is_empty() { default_nav(r) } else { r });
     }
     cp = cp.child(ui.bx(s().col()).group(crate::kit::group("tr-coins", false)).kids(rows));
     if pf.is_some() && coins.is_empty() {
-        cp = cp.child(quiet(ui, "No coins in this wallet yet.", 2.0));
+        cp = cp.child(quiet(ui, tr().trade.no_coins, 2.0));
     }
     if d.portfolio_error && pf.is_none() {
-        cp = cp.child(quiet(ui, "Could not load this wallet's coins.", 2.0));
+        cp = cp.child(quiet(ui, tr().trade.coins_failed, 2.0));
     }
     pg = pg.child(cp);
 
     if let Some(p) = closing.and_then(|i| positions.get(i)) {
         let r = Review {
-            title: format!("Close {} {}", p.symbol, p.side.lower()),
-            sub: Some("Market order for the whole position".into()),
-            action: "Close position".into(),
+            title: trf!(tr().trade.close_title, symbol = p.symbol, side = p.side.word_lower()),
+            sub: Some(tr().trade.market_order_whole.into()),
+            action: tr().trade.close_position.into(),
             tone: Tone::Primary,
             lines: vec![
-                ("Position".into(), Val::t(format!("{} {}, {}", p.side.word(), fmt_leverage(p.leverage), num_text(NumKind::Money, Some(p.notional_usd), NumOptions::default()))), false),
-                ("Entry".into(), Val::t(perp_px(Some(p.entry_price))), false),
-                ("Mark".into(), Val::t(perp_px(p.mark_price)), false),
-                ("P/L if closed now".into(), Val::n(NumKind::Pnl, Some(p.pnl_usd)), true),
-                ("Margin back".into(), Val::n(NumKind::Money, Some((p.margin_usd + p.pnl_usd).max(0.0))), false),
+                (tr().trade.position.into(), Val::t(format!("{} {}, {}", p.side.word(), fmt_leverage(p.leverage), num_text(NumKind::Money, Some(p.notional_usd), NumOptions::default()))), false),
+                (tr().trade.entry.into(), Val::t(perp_px(Some(p.entry_price))), false),
+                (tr().trade.mark.into(), Val::t(perp_px(p.mark_price)), false),
+                (tr().trade.pnl_if_closed.into(), Val::n(NumKind::Pnl, Some(p.pnl_usd)), true),
+                (tr().trade.margin_back.into(), Val::n(NumKind::Money, Some((p.margin_usd + p.pnl_usd).max(0.0))), false),
             ],
         };
         pg = pg.child(review_sheet(ui, &r, d.wallet.is_some()));

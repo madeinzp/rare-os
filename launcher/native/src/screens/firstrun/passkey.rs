@@ -2,6 +2,7 @@
 //! registers): the start page with the three ways, the passkey flow, "Other ways" as the wallet's
 //! own pages inside setup, and "You're @name" with a free username suggestion.
 
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::kit::account_avatar;
 use crate::screens::wallet::markup::*;
 use crate::screens::wallet::onboard::passkey_flow::Step as FlowStep;
@@ -56,29 +57,29 @@ pub fn view(mode: Mode, flow_step: FlowStep, online: bool, flow: Option<El<Msg>>
     }
     let create = mode == Mode::Create;
     let title = if mode == Mode::Start {
-        "Create your account"
+        tr().firstrun.pk_create_your_account
     } else if create {
-        "Create account"
+        tr().firstrun.pk_create_account
     } else {
-        "Sign in with a passkey"
+        tr().firstrun.pk_sign_in_passkey
     };
     let body = if mode == Mode::Start {
-        Some("One account for Rare Wallet, Friends and Rare Marketplace. It is kept on this SuiPlay and signs with A. You write down 12 words once as a backup.")
+        Some(tr().firstrun.pk_start_body)
     } else if flow_step == FlowStep::Pin {
-        Some("This device signs everyday transactions with the PIN. Your passkey can always sign too.")
+        Some(tr().firstrun.pk_pin_body)
     } else if flow_step == FlowStep::Run {
         None
     } else if create {
-        Some("Make a new wallet protected by a passkey.")
+        Some(tr().firstrun.pk_create_body)
     } else {
-        Some("Use the passkey you made before.")
+        Some(tr().firstrun.pk_signin_body)
     };
     let mut kids = Vec::new();
     if mode == Mode::Start && !online {
         kids.push(
             div("flex max-w-[24rem] flex-col items-start gap-[0.6rem] text-small text-muted")
-                .kid(text("No internet. You can create your account now; Friends and the Marketplace need it later."))
-                .kid(button_el(ButtonSpec::new("Connect to Wi-Fi").size(BSize::Lg).v(BVariant::Secondary), Some(Msg::Back))),
+                .kid(text(tr().firstrun.pk_no_internet))
+                .kid(button_el(ButtonSpec::new(tr().firstrun.connect_wifi).size(BSize::Lg).v(BVariant::Secondary), Some(Msg::Back))),
         );
     }
     if mode == Mode::Start {
@@ -88,13 +89,13 @@ pub fn view(mode: Mode, flow_step: FlowStep, online: bool, flow: Option<El<Msg>>
                 .attr("data-nav-remember", "")
                 .kid(
                     div("flex w-full max-w-[22rem] flex-col gap-[0.75rem]")
-                        .kid(button_el(ButtonSpec::new("Create account").v(BVariant::Primary).size(BSize::Lg).def(true).class("w-full"), Some(Msg::Phrase)))
-                        .kid(button_el(ButtonSpec::new("Sign in with a passkey").size(BSize::Lg).icon("key-round", "").class("w-full"), Some(Msg::Mode(Mode::Signin)))),
+                        .kid(button_el(ButtonSpec::new(tr().firstrun.pk_create_account).v(BVariant::Primary).size(BSize::Lg).def(true).class("w-full"), Some(Msg::Phrase)))
+                        .kid(button_el(ButtonSpec::new(tr().firstrun.pk_sign_in_passkey).size(BSize::Lg).icon("key-round", "").class("w-full"), Some(Msg::Mode(Mode::Signin)))),
                 )
                 .kid(
                     div("-ml-[1.75rem] flex flex-wrap gap-[0.25rem]")
-                        .kid(button_el(ButtonSpec::new("Other ways to sign in").size(BSize::Lg).v(BVariant::Ghost), Some(Msg::Other)))
-                        .kid(button_el(ButtonSpec::new("Not now").size(BSize::Lg).v(BVariant::Ghost), Some(Msg::Next))),
+                        .kid(button_el(ButtonSpec::new(tr().firstrun.pk_other_ways).size(BSize::Lg).v(BVariant::Ghost), Some(Msg::Other)))
+                        .kid(button_el(ButtonSpec::new(tr().firstrun.not_now).size(BSize::Lg).v(BVariant::Ghost), Some(Msg::Next))),
                 ),
         );
     }
@@ -102,9 +103,9 @@ pub fn view(mode: Mode, flow_step: FlowStep, online: bool, flow: Option<El<Msg>>
         panel(
             "max-w-[30rem]",
             vec![
-                way("gamepad-2", "This SuiPlay", "Signs with A. Back up 12 words once"),
-                way("smartphone", "A passkey on your phone", "Scan a code and confirm with your face or fingerprint"),
-                way("usb", "A passkey on a security key", "Plug it into the USB-C port and touch it"),
+                way("gamepad-2", tr().firstrun.pk_way_device, tr().firstrun.pk_way_device_body),
+                way("smartphone", tr().firstrun.pk_way_phone, tr().firstrun.pk_way_phone_body),
+                way("usb", tr().firstrun.pk_way_key, tr().firstrun.pk_way_key_body),
             ],
         )
     } else {
@@ -118,23 +119,23 @@ pub fn named_view(name: Option<&str>, address: Option<&str>, busy: bool) -> El<M
     let mut actions = div("mt-[0.75rem] flex flex-wrap gap-[0.75rem]")
         .attr("data-nav-group", "firstrun-actions")
         .attr("data-nav-remember", "")
-        .kid(button_el(ButtonSpec::new("Continue").v(BVariant::Primary).size(BSize::Lg).def(true).disabled(busy).class("min-w-[10rem]"), Some(Msg::Continue)));
+        .kid(button_el(ButtonSpec::new(tr().common.continue_).v(BVariant::Primary).size(BSize::Lg).def(true).disabled(busy).class("min-w-[10rem]"), Some(Msg::Continue)));
     if address.is_some() {
-        actions = actions.kid(button_el(ButtonSpec::new("Change").size(BSize::Lg).v(BVariant::Ghost).disabled(busy), Some(Msg::Change)));
+        actions = actions.kid(button_el(ButtonSpec::new(tr().common.change).size(BSize::Lg).v(BVariant::Ghost).disabled(busy), Some(Msg::Change)));
     }
-    let title = name.map(|n| format!("You're @{n}")).unwrap_or_else(|| "You're signed in".into());
+    let title = name.map(|n| trf!(tr().firstrun.pk_youre_name, name = n)).unwrap_or_else(|| tr().firstrun.pk_youre_signed_in.into());
     let mut right = div("min-w-0");
     if let Some(a) = address {
         right = right.kid(panel(
             "flex max-w-[30rem] items-center gap-[1.25rem] px-[1.6rem] py-[1.5rem]",
             vec![
                 account_avatar(a, "4.5rem"),
-                span("min-w-0").kid(span("block text-label text-muted").text("How friends see you")).kid(span("block truncate text-title font-semibold").text(name.map(|n| format!("@{n}")).unwrap_or_else(|| "Your username".into()))),
+                span("min-w-0").kid(span("block text-label text-muted").text(tr().firstrun.pk_how_friends_see)).kid(span("block truncate text-title font-semibold").text(name.map(|n| format!("@{n}")).unwrap_or_else(|| tr().firstrun.pk_your_username.into()))),
             ],
         ));
     }
     div("grid h-full grid-cols-[minmax(0,26rem)_minmax(0,1fr)] items-center gap-[4rem]")
-        .kid(copy(&title, Some("Friends find you by your username. It is free, and you can change it from your profile."), vec![actions]))
+        .kid(copy(&title, Some(tr().firstrun.pk_username_body), vec![actions]))
         .kid(right)
         // signed in already: nothing to go back to
         .on_pad("b", Msg::Mode(Mode::Named))

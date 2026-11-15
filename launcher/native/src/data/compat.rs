@@ -3,6 +3,7 @@
 //! its public summary API, kept in ~/.cache/rare/protondb.json for a few days. Blocking: call
 //! from a worker.
 
+use rare_i18n::{tr, trf};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{BufReader, Read, Seek, SeekFrom};
@@ -21,9 +22,9 @@ impl Compat {
     /// "Steam Deck Verified", None when unknown.
     pub fn deck_text(&self) -> Option<&'static str> {
         match self.deck? {
-            3 => Some("Steam Deck Verified"),
-            2 => Some("Steam Deck Playable"),
-            1 => Some("Not supported on Steam Deck"),
+            3 => Some(tr().data.deck_verified),
+            2 => Some(tr().data.deck_playable),
+            1 => Some(tr().data.deck_unsupported),
             _ => None,
         }
     }
@@ -32,14 +33,14 @@ impl Compat {
     pub fn protondb_text(&self) -> Option<String> {
         let t = self.protondb.as_deref()?;
         let name = match t {
-            "platinum" => "Platinum",
-            "gold" => "Gold",
-            "silver" => "Silver",
-            "bronze" => "Bronze",
-            "borked" => "Borked",
+            "platinum" => tr().data.tier_platinum,
+            "gold" => tr().data.tier_gold,
+            "silver" => tr().data.tier_silver,
+            "bronze" => tr().data.tier_bronze,
+            "borked" => tr().data.tier_borked,
             _ => return None,
         };
-        Some(format!("ProtonDB {name}"))
+        Some(trf!(tr().data.protondb_tier, tier = name))
     }
 }
 

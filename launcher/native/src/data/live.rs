@@ -67,6 +67,7 @@ pub struct ProfileLive {
     pub change_usd: Option<f64>,
 }
 
+use rare_i18n::tr;
 use rare_sui::grpc::{ChainRead, Sui};
 use rare_sui::live::{LiveDeps, Mint as SuiMint, SuiLive};
 use rare_sui::market::{self, HttpMarket, MarketApi, Page};
@@ -375,7 +376,7 @@ pub fn pick_avatar(id: &str, name: &str, image_url: &str) {
                 // Only when nothing newer was picked meanwhile.
                 if picked(&a).is_some_and(|p| p.id == id) {
                     put_pick(&a, prev.as_ref());
-                    crate::social::toast_any("Couldn't save your picture. Try again.", true);
+                    crate::social::toast_any(tr().data.picture_save_failed, true);
                 }
             }
             // Friends is off here: the pick goes up with the first heartbeat.

@@ -5,6 +5,7 @@ use crate::screens::wallet::fmt::{addr_short, date_time_medium, fmt_token, fmt_u
 use crate::screens::wallet::home::lib::{copy_value, hint, load_bar, short_digest, Hint};
 use crate::screens::wallet::kit::{addr, avatar, btn_full, page, panel, row, Size, Variant};
 use crate::screens::wallet::markup::*;
+use rare_i18n::{tr, trf};
 use crate::screens::wallet::types::{ActivityChange, ActivityItem, ActivityKind};
 use std::collections::BTreeMap;
 
@@ -78,10 +79,10 @@ pub enum Msg {
 
 fn title(k: ActivityKind) -> &'static str {
     match k {
-        ActivityKind::Send => "Sent",
-        ActivityKind::Receive => "Received",
-        ActivityKind::Swap => "Swapped",
-        ActivityKind::Other => "Transaction",
+        ActivityKind::Send => tr().wallet.act_sent,
+        ActivityKind::Receive => tr().wallet.act_received,
+        ActivityKind::Swap => tr().wallet.act_swapped,
+        ActivityKind::Other => tr().wallet.act_transaction,
     }
 }
 
@@ -146,7 +147,7 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
                     .kid(avatar(c.logo.as_deref(), &c.symbol, "2rem", false))
                     .kid(span("min-w-0 flex-1").kid(span("block text-base font-semibold").text(&c.symbol)).kid(span("block text-xs text-secondary").text(match c.price {
                         Some(p_) => fmt_usd(Some(p_)),
-                        None => "No price".into(),
+                        None => tr().wallet.no_price.into(),
                     })))
                     .kid(right)
             }))],
@@ -158,44 +159,45 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
         None,
         None,
         "flex flex-col gap-2 px-5 py-4",
-        vec![row("Status", vec![span(if failed { "text-negative" } else { "" }).text(if failed { "Failed" } else if d.is_some() || pr.item.is_some() { "Success" } else { "--" })], "", true)],
+        vec![row(tr().wallet.status, vec![span(if failed { "text-negative" } else { "" }).text(if failed { tr().wallet.failed } else if d.is_some() || pr.item.is_some() { tr().wallet.success } else { "--" })], "", true)],
     );
     if let Some(e) = d.and_then(|d| d.error.as_ref()) {
         status = status.kid(p("text-sm text-negative").text(e));
     }
     col = col.kid(status);
     if pr.detail == Some(None) {
-        col = col.kid(p("px-1 text-sm text-secondary").text("The network no longer keeps the full details of this transaction. This is what the activity list recorded."));
+        col = col.kid(p("px-1 text-sm text-secondary").text(tr().wallet.details_gone));
     }
-    col = col.kid_opt(list("You sent", &out, "-")).kid_opt(list("You received", &inn, "+"));
+    col = col.kid_opt(list(tr().wallet.you_sent, &out, "-")).kid_opt(list(tr().wallet.you_received, &inn, "+"));
     let mut rows = Vec::new();
     if let Some(cp) = &counterparty {
         let c: Vec<char> = cp.chars().collect();
         let shown = if c.len() >= 14 { format!("{}...{}", c[..8].iter().collect::<String>(), c[c.len() - 6..].iter().collect::<String>()) } else { addr_short(cp) };
-        rows.push(row(if kind == ActivityKind::Receive { "From" } else { "To" }, vec![copy_value(&shown, "Copy address", copied(cp), Msg::Copy(cp.clone()))], "", true));
+        rows.push(row(if kind == ActivityKind::Receive { tr().wallet.from } else { tr().wallet.to }, vec![copy_value(&shown, tr().wallet.copy_address, copied(cp), Msg::Copy(cp.clone()))], "", true));
     }
     if let Some(d) = d {
         let v = if !d.fee_paid {
-            vec![text("Paid by sponsor")]
+            vec![text(tr().wallet.paid_by_sponsor)]
         } else {
-            let mut s = span(if fee < 0 { "text-positive" } else { "" }).text(format!("{}{} SUI", if fee < 0 { "Refund " } else { "" }, fmt_token(Some(fee_num), 6)));
+            let fee_text = if fee < 0 { trf!(tr().wallet.fee_refund, amount = fmt_token(Some(fee_num), 6)) } else { format!("{} SUI", fmt_token(Some(fee_num), 6)) };
+            let mut s = span(if fee < 0 { "text-positive" } else { "" }).text(fee_text.clone());
             if let Some(p_) = sui.price {
                 s.text = None;
-                s = s.kid(text(format!("{}{} SUI", if fee < 0 { "Refund " } else { "" }, fmt_token(Some(fee_num), 6)))).kid(span("ml-2 text-secondary").text(fmt_usd(Some(fee_num * p_))));
+                s = s.kid(text(fee_text)).kid(span("ml-2 text-secondary").text(fmt_usd(Some(fee_num * p_))));
             }
             vec![s]
         };
-        rows.push(row("Network fee", v, "", true));
+        rows.push(row(tr().wallet.network_fee, v, "", true));
     }
-    rows.push(row("Digest", vec![copy_value(&short_digest(pr.digest), "Copy digest", copied(pr.digest), Msg::Copy(pr.digest.to_string()))], "", true));
+    rows.push(row(tr().wallet.digest, vec![copy_value(&short_digest(pr.digest), tr().wallet.copy_digest, copied(pr.digest), Msg::Copy(pr.digest.to_string()))], "", true));
     if let Some(s) = d.and_then(|d| d.sender.as_ref()) {
-        rows.push(row("Sender", vec![addr(s, false, "")], "", true));
+        rows.push(row(tr().wallet.sender, vec![addr(s, false, "")], "", true));
     }
     col = col.kid(panel(None, None, "flex flex-col gap-1 px-5 py-4", rows));
     if let Some(d) = d.filter(|d| !d.calls.is_empty() || !d.objects.is_empty()) {
         let mut pnl = vec![button("flex h-14 w-full items-center justify-between rounded-lg px-5 text-base font-semibold", Some(Msg::Details))
             .attr("aria-expanded", st.open.to_string())
-            .kid(text("Details"))
+            .kid(text(tr().common.details))
             .kid(icon(if st.open { "chevron-up" } else { "chevron-down" }, "").attr("size", "1.1rem"))];
         if st.open {
             let mut lines = div("flex flex-col gap-1 px-5 pb-4 text-sm");
@@ -204,10 +206,10 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
             }
             for o in &d.objects {
                 let act = match o.action.as_str() {
-                    "sent" => "Sent",
-                    "created" => "Created",
-                    "deleted" => "Deleted",
-                    _ => "Received",
+                    "sent" => tr().wallet.obj_sent,
+                    "created" => tr().wallet.obj_created,
+                    "deleted" => tr().wallet.obj_deleted,
+                    _ => tr().wallet.obj_received,
                 };
                 lines = lines.kid(
                     p("text-secondary")
@@ -227,9 +229,9 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
         "flex flex-col items-center p-5 text-center",
         vec![
             el(Tag::Qr(url.clone()), "size-[12rem]"),
-            p("mt-3 text-sm font-semibold").text("Open on your phone"),
-            p("mt-1 text-xs text-secondary").text("Scan to see this transaction on Suiscan."),
-            btn_full("View on Suiscan", Variant::Secondary, Size::Md, false, "mt-3 w-full", Some(Msg::OpenWeb(url.clone()))),
+            p("mt-3 text-sm font-semibold").text(tr().wallet.open_on_phone),
+            p("mt-1 text-xs text-secondary").text(tr().wallet.scan_suiscan),
+            btn_full(tr().wallet.view_on_suiscan, Variant::Secondary, Size::Md, false, "mt-3 w-full", Some(Msg::OpenWeb(url.clone()))),
         ],
     );
     page(
@@ -258,7 +260,7 @@ pub fn update(st: &mut State, msg: Msg) -> Option<Msg> {
 }
 
 pub fn hints() -> Vec<Hint> {
-    vec![hint("a", "Select"), hint("b", "Back")]
+    vec![hint("a", tr().common.select), hint("b", tr().common.back)]
 }
 
 #[cfg(test)]

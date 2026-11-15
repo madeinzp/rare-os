@@ -2,6 +2,7 @@
 //! one, the header with the stat strip, then Items (a grid of cards or a list), Activity and
 //! Holders. LT/RT switch the tabs, X opens Filters (sort and traits), View flips grid and list.
 
+use rare_i18n::{tr, trf, trn};
 use super::data::{near_end, Answers};
 use super::host::*;
 use super::parts::*;
@@ -22,8 +23,8 @@ pub enum Tab {
     Holders,
 }
 
-pub const TABS: [(Tab, &str); 3] = [(Tab::Items, "Items"), (Tab::Activity, "Activity"), (Tab::Holders, "Holders")];
-pub const SORTS: [(Sort, &str); 4] = [(Sort::PriceAsc, "Price: low to high"), (Sort::PriceDesc, "Price: high to low"), (Sort::RarityAsc, "Rarity: rarest first"), (Sort::ListedDesc, "Recently listed")];
+pub const TABS: [(Tab, fn() -> &'static str); 3] = [(Tab::Items, || tr().market.tab_items), (Tab::Activity, || tr().market.activity), (Tab::Holders, || tr().market.tab_holders)];
+pub const SORTS: [(Sort, fn() -> &'static str); 4] = [(Sort::PriceAsc, || tr().market.sort_price_asc), (Sort::PriceDesc, || tr().market.sort_price_desc), (Sort::RarityAsc, || tr().market.sort_rarity), (Sort::ListedDesc, || tr().market.sort_recent)];
 pub const COLS: usize = 6;
 
 pub const T_TAB: u32 = 10;
@@ -105,8 +106,9 @@ pub fn trait_groups(vals: &[TraitValue]) -> Vec<(String, Vec<TraitValue>)> {
 /// "Royalty 5.0%, listed on Kiosk, Tradeport".
 pub fn royalty_line(c: &CollectionDetail) -> String {
     let r = c.royalty_bps.map(|b| format!("{:.1}%", b / 100.0)).unwrap_or_else(|| DASH.into());
-    let mut s = format!("Royalty {r}");
-    if !c.venues.is_empty() {
+    if c.venues.is_empty() {
+        trf!(tr().market.royalty, pct = r)
+    } else {
         let names: Vec<String> = c
             .venues
             .iter()
@@ -119,16 +121,15 @@ pub fn royalty_line(c: &CollectionDetail) -> String {
                 }
             })
             .collect();
-        s.push_str(&format!(", listed on {}", names.join(", ")));
+        trf!(tr().market.royalty_listed_on, pct = r, venues = names.join(", "))
     }
-    s
 }
 
 /// The sort button's words: the sort, and how many traits are on.
 pub fn sort_label(sort: Sort, traits: usize) -> String {
-    let mut s = SORTS.iter().find(|x| x.0 == sort).map(|x| x.1).unwrap_or("").to_string();
+    let mut s = SORTS.iter().find(|x| x.0 == sort).map(|x| (x.1)()).unwrap_or("").to_string();
     if traits > 0 {
-        s.push_str(&format!(", {traits} trait{}", if traits > 1 { "s" } else { "" }));
+        s = trn!(tr().market.sort_with_traits, traits, sort = s);
     }
     s
 }
@@ -262,42 +263,42 @@ pub fn view(ui: &mut Ui, a: &Answers, slug: &str, st: &State, frame: u64) -> El 
         let semi = t(BASE).w(600).tab();
         let unit = t(BASE).w(400).c(tok::MUTED);
         let floor_delta = delta_el(ui, s(), sx.floor_change24h_pct, 2, t(BASE).w(400));
-        let floor = stat(ui, "Floor price", vec![(semi, mf::fmt_sui(sx.floor_mist.as_deref(), SuiOpts { dp: 3, ..Default::default() })), (unit, "SUI".into())]);
+        let floor = stat(ui, tr().market.floor_price, vec![(semi, mf::fmt_sui(sx.floor_mist.as_deref(), SuiOpts { dp: 3, ..Default::default() })), (unit, "SUI".into())]);
         // The delta joins the floor's baseline row.
         let floor = add_to_line(floor, floor_delta);
-        let offer = stat(ui, "Top offer", vec![(semi, mf::fmt_sui(sx.top_offer_mist.as_deref(), SuiOpts { dp: 3, ..Default::default() })), (unit, "SUI".into())]);
-        let vol = stat(ui, "Volume 7d", vec![(semi, mf::fmt_sui(sx.volume7d_mist.as_deref(), SuiOpts { dp: 1, compact: true, trim: false }))]);
-        let sales = stat(ui, "Sales 7d", vec![(semi, mf::fmt_int(Some(sx.sales7d as f64), false))]);
+        let offer = stat(ui, tr().market.top_offer, vec![(semi, mf::fmt_sui(sx.top_offer_mist.as_deref(), SuiOpts { dp: 3, ..Default::default() })), (unit, "SUI".into())]);
+        let vol = stat(ui, tr().market.volume_7d, vec![(semi, mf::fmt_sui(sx.volume7d_mist.as_deref(), SuiOpts { dp: 1, compact: true, trim: false }))]);
+        let sales = stat(ui, tr().market.sales_7d, vec![(semi, mf::fmt_int(Some(sx.sales7d as f64), false))]);
         let pct = if sx.supply > 0 { mf::fmt_pct(Some(sx.listed_count as f64 / sx.supply as f64 * 100.0), 0) } else { String::new() };
-        let listed = stat(ui, "Listed / supply", vec![(semi, format!("{} / {}", mf::fmt_int(Some(sx.listed_count as f64), false), mf::fmt_int(Some(sx.supply as f64), false))), (unit, pct)]);
+        let listed = stat(ui, tr().market.listed_supply, vec![(semi, format!("{} / {}", mf::fmt_int(Some(sx.listed_count as f64), false), mf::fmt_int(Some(sx.supply as f64), false))), (unit, pct)]);
         let owners = if sx.owners > 0 {
-            stat(ui, "Owners", vec![(semi, mf::fmt_int(Some(sx.owners as f64), true)), (unit, mf::fmt_pct(Some(sx.unique_owner_pct), 1))])
+            stat(ui, tr().market.owners, vec![(semi, mf::fmt_int(Some(sx.owners as f64), true)), (unit, mf::fmt_pct(Some(sx.unique_owner_pct), 1))])
         } else {
-            stat(ui, "Owners", vec![(semi, DASH.into())])
+            stat(ui, tr().market.owners, vec![(semi, DASH.into())])
         };
         let strip = ui.bx(s().row().items_end().gap_xy(1.5, 0.0).ml(2.0).grow()).clip().child(floor).child(offer).child(vol).child(sales).child(listed).child(owners);
         head = head.child(strip);
     }
     page = page.child(head);
     if c.is_none() && a.failed(&paths::collection(slug)) {
-        let open = btn(ui, s(), "Open on rare.market", T_FAIL_OPEN, V::Secondary, Sz::Lg, true, false);
+        let open = btn(ui, s(), tr().market.open_on_rare_market, T_FAIL_OPEN, V::Secondary, Sz::Lg, true, false);
         // No tabs, sort or Sweep for a collection that isn't there.
-        return page.child(empty(ui, "Could not load this collection", None, Some(open), true));
+        return page.child(empty(ui, tr().market.collection_failed, None, Some(open), true));
     }
 
     // ---- tabs
     let ti = TABS.iter().position(|x| x.0 == st.tab).unwrap_or(0);
-    let labels: Vec<&str> = TABS.iter().map(|x| x.1).collect();
+    let labels: Vec<&str> = TABS.iter().map(|x| (x.1)()).collect();
     let tabs_el = tabs(ui, s(), &labels, ti, T_TAB);
     let mut bar = ui.bx(bw_side(s().row().items_center().gap(0.75).px(2.5).mt(1.5), 0.0, 1.0)).look(Look::default().bg(tok::BG).z(4)).sticky().name(PIN).group(kit::group(&format!("mk-bar-{frame}"), false)).child(ui.bx(s().abs(None, Some(0.0), Some(0.0), Some(0.0)).h_px(1.0)).style(|st| st.inset.bottom = rare_render::taffy::prelude::length(-1.0)).bg(BORDER)).child(tabs_el).child(ui.bx(s().grow()));
     let items_rows = a.rows::<ItemCard>(&paths::items(slug, st.sort, &st.traits.join(",")));
     if st.tab == Tab::Items {
-        let total = items_rows.total.map(|n| format!("{} listed", mf::fmt_int(Some(n as f64), false))).unwrap_or_default();
+        let total = items_rows.total.map(|n| trf!(tr().market.n_listed, n = mf::fmt_int(Some(n as f64), false))).unwrap_or_default();
         let sort_btn = btn(ui, s(), &sort_label(st.sort, st.traits.len()), T_SORT_BTN, V::Secondary, Sz::Sm, false, true);
-        let sweep_btn = btn(ui, s(), "Sweep", T_SWEEP_BTN, V::Secondary, Sz::Sm, false, false);
+        let sweep_btn = btn(ui, s(), tr().market.sweep, T_SWEEP_BTN, V::Secondary, Sz::Sm, false, false);
         let mut tools = ui.bx(s().row().items_center().gap(0.5).pb(0.5)).child(ui.text(total, t(SM).c(tok::MUTED))).child(sort_btn).child(sweep_btn);
         if super::cart::count() > 0 {
-            tools = tools.child(btn(ui, s(), &format!("Cart ({})", super::cart::count()), T_CART_BTN, V::Primary, Sz::Sm, false, false));
+            tools = tools.child(btn(ui, s(), &trf!(tr().market.cart_hint, n = super::cart::count()), T_CART_BTN, V::Primary, Sz::Sm, false, false));
         }
         bar = bar.child(tools);
     }
@@ -323,14 +324,14 @@ pub fn view(ui: &mut Ui, a: &Answers, slug: &str, st: &State, frame: u64) -> El 
             }
             content = content.child(g);
             if items_rows.ready && items.is_empty() {
-                let title = if st.traits.is_empty() { "Nothing listed right now" } else { "Nothing listed with these traits" };
+                let title = if st.traits.is_empty() { tr().market.nothing_listed } else { tr().market.nothing_listed_traits };
                 content = content.child(empty(ui, title, None, None, false));
             }
         }
         Tab::Activity => {
             let ev = a.rows::<MarketEvent>(&paths::events(&EventQuery { collection: Some(slug), ..Default::default() }, 30));
             match ev {
-                r if r.ready && r.items.is_empty() => content = content.child(empty(ui, "No activity yet", None, None, false)),
+                r if r.ready && r.items.is_empty() => content = content.child(empty(ui, tr().market.no_activity, None, None, false)),
                 r => {
                     let mut tbl = ui.bx(bw(s().col().p(0.5), 1.0)).bg(tok::L2).radius(ui.r(0.5)).border(1.0, BORDER).child(event_head(ui, true));
                     for (i, e) in r.items.iter().enumerate() {
@@ -373,7 +374,7 @@ pub fn item_row(ui: &mut Ui, c: &ItemCard, tag: u32, def: bool) -> El {
             let m = l.all_in_mist.clone().unwrap_or_else(|| l.price_mist.clone());
             sui(ui, s(), Some(&m), 3, false, t(SM).w(600))
         }
-        None => ui.text("Not listed", t(SM).c(tok::MUTED)),
+        None => ui.text(tr().market.not_listed, t(SM).c(tok::MUTED)),
     };
     let last = c.last_sale_mist.as_deref().map(|m| mf::fmt_sui(Some(m), SuiOpts { dp: 3, compact: false, trim: true })).unwrap_or_else(|| DASH.into());
     let look = Look::default().bg(tok::L1).radius(ui.r(0.5)).border(1.0, rare_render::Color::TRANSPARENT);
@@ -417,11 +418,11 @@ fn holders(ui: &mut Ui, a: &Answers, slug: &str) -> El {
     let line = |ui: &Ui| bottom_line(ui);
     if let Some(hd) = h.as_ref().map(|h| h.header.clone()) {
         let figs = [
-            ("Owners", mf::fmt_int(Some(hd.owners as f64), false)),
-            ("Unique owners", mf::fmt_pct(Some(hd.unique_owners_pct), 1)),
-            ("Top 10 hold", mf::fmt_pct(Some(hd.top10_pct), 1)),
-            ("Top 100 hold", mf::fmt_pct(Some(hd.top100_pct), 1)),
-            ("Items held", format!("{} / {}", mf::fmt_int(Some(hd.items_held as f64), false), mf::fmt_int(Some(hd.supply as f64), false))),
+            (tr().market.owners, mf::fmt_int(Some(hd.owners as f64), false)),
+            (tr().market.unique_owners, mf::fmt_pct(Some(hd.unique_owners_pct), 1)),
+            (tr().market.top_10_hold, mf::fmt_pct(Some(hd.top10_pct), 1)),
+            (tr().market.top_100_hold, mf::fmt_pct(Some(hd.top100_pct), 1)),
+            (tr().market.items_held, format!("{} / {}", mf::fmt_int(Some(hd.items_held as f64), false), mf::fmt_int(Some(hd.supply as f64), false))),
         ];
         let mut g = ui.bx(bw_side(s().grid(&[Track::Fr(1.0); 5]).gap_xy(1.0, 0.75).px(1.0).py(0.75), 0.0, 1.0)).child(line(ui));
         for (k, v) in figs {
@@ -429,10 +430,10 @@ fn holders(ui: &mut Ui, a: &Answers, slug: &str) -> El {
         }
         b = b.child(g);
         if !hd.staked_or_locked.is_empty() {
-            let mut sl = ui.bx(bw_side(s().col().px(1.0).py(0.75), 0.0, 1.0)).child(line(ui)).child(ui.text("Staked or locked", t(XS).c(tok::MUTED)));
+            let mut sl = ui.bx(bw_side(s().col().px(1.0).py(0.75), 0.0, 1.0)).child(line(ui)).child(ui.text(tr().market.staked_or_locked, t(XS).c(tok::MUTED)));
             let mut ul = ui.bx(s().col().mt(0.25).gap(0.125));
             for r in &hd.staked_or_locked {
-                ul = ul.child(ui.text(format!("{} in {}", mf::fmt_int(Some(r.count as f64), false), r.name), t(Ty::Px(0.8125, 1.25)).tab()));
+                ul = ul.child(ui.text(trf!(tr().market.n_in_name, n = mf::fmt_int(Some(r.count as f64), false), name = r.name), t(Ty::Px(0.8125, 1.25)).tab()));
             }
             sl = sl.child(ul);
             b = b.child(sl);
@@ -462,24 +463,24 @@ fn filter_sheet(ui: &mut Ui, a: &Answers, slug: &str, st: &State) -> El {
 
     let close_ic = icon_el(ui, "x", 1.25);
     let close = fill_nav(ui.bx(s().row().items_center().justify_center().size(2.5)).radius(ui.r(0.25)).child(close_ic), T_F_CLOSE, None, None, false);
-    let head = ui.bx(s().row().items_center().justify_between().h(4.0).px(1.0)).child(ui.text("Filters", t(LG).w(600))).child(close);
+    let head = ui.bx(s().row().items_center().justify_between().h(4.0).px(1.0)).child(ui.text(tr().market.filters, t(LG).w(600))).child(close);
 
-    let mut sort = ui.bx(bw_side(s().col().pb(0.75), 0.0, 1.0)).child(line(ui)).child(ui.bx(s().row().items_center().h(3.0)).child(ui.text("Sort", t(BASE).w(500))));
+    let mut sort = ui.bx(bw_side(s().col().pb(0.75), 0.0, 1.0)).child(line(ui)).child(ui.bx(s().row().items_center().h(3.0)).child(ui.text(tr().market.sort, t(BASE).w(500))));
     for (i, (v, label)) in SORTS.iter().enumerate() {
         let on = *v == st.sort;
         let dot = if on { ui.bx(s().size(1.25)).radius(ui.r(0.625)).border(6.0, tok::FG) } else { ui.bx(s().size(1.25)).radius(ui.r(0.625)).bg(tok::L4) };
-        let row = ui.bx(s().row().items_center().h(2.75).wp(1.0).gap(0.75).px(0.25)).radius(ui.r(0.25)).child(dot).child(ui.text(*label, t(SM)));
+        let row = ui.bx(s().row().items_center().h(2.75).wp(1.0).gap(0.75).px(0.25)).radius(ui.r(0.25)).child(dot).child(ui.text(label(), t(SM)));
         sort = sort.child(fill_nav(row, T_F_SORT + i as u32, None, None, on));
     }
 
-    let mut th = ui.bx(s().row().items_center().justify_between().h(3.0)).child(ui.text("Traits", t(BASE).w(500)));
+    let mut th = ui.bx(s().row().items_center().justify_between().h(3.0)).child(ui.text(tr().market.traits, t(BASE).w(500)));
     if !st.traits.is_empty() {
-        let clear = ui.bx(s().row().items_center().h(2.0).px(0.75)).bg(tok::BUTTON_SECONDARY).radius(ui.r(0.25)).child(ui.text("Clear", t(SM)));
+        let clear = ui.bx(s().row().items_center().h(2.0).px(0.75)).bg(tok::BUTTON_SECONDARY).radius(ui.r(0.25)).child(ui.text(tr().market.clear, t(SM)));
         th = th.child(fill_nav(clear, T_F_CLEAR, None, None, false));
     }
     let mut traits = ui.bx(s().col().pt(0.25)).child(th);
     if groups.is_empty() && vals.is_some() {
-        traits = traits.child(ui.bx(s().py(0.75)).child(ui.text("No traits for this collection", t(SM).c(tok::MUTED))));
+        traits = traits.child(ui.bx(s().py(0.75)).child(ui.text(tr().market.no_collection_traits, t(SM).c(tok::MUTED))));
     }
     let n = groups.len();
     for (gi, (ty, vs)) in groups.iter().enumerate() {
@@ -505,7 +506,7 @@ fn filter_sheet(ui: &mut Ui, a: &Answers, slug: &str, st: &State) -> El {
                     let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M2 5.2 4 7l4-4.2" fill="none" stroke="white" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>"#;
                     cb = cb.bg(tok::FG).child(crate::kit::icon::svg_tinted(ui, "trait-check", svg.into(), 0.625, 0.625, tok::BG));
                 }
-                let floor = v.floor_mist.as_deref().map(|m| format!("{} SUI floor", mf::fmt_sui(Some(m), SuiOpts { dp: 3, ..Default::default() }))).unwrap_or_else(|| "No listings".into());
+                let floor = v.floor_mist.as_deref().map(|m| trf!(tr().market.sui_floor, price = mf::fmt_sui(Some(m), SuiOpts { dp: 3, ..Default::default() }))).unwrap_or_else(|| tr().market.no_listings.into());
                 let mid = ui.bx(s().col().grow()).child(ui.text(v.value.clone(), t(Ty::Px(0.875, 1.125)).trunc())).child(ui.text(floor, t(Ty::Px(0.75, 1.0)).c(tok::MUTED).trunc()));
                 let right = ui
                     .bx(s().col().items_end().w(3.25))
@@ -614,7 +615,7 @@ impl MkPage for CollectionPage {
                     t if t >= T_HOLDER && t < T_F_CLOSE => {
                         let (_, rows, _) = holder_rows(&self.a, &self.slug);
                         rows.get((t - T_HOLDER) as usize).cloned()
-                            .map(|r| Act::Push(View::Account { address: r.address.clone(), label: r.name.clone().unwrap_or_else(|| "Holder".into()) }))
+                            .map(|r| Act::Push(View::Account { address: r.address.clone(), label: r.name.clone().unwrap_or_else(|| tr().market.holder.into()) }))
                             .unwrap_or(Act::None)
                     }
                     _ => Act::None,
@@ -677,20 +678,20 @@ impl MkPage for CollectionPage {
 
     fn hints(&self) -> Vec<(&'static str, String)> {
         if self.st.filters {
-            return vec![("a", "Select".into()), ("b", "Done".into())];
+            return vec![("a", tr().common.select.into()), ("b", tr().common.done.into())];
         }
         if self.failed() {
-            return vec![("a", "Select".into()), ("y", "Search".into()), ("b", "Back".into())];
+            return vec![("a", tr().common.select.into()), ("y", tr().common.search.into()), ("b", tr().common.back.into())];
         }
-        let mut h = vec![("a", "Open".to_string())];
+        let mut h = vec![("a", tr().common.open.to_string())];
         if self.st.tab == Tab::Items {
-            h.push(("x", "Filters".into()));
-            h.push(("select", if self.st.list { "Grid view" } else { "List view" }.into()));
+            h.push(("x", tr().market.filters.into()));
+            h.push(("select", if self.st.list { tr().market.grid_view } else { tr().market.list_view }.into()));
         }
         if super::cart::count() > 0 {
-            h.push(("start", format!("Cart ({})", super::cart::count())));
+            h.push(("start", trf!(tr().market.cart_hint, n = super::cart::count())));
         }
-        h.extend([("ltrt", "Sections".to_string()), ("y", "Search".into()), ("b", "Back".into())]);
+        h.extend([("ltrt", tr().common.sections.to_string()), ("y", tr().common.search.into()), ("b", tr().common.back.into())]);
         h
     }
 }

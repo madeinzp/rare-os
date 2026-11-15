@@ -3,6 +3,7 @@
 
 use super::{config::Config, rows::*, SectionOut, SectionView};
 use crate::screens::overlay::common::*;
+use rare_i18n::{tr, trf};
 use rare_render::Id;
 use rare_system::audio::{Audio, Device, Kind};
 
@@ -34,12 +35,13 @@ impl SoundSection {
 
     /// `volume`: None when no sound output was found. `audio`: None until the first reading.
     pub fn build_with(cx: &mut Cx, nav: &mut Nav, parent: Id, cfg: &Config, volume: Option<f32>, audio: Option<Audio>, _now: f64) -> SoundSection {
+        let t = &tr().settings_more;
         let p = panel(cx, parent);
         let mut rows = RowSet::default();
         match volume {
-            Some(v) => rows.slider(cx, nav, p, "volume", "Volume", Some("Left and right to change."), v, 0.0, 100.0, 5.0, "%", true),
+            Some(v) => rows.slider(cx, nav, p, "volume", t.snd_volume, Some(t.snd_volume_body), v, 0.0, 100.0, 5.0, "%", true),
             None => {
-                setting_row(cx, p, "Volume", Some("No sound output found."), true);
+                setting_row(cx, p, t.snd_volume, Some(t.snd_no_output), true);
             }
         }
         let mut first = false;
@@ -63,38 +65,38 @@ impl SoundSection {
                 let refs: Vec<&str> = labels.iter().map(|s| s.as_str()).collect();
                 let cur = a.outputs.iter().position(|d| d.default);
                 let body = match cur.map(|i| &a.outputs[i]) {
-                    Some(d) => format!("Playing on {}.", d.label),
-                    None => "Pick where sound plays.".to_string(),
+                    Some(d) => trf!(t.snd_playing_on, name = d.label),
+                    None => t.snd_pick_output.to_string(),
                 };
                 if a.outputs.len() == 1 && cur == Some(0) {
                     // One output and it is in use: nothing to pick, so no button to press.
-                    setting_row(cx, p, "Output", Some(&body), first);
+                    setting_row(cx, p, t.snd_output, Some(&body), first);
                 } else {
-                    rows.choice(cx, nav, p, "output", "Output", Some(&body), &refs, cur, first);
+                    rows.choice(cx, nav, p, "output", t.snd_output, Some(&body), &refs, cur, first);
                     outputs = a.outputs.iter().map(|d| d.id).collect();
                 }
                 first = false;
             }
             // The SuiPlay0X1's speaker chain: more makeup gain, the limiter keeps peaks clean.
             if let Some(on) = a.louder {
-                rows.switch(cx, nav, p, "louder", "Louder speakers", "More volume from the built-in speakers. A limiter keeps loud parts clean.", on, first);
+                rows.switch(cx, nav, p, "louder", t.snd_louder, t.snd_louder_body, on, first);
                 first = false;
             }
             match a.mic_muted {
                 Some(muted) => {
-                    let body = a.default_input().map(|d| d.label.clone()).unwrap_or_else(|| "Microphone".into());
-                    rows.switch(cx, nav, p, "mic", "Microphone", &format!("{body}. Off mutes it for every app."), !muted, first);
+                    let body = a.default_input().map(|d| d.label.clone()).unwrap_or_else(|| t.snd_microphone.into());
+                    rows.switch(cx, nav, p, "mic", t.snd_microphone, &trf!(t.snd_mic_body, name = body), !muted, first);
                     if let Some(l) = a.mic_level {
-                        rows.slider(cx, nav, p, "mic-level", "Mic level", Some("How loud you sound to others."), l as f32, 0.0, 100.0, 5.0, "%", false);
+                        rows.slider(cx, nav, p, "mic-level", t.snd_mic_level, Some(t.snd_mic_level_body), l as f32, 0.0, 100.0, 5.0, "%", false);
                     }
                 }
                 None => {
-                    setting_row(cx, p, "Microphone", Some("No microphone found."), first);
+                    setting_row(cx, p, t.snd_microphone, Some(t.snd_no_mic), first);
                 }
             }
             first = false;
         }
-        rows.switch(cx, nav, p, "sounds", "Sounds", "Soft clicks when you move, select and go back.", cfg.ui_sounds.unwrap_or(true), first);
+        rows.switch(cx, nav, p, "sounds", t.snd_sounds, t.snd_sounds_body, cfg.ui_sounds.unwrap_or(true), first);
         SoundSection { rows, outputs }
     }
 }

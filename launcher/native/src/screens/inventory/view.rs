@@ -4,6 +4,7 @@
 //! sheet; in select mode A toggles (never a staked item). The data and its optimistic updates
 //! are rare-market's `inventory` (WS 11).
 
+use rare_i18n::{tr, trf, trn};
 use crate::screens::wallet::fmt::{fmt_sui, num_locale};
 use crate::screens::wallet::home::lib::load_bar;
 use crate::screens::wallet::kit::empty;
@@ -32,7 +33,7 @@ pub fn view(inv: Option<&Inventory>, loading: bool, error: bool, selecting: bool
     if let Some(inv) = inv.filter(|i| i.total > 0) {
         d = d.kid(
             p("mb-4 text-sm text-secondary")
-                .kid(text(format!("{} {}, floor value ", num_locale(inv.total as f64, 0, 0), if inv.total == 1 { "item" } else { "items" })))
+                .kid(text(trn!(tr().inventory.items_floor_value, inv.total as f64, n = num_locale(inv.total as f64, 0, 0))))
                 .kid(span("tabular-nums text-primary").text(format!("{} SUI", fmt_sui(mist(Some(&total_floor_mist(inv))), 2, false, true)))),
         );
     }
@@ -44,16 +45,16 @@ pub fn view(inv: Option<&Inventory>, loading: bool, error: bool, selecting: bool
             // No empty game sections (an item can move out while a send is pending).
             continue;
         }
-        let mut count = span("text-sm text-secondary").text(format!("{n} {}", if n == 1 { "item" } else { "items" }));
+        let mut count = span("text-sm text-secondary").text(trn!(tr().common.items_n, n));
         if mist(Some(&g.floor_value_mist)).unwrap_or(0) > 0 {
             count.text = None;
-            count = count.kid(text(format!("{n} {}", if n == 1 { "item" } else { "items" }))).kid(text(", floor value ")).kid(sui(mist(Some(&g.floor_value_mist)), 2, false, true, ""));
+            count = count.kid(text(trn!(tr().inventory.items_floor_value, n))).kid(sui(mist(Some(&g.floor_value_mist)), 2, false, true, ""));
         }
         let mut head = div("mb-3 flex items-center gap-3");
         if let Some(game) = &g.game {
             head = head.kid(thumb(if game.logo_url.is_empty() { None } else { Some(&game.logo_url) }, &game.name, "size-8", false));
         }
-        head = head.kid(h2("text-base font-semibold").text(g.game.as_ref().map(|x| x.name.as_str()).unwrap_or("Other collectibles"))).kid(count);
+        head = head.kid(h2("text-base font-semibold").text(g.game.as_ref().map(|x| x.name.as_str()).unwrap_or(tr().inventory.other_collectibles))).kid(count);
         let grid = div("grid grid-cols-6 gap-3").attr("data-nav-group", format!("inv-{slug}")).kids(g.items.iter().map(|it: &InvItem| {
             let on = selected.contains(&it.id);
             let i = idx;
@@ -70,9 +71,9 @@ pub fn view(inv: Option<&Inventory>, loading: bool, error: bool, selecting: bool
             let mut cell = div("relative min-w-0")
                 .key(&it.id)
                 .kid(item_card(&card, i, i == 0, false, &cn(&["w-full", when(on, "outline outline-2 -outline-offset-2 outline-primary")]), msg))
-                .kid(p("mt-1 truncate px-1 text-label text-secondary").text(format!(
-                    "Floor {}",
-                    match mist(it.floor_mist.as_deref()) {
+                .kid(p("mt-1 truncate px-1 text-label text-secondary").text(trf!(
+                    tr().inventory.floor_price,
+                    price = match mist(it.floor_mist.as_deref()) {
                         Some(f) if it.floor_mist.as_deref().is_some_and(|s| !s.is_empty()) => fmt_sui(Some(f), 2, false, true),
                         _ => "--".into(),
                     }
@@ -92,10 +93,10 @@ pub fn view(inv: Option<&Inventory>, loading: bool, error: bool, selecting: bool
         d = d.kid(section("mb-8").key(&slug).kid(head).kid(grid));
     }
     if inv.is_some_and(|i| i.total == 0) {
-        d = d.kid(empty("No collectibles in this wallet", Some(text("Items from Sui games show up here, grouped by game.")), None, false));
+        d = d.kid(empty(tr().inventory.no_collectibles, Some(text(tr().inventory.no_collectibles_body)), None, false));
     }
     if error && inv.is_none() {
-        d = d.kid(empty("Could not load your inventory", Some(text("Check the connection and try again.")), None, false));
+        d = d.kid(empty(tr().inventory.load_failed, Some(text(tr().inventory.load_failed_body)), None, false));
     }
     d
 }
@@ -112,7 +113,7 @@ mod tests {
         let t = v.texts();
         assert_eq!(t[0], "8 items, floor value ");
         assert_eq!(t[1], "200.2 SUI");
-        assert_eq!(&t[2..4], ["Pawtato Heroes", "3 items"]);
+        assert_eq!(&t[2..4], ["Pawtato Heroes", "3 items, floor value "]);
         assert!(t.contains(&"Staked".to_string()));
         assert!(t.contains(&"Unstake on Popkins to list or send".to_string()));
         assert!(t.contains(&"Other collectibles".to_string()));

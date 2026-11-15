@@ -10,6 +10,7 @@ pub mod state;
 pub mod tiles;
 pub mod view;
 
+use rare_i18n::tr;
 use crate::screens::overlay::common::*;
 use fixtures::{Mode, MockApi, DEN, PC};
 use logic::*;
@@ -218,7 +219,7 @@ impl StreamUi {
             return;
         }
         if !valid_address(address) {
-            self.st.toasts.push(state::Toast { text: "That doesn't look like an address".into(), error: true });
+            self.st.toasts.push(state::Toast { text: tr().stream.bad_address.into(), error: true });
             return;
         }
         if let Some(h) = self.st.add(address.trim()) {

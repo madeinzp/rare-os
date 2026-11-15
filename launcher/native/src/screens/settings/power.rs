@@ -3,6 +3,7 @@
 
 use super::{config::Config, rows::*, SectionOut, SectionView};
 use crate::screens::overlay::common::*;
+use rare_i18n::{tr, trf, trn};
 use rare_render::Id;
 
 pub const DEFAULT_IDLE_BATTERY_MIN: f32 = 15.0;
@@ -47,11 +48,11 @@ pub fn next_idle_choice(cur: f32) -> f32 {
 
 pub fn idle_label(min: f32) -> String {
     if min <= 0.0 {
-        "Never".into()
+        tr().settings_more.pw_never.into()
     } else if min >= 60.0 {
-        format!("{} h", min / 60.0)
+        trf!(tr().settings_more.pw_hours, n = min / 60.0)
     } else {
-        format!("{} min", min)
+        trf!(tr().settings_more.pw_minutes, n = min)
     }
 }
 
@@ -72,26 +73,25 @@ pub enum CareState {
 pub fn care_note(s: CareState, limit: u32) -> String {
     let (low, floor) = (limit.saturating_sub(5), limit.saturating_sub(10));
     match s {
-        CareState::Off => format!("Charging stops at {limit}% while plugged in and starts again at {low}%, so the battery ages more slowly."),
+        CareState::Off => trf!(tr().settings_more.pw_care_off, limit = limit, low = low),
         CareState::Unavailable => String::new(),
-        CareState::Unplugged => format!("Charging stops at {limit}% the next time you plug in."),
-        CareState::Low => format!("Charging normally until the battery is above {floor}%."),
-        CareState::Hot => "Charging normally while the battery is warm.".into(),
-        CareState::Unknown => "Charging normally while the battery level can't be read.".into(),
-        CareState::Charging => format!("Plugged in and charging to {limit}%."),
-        CareState::Holding => format!("Plugged in and holding at {limit}%."),
+        CareState::Unplugged => trf!(tr().settings_more.pw_care_unplugged, limit = limit),
+        CareState::Low => trf!(tr().settings_more.pw_care_low, floor = floor),
+        CareState::Hot => tr().settings_more.pw_care_hot.into(),
+        CareState::Unknown => tr().settings_more.pw_care_unknown.into(),
+        CareState::Charging => trf!(tr().settings_more.pw_care_charging, limit = limit),
+        CareState::Holding => trf!(tr().settings_more.pw_care_holding, limit = limit),
     }
 }
 
 /// Battery health's line: wear and charge cycles.
 pub fn health_note(health: u32, b: &BatteryExtra) -> String {
     let worn = 100u32.saturating_sub(health);
-    let wear = if worn == 0 { "As much charge as when it was new.".to_string() } else { format!("Holds {worn}% less charge than when it was new.") };
+    let t = &tr().settings_more;
+    let wear = if worn == 0 { t.pw_wear_none.to_string() } else { trf!(t.pw_wear, n = worn) };
     let cycles = match b.cycles {
-        Some(1) if b.counted => " 1 charge cycle since Rare OS was installed.".to_string(),
-        Some(c) if b.counted => format!(" {c} charge cycles since Rare OS was installed."),
-        Some(1) => " 1 charge cycle.".to_string(),
-        Some(c) => format!(" {c} charge cycles."),
+        Some(c) if b.counted => format!(" {}", trn!(t.pw_cycles_counted, c)),
+        Some(c) => format!(" {}", trn!(t.pw_cycles, c)),
         None => String::new(),
     };
     wear + &cycles
@@ -155,9 +155,17 @@ pub fn fixture_info() -> PowerInfo {
     }
 }
 
-const PROFILES: [(&str, &str); 3] = [("quiet", "Quiet"), ("balanced", "Balanced"), ("performance", "Performance")];
+const PROFILES: [&str; 3] = ["quiet", "balanced", "performance"];
+fn profile_labels() -> [&'static str; 3] {
+    let t = &tr().settings_more;
+    [t.pw_quiet, t.pw_balanced, t.pw_performance]
+}
 /// rare-fand's presets as Settings names them; Custom opens the curve editor.
-const FANS: [(&str, &str); 4] = [("quiet", "Quiet"), ("default", "Balanced"), ("cool", "Max"), ("custom", "Custom")];
+const FANS: [&str; 4] = ["quiet", "default", "cool", "custom"];
+fn fan_labels() -> [&'static str; 4] {
+    let t = &tr().settings_more;
+    [t.pw_quiet, t.pw_balanced, t.pw_max, t.pw_custom]
+}
 
 pub struct PowerSection {
     rows: RowSet,
@@ -176,45 +184,46 @@ impl PowerSection {
     }
 
     pub fn build_with(cx: &mut Cx, nav: &mut Nav, parent: Id, cfg: &Config, info: &PowerInfo, _now: f64) -> PowerSection {
+        let t = &tr().settings_more;
         let mut rows = RowSet::default();
         let p1 = panel(cx, parent);
         if let Some(perf) = &info.perf {
             if perf.available {
                 let watts = if perf.profile == "custom" { perf.tdp.unwrap_or(15.0) } else { perf.profile_watts.map(|w| match perf.profile.as_str() { "quiet" => w.0, "balanced" => w.1, _ => w.2 }).unwrap_or(15.0) };
-                let body = format!("{} W. Kept after a restart. Each game starts on Balanced unless you save settings for it in Quick settings.", watts.round() as i64);
-                let labels: Vec<&str> = PROFILES.iter().map(|(_, l)| *l).collect();
-                let cur = PROFILES.iter().position(|(k, _)| *k == perf.profile);
-                rows.choice(cx, nav, p1, "profile", "Performance profile", Some(&body), &labels, cur, true);
-                rows.slider(cx, nav, p1, "tdp", "Power limit", Some("A limit of your own instead of a profile."), perf.tdp.unwrap_or(15.0), perf.tdp_min, perf.tdp_max, 1.0, " W", false);
+                let body = trf!(t.pw_profile_body, watts = watts.round() as i64);
+                let labels = profile_labels();
+                let cur = PROFILES.iter().position(|k| *k == perf.profile);
+                rows.choice(cx, nav, p1, "profile", t.pw_profile, Some(&body), &labels, cur, true);
+                rows.slider(cx, nav, p1, "tdp", t.pw_limit, Some(t.pw_limit_body), perf.tdp.unwrap_or(15.0), perf.tdp_min, perf.tdp_max, 1.0, " W", false);
                 if let Some(b) = perf.cpu_boost {
-                    rows.switch(cx, nav, p1, "cpu-boost", "CPU boost", "Faster CPU, more heat and battery.", b, false);
+                    rows.switch(cx, nav, p1, "cpu-boost", t.pw_cpu_boost, t.pw_cpu_boost_body, b, false);
                 }
                 if let Some(f) = &perf.fan {
-                    let labels: Vec<&str> = FANS.iter().map(|(_, l)| *l).collect();
-                    let cur = FANS.iter().position(|(k, _)| k == f);
-                    let what = "Quiet stays low to about 65 C. Max spins up early. Custom opens the curve editor.";
+                    let labels = fan_labels();
+                    let cur = FANS.iter().position(|k| k == f);
+                    let what = t.pw_fan_body;
                     let body = match &perf.fan_now {
-                        Some(n) => format!("{n} now. {what}"),
+                        Some(n) => trf!(t.pw_fan_now, now = n, what = what),
                         None => what.to_string(),
                     };
-                    rows.choice(cx, nav, p1, "fan", "Fan", Some(&body), &labels, cur, false);
+                    rows.choice(cx, nav, p1, "fan", t.pw_fan, Some(&body), &labels, cur, false);
                 }
             } else {
-                let note = if perf.note.is_empty() { "This device does not let Rare OS change its power limits." } else { &perf.note };
-                setting_row(cx, p1, "Performance", Some(note), true);
+                let note = if perf.note.is_empty() { t.pw_no_control } else { &perf.note };
+                setting_row(cx, p1, t.pw_performance_title, Some(note), true);
             }
         }
         let p2 = panel(cx, parent);
-        let row_ = setting_row(cx, p2, "Sleep when idle", Some("Sleeps after this long with no input. Never while a game runs or sound plays. Press the power button to wake."), true);
+        let row_ = setting_row(cx, p2, t.pw_sleep, Some(t.pw_sleep_body), true);
         let bat = cfg.sleep_idle_battery.unwrap_or(DEFAULT_IDLE_BATTERY_MIN);
         let ac = cfg.sleep_idle_ac.unwrap_or(0.0);
-        let b1 = button(cx, row_.right, &format!("On battery: {}", idle_label(bat)), Variant::Secondary, Sz::Md, false).sid("sleep-idle").tag(1);
+        let b1 = button(cx, row_.right, &trf!(t.pw_on_battery, value = idle_label(bat)), Variant::Secondary, Sz::Md, false).sid("sleep-idle").tag(1);
         let battery_label = match b1.kind {
             Kind::Btn { text, .. } => text,
             _ => unreachable!(),
         };
         let battery_btn = nav.add(b1.group(10));
-        let b2 = button(cx, row_.right, &format!("Charging: {}", idle_label(ac)), Variant::Secondary, Sz::Md, false).sid("sleep-idle").tag(2);
+        let b2 = button(cx, row_.right, &trf!(t.pw_charging, value = idle_label(ac)), Variant::Secondary, Sz::Md, false).sid("sleep-idle").tag(2);
         let ac_label = match b2.kind {
             Kind::Btn { text, .. } => text,
             _ => unreachable!(),
@@ -226,17 +235,17 @@ impl PowerSection {
                 let limit = info.battery.limit.unwrap_or(80);
                 let note = care_note(if care.on { care.state } else { CareState::Off }, limit);
                 let note = if note.is_empty() { care_note(CareState::Off, limit) } else { note };
-                rows.switch(cx, nav, p2, "battery-care", &format!("Battery care (stop at {limit}%)"), &note, care.on, false);
+                rows.switch(cx, nav, p2, "battery-care", &trf!(t.pw_care_title, limit = limit), &note, care.on, false);
                 if care.on && info.battery.limit.is_some() {
                     let labels: Vec<String> = LIMITS.iter().map(|l| format!("{l}%")).collect();
                     let labels: Vec<&str> = labels.iter().map(String::as_str).collect();
                     let cur = LIMITS.iter().position(|l| *l == limit);
-                    rows.choice(cx, nav, p2, "charge-limit", "Stop charging at", Some("Lower keeps the battery healthy for longer. Higher lasts longer away from the charger."), &labels, cur, false);
+                    rows.choice(cx, nav, p2, "charge-limit", t.pw_stop_at, Some(t.pw_stop_at_body), &labels, cur, false);
                 }
             }
         }
         if let Some(h) = info.health {
-            setting_row(cx, p2, &format!("Battery health {h}%"), Some(&health_note(h, &info.battery)), false);
+            setting_row(cx, p2, &trf!(t.pw_health, n = h), Some(&health_note(h, &info.battery)), false);
         }
         PowerSection { rows, perf: info.perf.clone(), care: info.care.clone(), battery_btn, ac_btn, battery_label, ac_label }
     }
@@ -248,20 +257,20 @@ impl SectionView for PowerSection {
             if cur == self.battery_btn {
                 let next = next_idle_choice(cfg.sleep_idle_battery.unwrap_or(DEFAULT_IDLE_BATTERY_MIN));
                 cfg.sleep_idle_battery = Some(next);
-                cx.scene.set_text(cx.t, self.battery_label, &format!("On battery: {}", idle_label(next)));
+                cx.scene.set_text(cx.t, self.battery_label, &trf!(tr().settings_more.pw_on_battery, value = idle_label(next)));
                 return SectionOut::Changed;
             }
             if cur == self.ac_btn {
                 let next = next_idle_choice(cfg.sleep_idle_ac.unwrap_or(0.0));
                 cfg.sleep_idle_ac = Some(next);
-                cx.scene.set_text(cx.t, self.ac_label, &format!("Charging: {}", idle_label(next)));
+                cx.scene.set_text(cx.t, self.ac_label, &trf!(tr().settings_more.pw_charging, value = idle_label(next)));
                 return SectionOut::Changed;
             }
         }
         match self.rows.press(cx, nav, now) {
-            Some((sid, Val::Idx(i))) if sid == "profile" => SectionOut::Act(format!("power:profile:{}", PROFILES[i].0)),
+            Some((sid, Val::Idx(i))) if sid == "profile" => SectionOut::Act(format!("power:profile:{}", PROFILES[i])),
             Some((sid, Val::Idx(3))) if sid == "fan" => SectionOut::Act("open:fan-curve".into()),
-            Some((sid, Val::Idx(i))) if sid == "fan" => SectionOut::Act(format!("power:fan:{}", FANS[i].0)),
+            Some((sid, Val::Idx(i))) if sid == "fan" => SectionOut::Act(format!("power:fan:{}", FANS[i])),
             Some((sid, Val::Idx(i))) if sid == "charge-limit" => SectionOut::Act(format!("power:charge-limit:{}", LIMITS[i])),
             Some((sid, Val::Bool(v))) if sid == "cpu-boost" => SectionOut::Act(format!("power:cpu-boost:{v}")),
             Some((sid, Val::Bool(v))) if sid == "battery-care" => SectionOut::Act(format!("power:battery-care:{v}")),

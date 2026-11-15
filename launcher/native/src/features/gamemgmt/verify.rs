@@ -12,6 +12,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+use rare_i18n::{tr, trf, trn};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Phase {
@@ -144,33 +145,31 @@ pub fn steam_parse(appid: u32, text: &str, total: u64) -> Status {
         }
     }
     if let Some(why) = failed.filter(|_| !done) {
-        return Status { phase: Phase::Failed, text: format!("Steam stopped the check: {why}") };
+        return Status { phase: Phase::Failed, text: trf!(tr().features_more.verify_steam_stopped, reason = why) };
     }
     if done {
-        let files = |n: u64, what: &str| format!("{n} {what} file{}", if n == 1 { "" } else { "s" });
         let text = match bad {
-            Some((m, c)) if m + c > 0 => {
-                let parts: Vec<String> = [(m, "missing"), (c, "damaged")].iter().filter(|(n, _)| *n > 0).map(|(n, w)| files(*n, w)).collect();
-                format!("Steam replaced {}", parts.join(" and "))
-            }
-            Some(_) => "All files are fine".to_string(),
-            None if fixing || download > 0 => "Steam replaced missing or damaged files".to_string(),
-            None => "All files are fine".to_string(),
+            Some((m, 0)) if m > 0 => trn!(tr().features_more.verify_replaced_missing, m),
+            Some((0, c)) if c > 0 => trn!(tr().features_more.verify_replaced_damaged, c),
+            Some((m, c)) if m + c > 0 => trn!(tr().features_more.verify_replaced_both, m + c, m = m, c = c),
+            Some(_) => tr().features_more.verify_all_fine.to_string(),
+            None if fixing || download > 0 => tr().features_more.verify_replaced_some.to_string(),
+            None => tr().features_more.verify_all_fine.to_string(),
         };
         return Status { phase: Phase::Done, text };
     }
     if fixing {
-        return Status { phase: Phase::Fixing, text: "Steam is replacing missing or damaged files".into() };
+        return Status { phase: Phase::Fixing, text: tr().features_more.verify_replacing.into() };
     }
     if seen {
         let text = if total > 0 && checked > 0 {
-            format!("Checking files: {} of {}", gb(checked.min(total)), gb(total))
+            trf!(tr().features_more.verify_checking_progress, done = gb(checked.min(total)), total = gb(total))
         } else {
-            "Checking files".to_string()
+            tr().features_more.verify_checking.to_string()
         };
         return Status { phase: Phase::Checking, text };
     }
-    Status { phase: Phase::Waiting, text: "Waiting for Steam to start the check".into() }
+    Status { phase: Phase::Waiting, text: tr().features_more.verify_waiting.into() }
 }
 
 fn content_log() -> Option<PathBuf> {
@@ -186,10 +185,10 @@ pub fn steam_start(ctx: &rare_core::Ctx, runner: &rare_launch::launch::Runner, i
     if status(id).is_some_and(|s| s.busy()) {
         return Ok(());
     }
-    let log = content_log().ok_or("Steam is not installed.")?;
+    let log = content_log().ok_or_else(|| tr().features_more.verify_no_steam.to_string())?;
     let mut from = file_len(&log);
     rare_launch::apps::steam(ctx, runner, &format!("steam://validate/{appid}")).map_err(|e| e.to_string())?;
-    set(id, Phase::Waiting, "Waiting for Steam to start the check");
+    set(id, Phase::Waiting, tr().features_more.verify_waiting);
     let id = id.to_string();
     std::thread::spawn(move || {
         let t0 = Instant::now();
@@ -218,7 +217,7 @@ pub fn steam_start(ctx: &rare_core::Ctx, runner: &rare_launch::launch::Runner, i
                 log::info!("verify {id}: {}", s.text);
             }
             let waited_long = s.phase == Phase::Waiting && t0.elapsed() > Duration::from_secs(180);
-            jobs().insert(id.clone(), if waited_long { Status { phase: Phase::Failed, text: "Steam didn't start the check. Try again, or use Open in Steam.".into() } } else { s });
+            jobs().insert(id.clone(), if waited_long { Status { phase: Phase::Failed, text: tr().features_more.verify_steam_no_start.into() } } else { s });
             if end || waited_long || t0.elapsed() > Duration::from_secs(7200) {
                 break;
             }
@@ -267,7 +266,7 @@ fn sha256(p: &Path, hashed: &mut u64, total: u64, id: &str, verb: &str, last: &m
         *hashed += n as u64;
         if last.elapsed() > Duration::from_millis(400) {
             *last = Instant::now();
-            set(id, Phase::Checking, format!("{verb}: {} of {}", gb(*hashed), gb(total)));
+            set(id, Phase::Checking, trf!(verb, done = gb(*hashed), total = gb(total)));
         }
     }
     Some(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
@@ -299,30 +298,24 @@ fn save_list(id: &str, l: &List) -> Result<(), String> {
     std::fs::write(p, serde_json::to_vec(l).map_err(|e| e.to_string())?).map_err(|e| e.to_string())
 }
 
-fn n_files(n: usize) -> String {
-    if n == 1 {
-        "1 file".into()
-    } else {
-        format!("{} files", crate::kit::format::grouped(n as f64, 0, 0))
-    }
-}
-
 /// Compares a fresh list with the saved one: the line to show and whether they differ.
 pub fn compare(saved: &BTreeMap<String, (u64, String)>, now: &BTreeMap<String, (u64, String)>) -> (bool, String) {
     let changed: Vec<&String> = saved.iter().filter(|(k, v)| now.get(*k).is_some_and(|n| n != *v)).map(|(k, _)| k).collect();
     let missing: Vec<&String> = saved.keys().filter(|k| !now.contains_key(*k)).collect();
     if changed.is_empty() && missing.is_empty() {
-        return (false, format!("All {} match the saved list", n_files(saved.len())));
+        return (false, trn!(tr().features_more.verify_all_match, saved.len(), n = crate::kit::format::grouped(saved.len() as f64, 0, 0)));
     }
-    let mut parts = Vec::new();
-    if !changed.is_empty() {
-        parts.push(format!("{} changed", n_files(changed.len())));
-    }
-    if !missing.is_empty() {
-        parts.push(format!("{} missing", n_files(missing.len())));
-    }
+    let f = &tr().features_more;
+    let n_changed = trn!(f.verify_files_changed, changed.len(), n = crate::kit::format::grouped(changed.len() as f64, 0, 0));
+    let n_missing = trn!(f.verify_files_missing, missing.len(), n = crate::kit::format::grouped(missing.len() as f64, 0, 0));
     let names: Vec<&str> = missing.iter().chain(changed.iter()).take(2).map(|p| p.rsplit('/').next().unwrap_or(p)).collect();
-    (true, format!("{} ({}). Reinstall or copy the game again to repair it", parts.join(", "), names.join(", ")))
+    let names = names.join(", ");
+    let text = match (changed.is_empty(), missing.is_empty()) {
+        (false, false) => trf!(f.verify_differs_both, changed = n_changed, missing = n_missing, names = names),
+        (false, true) => trf!(f.verify_differs_one, part = n_changed, names = names),
+        _ => trf!(f.verify_differs_one, part = n_missing, names = names),
+    };
+    (true, text)
 }
 
 /// Checks a game outside the stores against its saved list, or saves the list the first time.
@@ -333,13 +326,13 @@ pub fn local_start(id: &str, dir: &str, keep: bool) -> Result<(), String> {
     }
     let dir = PathBuf::from(dir);
     if !dir.is_dir() {
-        return Err("The game's folder isn't there any more.".into());
+        return Err(tr().features_more.verify_folder_gone.into());
     }
-    set(id, Phase::Checking, "Checking files");
+    set(id, Phase::Checking, tr().features_more.verify_checking);
     let id = id.to_string();
     std::thread::spawn(move || {
         let saved: Option<List> = if keep { None } else { std::fs::read(list_path(&id)).ok().and_then(|b| serde_json::from_slice(&b).ok()) };
-        let verb = if saved.is_some() { "Checking files" } else { "Making a list of the files" };
+        let verb = if saved.is_some() { tr().features_more.verify_checking_progress } else { tr().features_more.verify_listing_progress };
         let now = read_list(&id, &dir, verb);
         let s = match saved {
             Some(saved) => {
@@ -347,9 +340,9 @@ pub fn local_start(id: &str, dir: &str, keep: bool) -> Result<(), String> {
                 Status { phase: if differs { Phase::Differs } else { Phase::Done }, text }
             }
             None => match save_list(&id, &now) {
-                Ok(()) if keep => Status { phase: Phase::Done, text: format!("Saved {} as the good copy", n_files(now.files.len())) },
-                Ok(()) => Status { phase: Phase::Done, text: format!("Saved a list of {}. The next check compares against it", n_files(now.files.len())) },
-                Err(e) => Status { phase: Phase::Failed, text: format!("Couldn't save the file list: {e}") },
+                Ok(()) if keep => Status { phase: Phase::Done, text: trn!(tr().features_more.verify_saved_good, now.files.len(), n = crate::kit::format::grouped(now.files.len() as f64, 0, 0)) },
+                Ok(()) => Status { phase: Phase::Done, text: trn!(tr().features_more.verify_saved_list, now.files.len(), n = crate::kit::format::grouped(now.files.len() as f64, 0, 0)) },
+                Err(e) => Status { phase: Phase::Failed, text: trf!(tr().features_more.verify_save_failed, error = e) },
             },
         };
         log::info!("verify {id}: {}", s.text);

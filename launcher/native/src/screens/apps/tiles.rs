@@ -6,6 +6,7 @@ use super::catalog::{apps, icon_src, run_id, AppEntry, AppStatus};
 use super::state::{InstallState, Shared};
 use crate::screens::overlay::common::*;
 use crate::screens::overlay::lay::s;
+use rare_i18n::{tr, trf};
 use rare_render::anim::{Ease, Keys, BREATHE};
 use rare_render::input::Pad;
 use rare_render::taffy::Style;
@@ -95,11 +96,11 @@ impl TileView {
     /// Only a state worth reading: how an app opens (which browser) is detail for its page.
     pub fn sub(&self) -> &'static str {
         if self.installing.as_ref().is_some_and(|i| i.error.is_none()) {
-            "Installing"
+            tr().apps.tile_installing
         } else if self.running {
-            "Running"
+            tr().apps.tile_running
         } else if !self.ready() && self.status.is_some() {
-            "Not installed"
+            tr().apps.tile_not_installed
         } else {
             ""
         }
@@ -108,11 +109,11 @@ impl TileView {
     /// data-hint-a: what A does on this tile.
     pub fn hint_a(&self) -> &'static str {
         if self.running {
-            "Resume"
+            tr().common.resume
         } else if self.ready() {
-            "Open"
+            tr().common.open
         } else {
-            "Get"
+            tr().apps.get
         }
     }
 }
@@ -140,7 +141,7 @@ pub fn app_tile(cx: &mut Cx, parent: Id, app: &AppEntry, v: &TileView, live: boo
     cx.scene.add_text(cx.t, wrap, s().px(0.1 * r).done(), if sub.is_empty() { "\u{a0}" } else { sub }, ts(r, ty::LABEL.0, ty::LABEL.1, 400).truncate(), tok::MUTED);
     let mut hint = v.hint_a().to_string();
     if details {
-        hint.push_str("|X:Details");
+        hint.push_str(&format!("|X:{}", tr().common.details));
     }
     let f = Focusable { id: btn, kind: Kind::Tile { scale: 1.06 }, group: 0, hint, tag: 0, sid: app.id.clone() };
     TileParts { f, label }
@@ -199,9 +200,9 @@ impl AppsTiles {
                 // Rail > SectionHead: mb 0.9rem px 2.5rem; the note is "n running".
                 let n = apps.running_apps();
                 let head = cx.scene.add(page, s().row().items_center().gap(0.75 * r).px(2.5 * r).mb(0.9 * r).done(), Node::default());
-                cx.scene.add_text(cx.t, head, s().done(), "Apps", ts(r, ty::ROW.0, ty::ROW.1, 600).tracking(-0.01), tok::FG);
+                cx.scene.add_text(cx.t, head, s().done(), tr().apps.apps_title, ts(r, ty::ROW.0, ty::ROW.1, 600).tracking(-0.01), tok::FG);
                 if n > 0 {
-                    text(cx, head, ty::SMALL, 400, tok::MUTED, &format!("{n} running"));
+                    text(cx, head, ty::SMALL, 400, tok::MUTED, &trf!(tr().apps.n_running, n = n));
                 }
                 let rail = cx.scene.add(page, s().row().items_start().gap(1.0 * r).px(2.5 * r).done(), Node::default());
                 for a in catalog {
