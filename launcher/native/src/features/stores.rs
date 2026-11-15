@@ -211,7 +211,7 @@ pub fn job_line(j: &Job) -> String {
         return parts.join(" \u{b7} ");
     }
     if matches!(j.phase, Phase::Running | Phase::Paused) && j.total > 0 && !j.verifying {
-        parts.push(trf!(tr().features_more.stores_bytes_of, done = rare_stores::fmt_bytes(j.done), total = rare_stores::fmt_bytes(j.total)));
+        parts.push(trf!(tr().features_more.stores_bytes_of, done = crate::kit::format::fmt_bytes(j.done), total = crate::kit::format::fmt_bytes(j.total)));
     }
     if j.phase == Phase::Running {
         if let Some(eta) = j.eta.filter(|e| *e > 0) {
@@ -336,13 +336,13 @@ fn install_sheet(st: &mut State, id: &str) {
         .into_iter()
         .map(|d| {
             let short = need.is_some_and(|n| n > d.free);
-            let label = if short { trf!(tr().features_more.stores_drive_short, drive = d.label, free = rare_stores::fmt_bytes(d.free)) } else { trf!(tr().features_more.stores_drive_free, drive = d.label, free = rare_stores::fmt_bytes(d.free)) };
+            let label = if short { trf!(tr().features_more.stores_drive_short, drive = d.label, free = crate::kit::format::fmt_bytes(d.free)) } else { trf!(tr().features_more.stores_drive_free, drive = d.label, free = crate::kit::format::fmt_bytes(d.free)) };
             let root = if d.kind == DriveKind::Internal { home.clone() } else { d.mount.clone() };
             OptionItem { label, on: None, act: Act::Legacy(format!("stores:install-to:{id}|{}", drives::games_dir(&root, store).display())) }
         })
         .collect();
     let sub = match need {
-        Some(n) => trf!(tr().features_more.stores_install_where_needs, size = rare_stores::fmt_bytes(n)),
+        Some(n) => trf!(tr().features_more.stores_install_where_needs, size = crate::kit::format::fmt_bytes(n)),
         None => tr().features_more.stores_install_where.into(),
     };
     st.options = Some(OptionsSpec { title, sub: Some(sub), items });
@@ -446,7 +446,7 @@ pub fn download_row(ui: &mut crate::kit::Ui, st: &State, acts: &mut crate::page:
         .child(ui.text_s(s().w(3.2), pct, T::new(Ty::Small).w(600).tab().right()));
     let mut line = job_line(j);
     if live && j.speed > 0.0 {
-        line = format!("{line} \u{b7} {}/s", rare_stores::fmt_bytes(j.speed as u64));
+        line = format!("{line} \u{b7} {}", trf!(tr().common.per_sec, size = crate::kit::format::fmt_bytes(j.speed as u64)));
     }
     let col = ui
         .bx(s().col().grow().min0().gap(0.45))

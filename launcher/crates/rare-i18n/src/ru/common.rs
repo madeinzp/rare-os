@@ -93,4 +93,8 @@ translate! { common {
     unit_gb: "{n} ГБ",
     unit_mb: "{n} МБ",
     secs: "{n} с",
+    unit_tb: "{n} ТБ",
+    unit_kb: "{n} КБ",
+    watts: "{n} Вт",
+    per_sec: "{size}/с",
 }}

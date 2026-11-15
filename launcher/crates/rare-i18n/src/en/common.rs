@@ -106,4 +106,12 @@ strings! {
     unit_mb: "{n} MB",
     /// A short duration in seconds; n is a number
     secs: "{n} s",
+    /// A size in terabytes; n is a number like 1.2
+    unit_tb: "{n} TB",
+    /// A size in kilobytes; n is a whole number
+    unit_kb: "{n} KB",
+    /// A power in watts; n is a whole number
+    watts: "{n} W",
+    /// A download speed; size is a size like "12 MB"
+    per_sec: "{size}/s",
 }

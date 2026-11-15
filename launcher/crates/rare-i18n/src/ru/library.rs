@@ -60,7 +60,7 @@ translate! { library {
     set_up_android: "Настроить Android",
     set_up: "Настроить",
     play_android_title: "Играйте в игры для Android",
-    play_android_body: "Rare загрузит Android без приложений Google (около 1 GB) и добавит F-Droid и Aurora Store, чтобы вы могли устанавливать игры без аккаунта Google.",
+    play_android_body: "Rare загрузит Android без приложений Google (около 1 ГБ) и добавит F-Droid и Aurora Store, чтобы вы могли устанавливать игры без аккаунта Google.",
     find_fdroid: "Найти в F-Droid",
     search_fdroid: "Поиск в F-Droid",
     android_find_note: "Найдите игру в F-Droid или откройте F-Droid или Aurora Store. Установленные игры появятся здесь.",

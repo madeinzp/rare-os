@@ -102,14 +102,14 @@ fn preset_index(name: &str) -> usize {
     PRESETS.iter().position(|p| *p == name).unwrap_or(1)
 }
 
-/// "54 C, 2,898 rpm, fan at 41%".
+/// "54 C, 2898 rpm, fan at 41%".
 pub fn now_line(f: &FanStatus) -> String {
     let mut parts = Vec::new();
     if let Some(t) = f.temp {
         parts.push(trf!(tr().features.fan_temp, t = t.round() as i64));
     }
     if let Some(r) = f.rpm {
-        parts.push(trf!(tr().features.fan_rpm, n = crate::kit::format::grouped(r as f64, 0, 0)));
+        parts.push(trf!(tr().features.fan_rpm, n = r));
     }
     if let Some(d) = f.duty {
         parts.push(trf!(tr().features.fan_duty, n = d));
@@ -377,7 +377,7 @@ mod tests {
     #[test]
     fn the_now_line_reads_plainly() {
         let f = FanStatus { preset: "default".into(), curve: vec![], mode: "ec".into(), temp: Some(54.4), sensor: "edge".into(), duty: Some(41), rpm: Some(2898) };
-        assert_eq!(now_line(&f), "54 C, 2,898 rpm, fan at 41%");
+        assert_eq!(now_line(&f), "54 C, 2898 rpm, fan at 41%");
         assert_eq!(now_line(&FanStatus { temp: None, duty: None, rpm: None, ..f }), "Reading the fan");
     }
 }

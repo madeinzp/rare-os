@@ -164,11 +164,11 @@ const ITEMS: u32 = 10000;
 pub fn size_text(b: u64) -> String {
     let b = b as f64;
     if b >= 1e12 {
-        format!("{:.1} TB", b / 1e12)
+        crate::kit::format::in_tb(format!("{:.1}", b / 1e12))
     } else if b >= 1e9 {
-        format!("{:.1} GB", b / 1e9)
+        crate::kit::format::in_gb(format!("{:.1}", b / 1e9))
     } else {
-        format!("{} MB", (b / 1e6).round() as i64)
+        crate::kit::format::in_mb((b / 1e6).round() as i64)
     }
 }
 
@@ -601,6 +601,9 @@ fn item_title(title: &str) -> String {
             Some(appid) => trf!(tr().settings_more.sto_leftover_steam, appid = appid),
             None => trf!(tr().settings_more.sto_leftover_named, what = rest),
         },
-        None => title.to_string(),
+        None => match title.strip_suffix(": saves and Windows files") {
+            Some(game) => trf!(tr().settings_more.sto_prefix_files, game = game),
+            None => title.to_string(),
+        },
     }
 }

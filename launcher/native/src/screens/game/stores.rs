@@ -93,5 +93,5 @@ pub fn size_text(g: &Game) -> Option<String> {
     if g.installed || !managed(g) {
         return None;
     }
-    Some(stores::size(&g.id).map(|s| rare_stores::fmt_bytes(s.1)).unwrap_or_else(|| tr().game.checking.into()))
+    Some(stores::size(&g.id).map(|s| crate::kit::format::fmt_bytes(s.1)).unwrap_or_else(|| tr().game.checking.into()))
 }
