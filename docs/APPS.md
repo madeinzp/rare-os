@@ -15,11 +15,12 @@ Each app lists ways to open it, best first. The first way the device can use is 
 | Netflix | Chrome app window (`--app=https://www.netflix.com/browse --start-fullscreen`) | none | pointer |
 | YouTube | Chrome app window on `youtube.com/tv` with a TV user agent | none | gamepad |
 | Discord | Discord (`com.discordapp.Discord` Flatpak) | `discord.com/app` in Rare's window | pointer / focus |
-| Google Chrome | Chrome itself, fullscreen, the normal profile | none | pointer |
+| Google Chrome (Browser) | Chrome itself as a normal window with tabs, sized to the screen, the normal profile | none | pointer (browser layout) |
 | Battle.net | Blizzard's app through umu-run (Proton) in its Wine prefix | none (Rare installs it) | pointer |
 
 - **DRM.** WebKitGTK has no Widevine, so Netflix only opens in Google Chrome or Microsoft Edge (`drm: true`). Chromium and Brave don't count.
 - **Chrome app windows** get their own `--user-data-dir` (`~/.var/app/com.google.Chrome/data/rare-apps/<id>` for the Flatpak), so each app keeps its sign-in and runs as its own Chrome. That is what lets Close end just that app and the running dot follow it. On the SuiPlay0X1 they also get `--force-device-scale-factor=1.5`, the same scale as Rare's UI.
+- **The Browser** (the Google Chrome entry) is Chrome with tabs, the address bar and the new-tab button, not a kiosk: `--start-maximized --window-position=0,0 --window-size=<screen in DIP>` (gamescope has no window manager, so the size is given; the screen is read from the X root, 1920x1200 at scale 1.5 on the SuiPlay0X1 = 1280x800), `--hide-crash-restore-bubble`, no `--start-fullscreen` (that is F11 fullscreen and hides the tab strip). The Chrome app entries (Netflix, YouTube, and X or Telegram when they open in Chrome) stay single-site `--app` windows, fullscreen.
 - **Rare's window** is the web game window (`webgame.rs`) with its own storage per app, the focus controller mode and the on-screen keyboard. One web window at a time: opening X replaces a running web game.
 - Apps run in the launcher's runner as `app:<id>`, in their own systemd scope, so Resume, Close, the running dot and the status bar work as they do for games.
 
@@ -68,7 +69,9 @@ Chrome, Telegram Desktop and Discord don't read a gamepad. Rare already reads th
 | InputPlumber | Yes on the Rare OS image, not today. `LoadProfilePath` / `SetTargetDevices` on `org.shadowblip.Input.CompositeDevice` do exactly this, but the polkit policy says `auth_admin` for them, so a normal session can't call them without a rule. |
 | **Rare's own virtual device** | **What ships now.** While an app in pointer mode is in front, Rare writes mouse and key events to a virtual device it creates through `/dev/uinput`. Bazzite tags `/dev/uinput` `uaccess` (Steam's udev rules), so the logged-in user can open it without sudo. |
 
-Pointer mode layout: right stick moves the pointer (the same as Rare's web games), left stick scrolls (hi-res wheel), d-pad arrow keys, A or RT left click, LT right click, B back (Alt+Left in Chrome, Escape elsewhere), X space (play or pause), Y Steam's on-screen keyboard (`steam://open/keyboard`, Game Mode), LB and RB Shift+Tab and Tab, Menu Enter, View Escape. While it is on, the left stick no longer acts as a d-pad. The app's page shows the layout.
+Pointer mode layout: right stick moves the pointer (the same as Rare's web games), left stick scrolls (hi-res wheel), d-pad arrow keys, A or RT left click, LT right click, B back (Alt+Left in Chrome, Escape elsewhere), X space (play or pause), Y the on-screen keyboard (Rare's over the app on Rare OS, else Steam's `steam://open/keyboard`), LB and RB Shift+Tab and Tab, Menu Enter, View Escape. While it is on, the left stick no longer acts as a d-pad. The app's page shows the layout.
+
+The Browser layout (Google Chrome itself) changes a few: d-pad left and right go back and forward (Alt+Left, Alt+Right), LB and RB the previous and next tab (Ctrl+Shift+Tab, Ctrl+Tab), X closes the tab (Ctrl+W), View goes to the address bar (Ctrl+L) and Menu opens a new tab (Ctrl+T), both with Rare's keyboard up on its web address layout (`.` `/` `:` `-` on the letters and a `.com` key). View and Menu act when let go and do nothing when both were held, so the View + Menu way back to Rare never opens a tab. Y opens the keyboard over any field. The keyboard can't open by itself when a Chrome field takes focus (that would need accessibility events from Chrome); Y, View, Menu or RC bring it up.
 
 **Back to Rare, always.** Guide is never taken by pointer mode: it hands the screen and the pad back to the launcher with the app still running. Holding Guide for 0.6 s opens the running list with Resume and Close (or Quit game). The launcher also takes the pad back on its own when the app in front exits. With the launcher in front, the pad drives it even while apps or games run in the background.
 

@@ -266,6 +266,21 @@ pub fn controls_for(controller: Controller, way: Option<&Way>) -> Vec<ControlRow
         .and_then(|w| w.back.as_deref())
         .unwrap_or(if matches!(k, Some(WayKind::ChromeApp) | Some(WayKind::Chrome)) { "alt+left" } else { "escape" });
     match controller {
+        // Chrome itself (the Browser, with tabs): rare_launch apps::pointer's browser layout.
+        Controller::Pointer if k == Some(WayKind::Chrome) => vec![
+            cr("Right stick", "Moves the pointer"),
+            cr("a", "Click (RT too)"),
+            cr("lt", "Right click"),
+            cr("Left stick", "Scrolls"),
+            cr("b", "Back a page"),
+            cr("D-pad", "Left and right: back and forward"),
+            cr("lb", "Previous tab"),
+            cr("rb", "Next tab"),
+            cr("start", "New tab"),
+            cr("select", "Address bar"),
+            cr("x", "Close tab"),
+            cr("y", "On-screen keyboard"),
+        ],
         Controller::Pointer => vec![
             cr("Right stick", "Moves the pointer"),
             cr("a", "Click (RT too)"),
@@ -388,5 +403,12 @@ mod tests {
         assert_eq!(back("netflix"), "Back a page");
         assert_eq!(back("telegram"), "Back (Escape)");
         assert!(controls_for(Controller::Focus, None).iter().any(|r| r.b == "select"));
+        // Chrome itself: tabs and the address bar on the pad.
+        let c = controls_for(Controller::Pointer, Some(&get("chrome").ways[0]));
+        let does = |b: &str| c.iter().find(|r| r.b == b).map(|r| r.does);
+        assert_eq!(does("start"), Some("New tab"));
+        assert_eq!(does("select"), Some("Address bar"));
+        assert_eq!(does("x"), Some("Close tab"));
+        assert_eq!(does("b"), Some("Back a page"));
     }
 }

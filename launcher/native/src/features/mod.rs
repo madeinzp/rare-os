@@ -66,7 +66,7 @@ pub fn boot(st: &mut State) {
     android::boot();
     // Y in an app the pad drives as a mouse: Rare's keyboard over it, where it can show.
     if typekb::available() {
-        rare_launch::apps::pointer::set_keyboard(crate::side::keyboard);
+        rare_launch::apps::pointer::set_keyboard(crate::side::app_keyboard);
     }
     // Now playing: the first look at Quick settings or the Rare menu already has the player.
     rare_system::media::warm();

@@ -45,6 +45,8 @@ pub fn env() -> Env {
         home: dirs::home_dir().unwrap_or_else(|| PathBuf::from("/")),
         // The SuiPlay0X1's 7" 1920 x 1200 screen: the same 1.5x Rare's own UI uses.
         scale: (product.trim() == "SuiPlay0X1").then_some(1.5),
+        // The screen Chrome's window fills (the SuiPlay's panel is 1920 x 1200 as shown).
+        screen: rare_overlay::gamescope::screen_size().or_else(|| (product.trim() == "SuiPlay0X1").then_some((1920, 1200))),
         user_flathub: user_flathub(),
         battlenet: rare_library::battlenet::find_client(),
     }

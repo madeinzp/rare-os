@@ -14,9 +14,15 @@
 //! this needs no sudo.
 //!
 //! Layout: right stick moves the pointer (as in Rare's web games), left stick scrolls, d-pad
-//! arrows, A left click, B back, X space, Y Steam's on-screen keyboard, LB/RB Shift+Tab/Tab,
-//! LT right click, RT left click, Menu Enter, View Escape. Guide is never taken: it brings Rare
-//! back, and holding it offers Close app.
+//! arrows, A left click, B back, X space, Y the on-screen keyboard (Rare's over the app, else
+//! Steam's), LB/RB Shift+Tab/Tab, LT right click, RT left click, Menu Enter, View Escape. Guide is
+//! never taken: it brings Rare back, and holding it offers Close app.
+//!
+//! Chrome itself (`Back::Browser`, the Browser app with tabs) is a browser first: d-pad left and
+//! right go back and forward, LB/RB the previous and next tab, X closes the tab, View goes to the
+//! address bar and Menu opens a new tab, both with the keyboard up for a web address. View and
+//! Menu act when let go, and not at all when both were held: View + Menu held is the way back to
+//! Rare and must not open a tab on the way.
 
 use super::catalog::Back;
 use rare_core::Pad;
@@ -28,6 +34,10 @@ pub mod code {
     #![cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub const KEY_ESC: u16 = 1;
     pub const KEY_TAB: u16 = 15;
+    pub const KEY_W: u16 = 17;
+    pub const KEY_T: u16 = 20;
+    pub const KEY_LEFTCTRL: u16 = 29;
+    pub const KEY_L: u16 = 38;
     pub const KEY_ENTER: u16 = 28;
     pub const KEY_LEFTSHIFT: u16 = 42;
     pub const KEY_LEFTALT: u16 = 56;
@@ -45,7 +55,7 @@ pub mod code {
     pub const REL_WHEEL: u16 = 0x08;
     pub const REL_WHEEL_HI_RES: u16 = 0x0b;
     pub const REL_HWHEEL_HI_RES: u16 = 0x0c;
-    pub const KEYS: &[u16] = &[KEY_ESC, KEY_TAB, KEY_ENTER, KEY_LEFTSHIFT, KEY_LEFTALT, KEY_SPACE, KEY_UP, KEY_LEFT, KEY_RIGHT, KEY_DOWN, BTN_LEFT, BTN_RIGHT, BTN_MIDDLE];
+    pub const KEYS: &[u16] = &[KEY_ESC, KEY_TAB, KEY_W, KEY_T, KEY_LEFTCTRL, KEY_L, KEY_ENTER, KEY_LEFTSHIFT, KEY_LEFTALT, KEY_SPACE, KEY_UP, KEY_LEFT, KEY_RIGHT, KEY_DOWN, BTN_LEFT, BTN_RIGHT, BTN_MIDDLE];
     pub const RELS: &[u16] = &[REL_X, REL_Y, REL_HWHEEL, REL_WHEEL, REL_WHEEL_HI_RES, REL_HWHEEL_HI_RES];
 }
 use code::*;
@@ -57,17 +67,32 @@ pub enum Action {
     Keys(Vec<u16>),
     /// Steam's on-screen keyboard, which types into the window in front.
     Keyboard,
+    /// These keys, then the keyboard for a web address (the browser's address bar, a new tab).
+    /// On release, and only when View and Menu were not held together.
+    KeysThenUrl(Vec<u16>),
     /// Not taken: the launcher handles it (Guide, quick access).
     Pass,
 }
 
 pub fn action(b: Pad, back: Back) -> Action {
     let k = |c: &[u16]| Action::Keys(c.to_vec());
+    if back == Back::Browser {
+        match b {
+            Pad::Left => return k(&[KEY_LEFTALT, KEY_LEFT]),
+            Pad::Right => return k(&[KEY_LEFTALT, KEY_RIGHT]),
+            Pad::Lb => return k(&[KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_TAB]),
+            Pad::Rb => return k(&[KEY_LEFTCTRL, KEY_TAB]),
+            Pad::X => return k(&[KEY_LEFTCTRL, KEY_W]),
+            Pad::Select => return Action::KeysThenUrl(vec![KEY_LEFTCTRL, KEY_L]),
+            Pad::Start => return Action::KeysThenUrl(vec![KEY_LEFTCTRL, KEY_T]),
+            _ => {}
+        }
+    }
     match b {
         Pad::A | Pad::Rt => k(&[BTN_LEFT]),
         Pad::Lt => k(&[BTN_RIGHT]),
         Pad::B => match back {
-            Back::AltLeft => k(&[KEY_LEFTALT, KEY_LEFT]),
+            Back::AltLeft | Back::Browser => k(&[KEY_LEFTALT, KEY_LEFT]),
             Back::Escape => k(&[KEY_ESC]),
         },
         Pad::X => k(&[KEY_SPACE]),
@@ -189,13 +214,57 @@ fn with_dev<F: FnOnce(&mut uinput::Device)>(m: &mut Mapper, f: F) {
 }
 
 /// What Y opens in pointer mode, when the launcher has a keyboard of its own that shows over apps
-/// (Rare OS game mode). Without one, Steam's keyboard.
-static KEYBOARD: std::sync::OnceLock<fn()> = std::sync::OnceLock::new();
+/// (Rare OS game mode): `f(url)`, url for a web address (the browser's address bar). Without one,
+/// Steam's keyboard.
+static KEYBOARD: std::sync::OnceLock<fn(bool)> = std::sync::OnceLock::new();
 
 /// Y in pointer mode opens `f` (the launcher's keyboard over the app) instead of Steam's.
-pub fn set_keyboard(f: fn()) {
+pub fn set_keyboard(f: fn(bool)) {
     let _ = KEYBOARD.set(f);
 }
+
+fn keyboard(url: bool) {
+    match KEYBOARD.get() {
+        Some(f) => f(url),
+        // Steam's keyboard types into whatever window is in front (Game Mode).
+        None => {
+            let _ = crate::launch::steam_url("steam://open/keyboard");
+        }
+    }
+}
+
+/// View and Menu in the browser: a tap acts on release; held together (the way back to Rare)
+/// neither does anything.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ViewMenu {
+    view: bool,
+    menu: bool,
+    both: bool,
+}
+
+impl ViewMenu {
+    /// View (`view`) or Menu went down or up: true when this release is a tap that should act.
+    pub fn set(&mut self, view: bool, down: bool) -> bool {
+        if view {
+            self.view = down;
+        } else {
+            self.menu = down;
+        }
+        if self.view && self.menu {
+            self.both = true;
+        }
+        if down {
+            return false;
+        }
+        let tap = !self.both;
+        if !self.view && !self.menu {
+            self.both = false;
+        }
+        tap
+    }
+}
+
+static VIEW_MENU: Mutex<ViewMenu> = Mutex::new(ViewMenu { view: false, menu: false, both: false });
 
 /// True while the pad should drive an app as a mouse and keyboard.
 pub fn active() -> bool {
@@ -215,13 +284,15 @@ pub fn button(b: Pad, down: bool, back: Back) -> bool {
         Action::Pass => false,
         Action::Keyboard => {
             if down {
-                match KEYBOARD.get() {
-                    Some(f) => f(),
-                    // Steam's keyboard types into whatever window is in front (Game Mode).
-                    None => {
-                        let _ = crate::launch::steam_url("steam://open/keyboard");
-                    }
-                }
+                keyboard(false);
+            }
+            true
+        }
+        Action::KeysThenUrl(keys) => {
+            let tap = VIEW_MENU.lock().unwrap_or_else(|e| e.into_inner()).set(b == Pad::Select, down);
+            if tap {
+                combo(&keys);
+                keyboard(true);
             }
             true
         }
@@ -442,6 +513,59 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn browser_layout() {
+        let br = Back::Browser;
+        assert_eq!(action(Pad::B, br), Action::Keys(vec![KEY_LEFTALT, KEY_LEFT]));
+        assert_eq!(action(Pad::Left, br), Action::Keys(vec![KEY_LEFTALT, KEY_LEFT]));
+        assert_eq!(action(Pad::Right, br), Action::Keys(vec![KEY_LEFTALT, KEY_RIGHT]));
+        assert_eq!(action(Pad::Rb, br), Action::Keys(vec![KEY_LEFTCTRL, KEY_TAB]));
+        assert_eq!(action(Pad::Lb, br), Action::Keys(vec![KEY_LEFTCTRL, KEY_LEFTSHIFT, KEY_TAB]));
+        assert_eq!(action(Pad::X, br), Action::Keys(vec![KEY_LEFTCTRL, KEY_W]));
+        assert_eq!(action(Pad::Select, br), Action::KeysThenUrl(vec![KEY_LEFTCTRL, KEY_L]));
+        assert_eq!(action(Pad::Start, br), Action::KeysThenUrl(vec![KEY_LEFTCTRL, KEY_T]));
+        // The rest is the app layout: clicks, the keyboard, arrows up and down.
+        assert_eq!(action(Pad::A, br), Action::Keys(vec![BTN_LEFT]));
+        assert_eq!(action(Pad::Y, br), Action::Keyboard);
+        assert_eq!(action(Pad::Up, br), Action::Keys(vec![KEY_UP]));
+        // Guide, held Guide, quick access and View + Menu held always reach the launcher.
+        for b in [Pad::Guide, Pad::GuideHold, Pad::ExitHold, Pad::Qam] {
+            assert_eq!(action(b, br), Action::Pass);
+        }
+        // Single-site app windows (Netflix, X in Chrome) keep the app layout.
+        assert_eq!(action(Pad::X, Back::AltLeft), Action::Keys(vec![KEY_SPACE]));
+        assert_eq!(action(Pad::Rb, Back::AltLeft), Action::Keys(vec![KEY_TAB]));
+        assert_eq!(action(Pad::Start, Back::AltLeft), Action::Keys(vec![KEY_ENTER]));
+        for b in [Pad::A, Pad::B, Pad::X, Pad::Lb, Pad::Rb, Pad::Lt, Pad::Rt, Pad::Up, Pad::Down, Pad::Left, Pad::Right, Pad::Start, Pad::Select] {
+            if let Action::Keys(ks) | Action::KeysThenUrl(ks) = action(b, br) {
+                assert!(ks.iter().all(|k| KEYS.contains(k)), "{b:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn view_and_menu_act_on_a_tap_never_on_the_way_out() {
+        let mut v = ViewMenu::default();
+        // A tap of View: on release.
+        assert!(!v.set(true, true));
+        assert!(v.set(true, false));
+        // A tap of Menu.
+        assert!(!v.set(false, true));
+        assert!(v.set(false, false));
+        // View + Menu held (the way back to Rare): neither release acts, in either order.
+        v.set(true, true);
+        v.set(false, true);
+        assert!(!v.set(true, false));
+        assert!(!v.set(false, false));
+        v.set(false, true);
+        v.set(true, true);
+        assert!(!v.set(false, false));
+        assert!(!v.set(true, false));
+        // And taps work again after.
+        v.set(true, true);
+        assert!(v.set(true, false));
     }
 
     #[test]

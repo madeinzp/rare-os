@@ -101,6 +101,10 @@ impl Way {
     }
 
     pub fn back(&self) -> Back {
+        // Chrome itself is a browser: tabs, the address bar, forward (pointer.rs).
+        if self.kind() == Some(Kind::Chrome) {
+            return Back::Browser;
+        }
         match self.back.as_deref() {
             Some("alt+left") => Back::AltLeft,
             Some("escape") => Back::Escape,
@@ -115,6 +119,8 @@ impl Way {
 pub enum Back {
     Escape,
     AltLeft,
+    /// Chrome with tabs (the Browser): Alt+Left, plus the browser's keys (pointer.rs).
+    Browser,
 }
 
 #[derive(Deserialize)]
@@ -177,6 +183,8 @@ pub struct Env {
     pub home: PathBuf,
     /// Page zoom for Chrome windows (1.5 on the SuiPlay's 7" 1920 x 1200 screen).
     pub scale: Option<f32>,
+    /// The screen in pixels (gamescope's X screen), for the Browser's window size.
+    pub screen: Option<(u32, u32)>,
     /// The user installation already has the flathub remote.
     pub user_flathub: bool,
     /// Battle.net's program, when a prefix has it.
@@ -346,7 +354,11 @@ pub fn status(app: &AppEntry, env: &Env) -> Status {
     Status { id: app.id.clone(), way, opens_in, other_ways: ready.iter().skip(1).copied().collect(), offer, controller: way.map(|i| app.ways[i].controller()) }
 }
 
-/// Chrome's flags for a fullscreen app window (or Chrome itself when `url` is None).
+/// Chrome's flags: a fullscreen app window for one site (`url`), or, with `url` None, Chrome itself
+/// as a normal browser window with tabs, the address bar and the new tab button, filling the
+/// screen. `--start-fullscreen` there is F11 fullscreen, which hides the tab strip and the
+/// toolbar, so the Browser is a window the size of the screen instead: gamescope has no window
+/// manager to maximise it. Its size is in Chrome's own units (pixels / the scale factor).
 pub fn chrome_args(b: &Browser, app_id: &str, url: Option<&str>, user_agent: Option<&str>, env: &Env) -> (String, Vec<String>) {
     let mut a: Vec<String> = Vec::new();
     let program = if b.flatpak {
@@ -366,8 +378,17 @@ pub fn chrome_args(b: &Browser, app_id: &str, url: Option<&str>, user_agent: Opt
             env.home.join(".local/share/rare/apps").join(app_id)
         };
         a.push(format!("--user-data-dir={}", dir.display()));
+        a.push("--start-fullscreen".into());
+    } else {
+        a.push("--start-maximized".into());
+        a.push("--window-position=0,0".into());
+        if let Some((w, h)) = env.screen {
+            let s = env.scale.unwrap_or(1.0).max(0.5);
+            a.push(format!("--window-size={},{}", (w as f32 / s).round() as u32, (h as f32 / s).round() as u32));
+        }
+        // Rare's Close ends Chrome: no "Chrome didn't shut down correctly" bubble next time.
+        a.push("--hide-crash-restore-bubble".into());
     }
-    a.push("--start-fullscreen".into());
     a.push("--no-first-run".into());
     a.push("--no-default-browser-check".into());
     a.push(rare_library::browser::VIDEO_DECODE.into());
@@ -424,7 +445,7 @@ mod tests {
     use super::*;
 
     fn env(flatpaks: &[&str]) -> Env {
-        Env { flatpak: true, flatpaks: flatpaks.iter().map(|s| s.to_string()).collect(), programs: vec![], home: PathBuf::from("/home/b"), scale: None, user_flathub: true, battlenet: None }
+        Env { flatpak: true, flatpaks: flatpaks.iter().map(|s| s.to_string()).collect(), programs: vec![], home: PathBuf::from("/home/b"), scale: None, screen: None, user_flathub: true, battlenet: None }
     }
 
     #[test]
@@ -540,9 +561,26 @@ mod tests {
         let st = status(c, &env(&[]));
         assert_eq!(st.way, None);
         assert_eq!(st.offer.unwrap().command, "flatpak install --user -y flathub com.google.Chrome");
-        // Chrome itself: the default profile, no app window flags.
-        let Plan::Spawn { args, .. } = plan(c, None, &env(&["com.google.Chrome"])).unwrap() else { panic!() };
-        assert_eq!(args, vec!["run", "com.google.Chrome", "--start-fullscreen", "--no-first-run", "--no-default-browser-check", rare_library::browser::VIDEO_DECODE]);
+        // Chrome itself: the default profile, a normal window with tabs (never --app, --kiosk or
+        // F11 fullscreen, which hide the tab strip), the browser's controller layout.
+        let Plan::Spawn { args, back, .. } = plan(c, None, &env(&["com.google.Chrome"])).unwrap() else { panic!() };
+        assert_eq!(args, vec!["run", "com.google.Chrome", "--start-maximized", "--window-position=0,0", "--hide-crash-restore-bubble", "--no-first-run", "--no-default-browser-check", rare_library::browser::VIDEO_DECODE]);
+        assert_eq!(back, Back::Browser);
+        // On the SuiPlay: the whole 1920 x 1200 screen at 1.5x, in Chrome's units.
+        let mut e = env(&["com.google.Chrome"]);
+        (e.scale, e.screen) = (Some(1.5), Some((1920, 1200)));
+        let Plan::Spawn { args, .. } = plan(c, None, &e).unwrap() else { panic!() };
+        assert!(args.contains(&"--window-size=1280,800".to_string()), "{args:?}");
+        assert!(args.contains(&"--force-device-scale-factor=1.5".to_string()));
+        for no in ["--start-fullscreen", "--kiosk"] {
+            assert!(!args.contains(&no.to_string()));
+        }
+        assert!(!args.iter().any(|a| a.starts_with("--app=") || a.starts_with("--user-data-dir=")));
+        // Single-site apps stay app windows, fullscreen, with their own profile and layout.
+        let Plan::Spawn { args, back, .. } = plan(get("netflix").unwrap(), None, &e).unwrap() else { panic!() };
+        assert!(args.iter().any(|a| a.starts_with("--app=")) && args.contains(&"--start-fullscreen".to_string()));
+        assert!(!args.iter().any(|a| a.starts_with("--window-size")));
+        assert_eq!(back, Back::AltLeft);
         // A browser on PATH runs directly and keeps its profile in Rare's folder.
         let mut e = env(&[]);
         e.programs = vec!["google-chrome-stable".into()];

@@ -16,6 +16,9 @@ use std::sync::{Arc, Mutex, OnceLock};
 pub enum Req {
     /// The on-screen keyboard (RC's default press).
     Keyboard,
+    /// The keyboard over the app in front for a web address (the browser's address bar, a new
+    /// tab): opens it, or switches it to web address keys; never closes it.
+    KeyboardUrl,
     /// A message for the toasts: (text, is an error).
     Toast(String, bool),
 }
@@ -260,6 +263,11 @@ pub fn chord(s: rare_input::chords::Share) {
 /// The keyboard: over the game or app in front (features/typekb.rs), else the launcher's own.
 pub fn keyboard() {
     push(Req::Keyboard);
+}
+
+/// Y (`url` false), or View and Menu in the browser (`url`), in an app the pad drives as a mouse.
+pub fn app_keyboard(url: bool) {
+    push(if url { Req::KeyboardUrl } else { Req::Keyboard });
 }
 
 #[cfg(test)]

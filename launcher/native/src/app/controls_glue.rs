@@ -57,6 +57,11 @@ impl App {
         for r in crate::side::take() {
             match r {
                 crate::side::Req::Toast(text, err) => self.st.toast(text, if err { Tone::Error } else { Tone::Info }, now),
+                crate::side::Req::KeyboardUrl => {
+                    if crate::features::typekb::wanted() {
+                        crate::features::typekb::open_for(crate::features::kblayout::Field::Url);
+                    }
+                }
                 crate::side::Req::Keyboard => {
                     // Over a game or app (Steam's sign-in too): Rare's keyboard in the HUD's
                     // overlay window, typing into the app. The launcher's own keyboard is part of

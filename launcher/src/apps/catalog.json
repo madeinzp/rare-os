@@ -147,7 +147,7 @@
       "id": "chrome",
       "name": "Google Chrome",
       "icon": "apps/chrome.png",
-      "about": "The full web, fullscreen.",
+      "about": "The full web, with tabs.",
       "ways": [
         { "chrome": true, "label": "Google Chrome", "controller": "pointer", "back": "alt+left" }
       ]

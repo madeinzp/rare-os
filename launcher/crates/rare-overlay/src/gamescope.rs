@@ -387,6 +387,22 @@ pub fn remove(display: &str, name: &str) -> Result<(), String> {
     xprop(display, &["-root", "-remove", name]).map(|_| ())
 }
 
+/// The size of the X screen apps Rare starts draw on (our DISPLAY: gamescope's output, rotated as
+/// shown, or a TV's mode when docked). None off Linux or without an X server.
+pub fn screen_size() -> Option<(u32, u32)> {
+    #[cfg(target_os = "linux")]
+    {
+        let display = std::env::var("DISPLAY").ok().filter(|d| !d.is_empty()).unwrap_or_else(base_display);
+        let (conn, n) = x11rb::connect(Some(&display)).ok()?;
+        let root = x11rb::connection::Connection::setup(&conn).roots.get(n)?.clone();
+        Some((root.width_in_pixels as u32, root.height_in_pixels as u32)).filter(|(w, h)| *w > 0 && *h > 0)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
 /// The display of gamescope's server 0, where the focus controls live. Found once: the first of
 /// our own DISPLAY, :0, :1, :2 whose root says server id 0; :0 when none answers.
 pub fn base_display() -> String {
