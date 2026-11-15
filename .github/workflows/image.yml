@@ -24,6 +24,10 @@ on:
       version:
         description: Version (0.1.2); empty uses 0.1.<run number>
         default: ''
+      allow_new_boot_chain:
+        description: Publish even if rare.market's device attestor does not list this image's boot chain PCR4 yet (devices on it lose the Rare Pass level)
+        type: boolean
+        default: false
 
 concurrency:
   group: image-${{ github.ref }}
@@ -96,6 +100,22 @@ jobs:
           sudo podman images
           df -h /
 
+      - name: Boot chain PCR4
+        id: boot
+        if: steps.build.outcome == 'success'
+        # PCR4 of this image's shim + grub as a SuiPlay measures it. rare.market's device attestor gives the rare-os
+        # level (the Rare Pass) only to boot chains in its signed boot values, so a base with a new shim or grub needs
+        # its line signed and deployed before it ships (docs/ATTEST.md, Boot values for a new base). Publish checks it.
+        run: |
+          mkdir -p "$OUT"
+          rc=0
+          sudo tools/boot-pcr4.sh "$IMAGE" "$OUT/boot-pcr4.json" || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          { echo "### Boot chain PCR4"; echo; echo '```json'; sudo cat "$OUT/boot-pcr4.json" 2>/dev/null || echo "(none)"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          if [ $rc != 0 ]; then
+            echo "::warning::Boot chain PCR4 is not accepted by the attestor (exit $rc); publishing needs it signed and deployed first, or allow_new_boot_chain"
+          fi
+
       - name: VM test, fresh install
         if: steps.build.outcome == 'success' && (github.event_name == 'push' || inputs.fresh_test)
         # Ubuntu 24.04's podman (4.9) is older than the image's, so bootc in the image can't read the
@@ -120,6 +140,10 @@ jobs:
           # package pushed by hand first gets "permission_denied: write_package". GHCR_TOKEN (write:packages) covers it.
           GH_TOKEN: ${{ secrets.GHCR_TOKEN || secrets.GITHUB_TOKEN }}
         run: |
+          if [ "${{ steps.boot.outputs.rc }}" != 0 ] && [ "${{ inputs.allow_new_boot_chain }}" != true ]; then
+            echo "::error::rare.market's device attestor does not accept this image's boot chain (Boot chain PCR4 step). Sign and deploy its line from out/boot-pcr4.json first (docs/ATTEST.md), then run again; allow_new_boot_chain overrides."
+            exit 1
+          fi
           echo "$GH_TOKEN" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
           for tag in stable "$RARE_VERSION"; do
             sudo podman push --digestfile /tmp/digest "$IMAGE" "docker://$REGISTRY_IMAGE:$tag"
@@ -153,3 +177,4 @@ jobs:
             out/*.png
             out/*.txt
             out/*.log
+            out/*.json
