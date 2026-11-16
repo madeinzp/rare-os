@@ -108,16 +108,11 @@ pub fn game_tile(ui: &mut Ui, st: &State, acts: &mut Acts, g: &Game, def: bool, 
         let dim = j.phase != rare_stores::jobs::Phase::Running;
         btn = btn.child(ui.bx(s().abs(None, Some(0.5), Some(0.5), Some(0.5))).child(crate::features::downloads::bar(ui, None, j.pct / 100.0, dim)));
     }
-    // Owned and not installed (nothing downloading for it yet): A installs it (the drive sheet);
-    // the game page is on Menu, Details.
-    let busy = crate::features::downloads::of(st, &g.id).is_some() || crate::features::stores::job(&g.id).is_some();
-    let install = match act {
-        None if !g.installed && !running && !busy && g.source == "steam" && g.id.starts_with("steam:") => Some(Act::Install(g.id.clone())),
-        None if !g.installed && !running && !busy && crate::screens::game::stores::managed(g) => Some(Act::Legacy(format!("stores:install:{}", g.id))),
-        _ => None,
-    };
-    let a_hint = if install.is_some() { tr().common.install } else { tr().common.details };
-    let tag = acts.game(install.or(act).unwrap_or_else(|| Act::OpenGame(g.id.clone())), &g.id);
+    // A opens the game page, installed or not: an owned game the player has not installed yet shows
+    // what it is (its store screenshots, size, store) next to Install before anything downloads.
+    // Install is also on Menu.
+    let a_hint = tr().common.details;
+    let tag = acts.game(act.unwrap_or_else(|| Act::OpenGame(g.id.clone())), &g.id);
     let btn = btn.nav(|f| {
         let f = f.tag(tag).hints(Some(a_hint), None, None).game().label(&g.title);
         if def {
