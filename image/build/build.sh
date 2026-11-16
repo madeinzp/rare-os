@@ -376,6 +376,30 @@ update-desktop-database /usr/share/applications
 grep -q 'x-scheme-handler/rare=.*rare-launcher.desktop' /usr/share/applications/mimeinfo.cache || { echo "rare:// is not registered" >&2; exit 1; }
 echo "::endgroup::"
 
+echo "::group::selinux labels an older release can write"
+# An update is written by the device's own bootc under the policy that device booted, and the kernel
+# refuses a label whose type that policy lacks: "fsetxattr(security.selinux): Invalid argument", after
+# the whole download. Only processes with mac_admin may write such labels, and Settings > System update
+# (rare-update, rare-update-now) has none. So a base whose selinux-policy gives an existing file a NEW
+# type breaks every update from the release before it. selinux-policy 45.24 (base 45.20261115) moved
+# systemd's clonesetup and imds generators from systemd_generic_generator_exec_t to types of their own,
+# which 0.1.3 (45.23) doesn't know; the files themselves are unchanged. They keep the old type here
+# (file_contexts.local, which ostree labels with too); clonesetup is unused on these devices. When the
+# update VM test (image/vm/test.sh update) fails this way, find the file with the new type and add it.
+pin_label() { # <path> <type>
+    semanage fcontext -a -t "$2" "$1" 2>/dev/null || semanage fcontext -m -t "$2" "$1"
+}
+for g in systemd-clonesetup-generator systemd-imds-generator; do
+    pin_label "/usr/lib/systemd/system-generators/$g" systemd_generic_generator_exec_t
+done
+for g in systemd-clonesetup-generator systemd-imds-generator; do
+    f=/usr/lib/systemd/system-generators/$g
+    [[ -e $f ]] || continue
+    got=$(matchpathcon -n "$f")
+    [[ $got == *:systemd_generic_generator_exec_t:* ]] || { echo "$f is labelled $got" >&2; exit 1; }
+done
+echo "::endgroup::"
+
 echo "::group::check branding"
 # Fail the build if the obvious places still name the base.
 if grep -qi "bazzite\|universal blue\|playtron" /etc/system-release; then exit 1; fi
