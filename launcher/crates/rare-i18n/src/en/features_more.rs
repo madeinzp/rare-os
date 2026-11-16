@@ -489,6 +489,18 @@ strings! {
     stores_install_where_needs: "Install where? It needs {size}.",
     /// Subtitle of the install drive sheet when the size is unknown
     stores_install_where: "Install where?",
+    /// Downloads: status word while an Epic or GOG game's broken files are fetched again
+    stores_repairing: "Repairing",
+    /// Downloads: status word while cloud saves sync
+    stores_syncing_saves: "Syncing saves",
+    /// Downloads: an Epic or GOG download stopped, the drive is full
+    stores_err_space: "Not enough space on that drive.",
+    /// Downloads: an Epic or GOG download stopped, the store sign-in expired
+    stores_err_sign_in: "Sign in again in Settings > Accounts.",
+    /// Downloads: an Epic or GOG download stopped, no network
+    stores_err_offline: "No connection. Check Wi-Fi and try again.",
+    /// Downloads: an Epic or GOG download stopped for another reason
+    stores_err_generic: "It stopped with an error. Try again.",
     /// Toast after queueing an install; {title} is the game's name
     stores_in_downloads: "{title} is in your downloads",
     /// Toast when a cloud sync starts; {title} is the game's name

@@ -204,8 +204,8 @@ pub fn downloads() -> Vec<(String, String, u64, u64, bool)> {
 /// "Installing 42% · 1.2 GB of 12.3 GB · 8 min left"
 pub fn job_line(j: &Job) -> String {
     let mut parts = vec![match j.phase {
-        Phase::Running if j.pct > 0.0 => format!("{} {:.0}%", j.status(), j.pct),
-        _ => j.status(),
+        Phase::Running if j.pct > 0.0 => format!("{} {:.0}%", status_text(j), j.pct),
+        _ => status_text(j),
     }];
     if j.setup {
         // Installers run one by one; there are no bytes or times to show.
@@ -328,6 +328,33 @@ fn store_named(s: &str) -> Option<Store> {
     }
 }
 
+/// A download's status in the UI language: rare-stores words it in English (`Job::status`).
+/// A failure rare-stores words itself (`jobs::friendly`) is translated; any other error text, from
+/// the tool, stays as it came.
+pub fn status_text(j: &Job) -> String {
+    let t = tr();
+    match &j.phase {
+        Phase::Queued => t.features.dl_queued.into(),
+        Phase::Paused => t.features.dl_paused.into(),
+        Phase::Failed(e) => match e.as_str() {
+            "Not enough space on that drive." => t.features_more.stores_err_space.into(),
+            "Sign in again in Settings > Accounts." => t.features_more.stores_err_sign_in.into(),
+            "No connection. Check Wi-Fi and try again." => t.features_more.stores_err_offline.into(),
+            "It stopped with an error. Try again." => t.features_more.stores_err_generic.into(),
+            _ => e.clone(),
+        },
+        Phase::Running if j.setup => t.game.setting_up.into(),
+        Phase::Running if j.verifying => t.features_more.verify_checking.into(),
+        Phase::Running => match j.kind {
+            Kind::Install { .. } => t.library.installing.into(),
+            Kind::Update => t.features.dl_updating.into(),
+            Kind::Repair => t.features_more.stores_repairing.into(),
+            Kind::Saves => t.features_more.stores_syncing_saves.into(),
+            Kind::Setup => t.game.setting_up.into(),
+        },
+    }
+}
+
 /// The drive sheet for an install: every drive Settings > Storage lists, with its free space.
 fn install_sheet(st: &mut State, id: &str) {
     let Some((store, _)) = Store::of(id) else { return };
@@ -444,7 +471,7 @@ pub fn download_row(ui: &mut crate::kit::Ui, st: &State, acts: &mut crate::page:
     let head = ui
         .bx(s().row().items_center().gap(0.75))
         .child(ui.text_s(s().grow().min0(), j.title.clone(), T::new(Ty::Body).w(600).trunc()))
-        .child(ui.text(j.status(), T::new(Ty::Small).c(tok::MUTED)))
+        .child(ui.text(status_text(j), T::new(Ty::Small).c(tok::MUTED)))
         .child(ui.text_s(s().w(3.2), pct, T::new(Ty::Small).w(600).tab().right()));
     let mut line = job_line(j);
     if live && j.speed > 0.0 {
@@ -470,14 +497,14 @@ fn row_sheet(st: &mut State, id: &str) {
     if st.game(id).is_some() {
         items.push(OptionItem { label: tr().features_more.stores_game_page.into(), on: None, act: Act::OpenGame(id.to_string()) });
     }
-    st.options = Some(OptionsSpec { title: j.title.clone(), sub: Some(j.status()), items });
+    st.options = Some(OptionsSpec { title: j.title.clone(), sub: Some(status_text(&j)), items });
 }
 
 /// The Rare menu's Downloads line for Epic and GOG ("2 downloading, 45%"), None when idle.
 pub fn menu_line() -> Option<String> {
     let list: Vec<Job> = jobs::list().into_iter().filter(|j| matches!(j.phase, Phase::Running | Phase::Queued)).collect();
     let first = list.first()?;
-    Some(if list.len() == 1 { format!("{}, {:.0}%", first.status(), first.pct) } else { trf!(tr().features_more.stores_n_downloading, n = list.len(), pct = format!("{:.0}", first.pct)) })
+    Some(if list.len() == 1 { format!("{}, {:.0}%", status_text(first), first.pct) } else { trf!(tr().features_more.stores_n_downloading, n = list.len(), pct = format!("{:.0}", first.pct)) })
 }
 
 /// A finished Epic or GOG install: the "finished downloading" notice Steam's installs post.
