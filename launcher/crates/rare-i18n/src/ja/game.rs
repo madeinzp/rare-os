@@ -243,7 +243,7 @@ translate! { game {
     press_again_delete: "もう一度押すと削除",
     open_in_browser: "ブラウザーで開く",
     screenshots: "スクリーンショット",
-    store_shots: "From the store",
+    store_shots: "ストアから",
     updates: "アップデート",
     news: "ニュース",
     dlc: "DLC",
