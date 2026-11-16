@@ -177,6 +177,8 @@ impl Library {
             "media" => APPS.len(),
             "stream" => st.pc.as_ref().map(|p| p.apps.len()).unwrap_or(0),
             "notinstalled" => st.one_each(st.owned().iter().filter(|g| !st.is_hidden(&g.id)).chain(st.games().iter().filter(|g| Library::fits(st, f, g)))).len(),
+            // The Steam account's games that are not installed too, as Epic and GOG list theirs.
+            "steam" => st.one_each(Library::pool(st, f).filter(|g| Library::fits(st, f, g)).chain(st.owned().iter().filter(|g| Library::fits(st, f, g)))).len(),
             COLS => st.user.collections.len(),
             // One per game: copies of one game count once.
             f => st.one_each(Library::pool(st, f).filter(|g| Library::fits(st, f, g))).len(),
@@ -231,6 +233,11 @@ impl Library {
         let mut v: Vec<&Game> = Library::pool(st, &self.filter).filter(|g| Library::fits(st, &self.filter, g)).collect();
         if self.filter == "notinstalled" {
             v.extend(st.owned().iter().filter(|g| !st.is_hidden(&g.id)));
+        }
+        // Under Steam, the account's games that are not installed as well (installed first, below),
+        // as the Epic and GOG filters list their stores' owned games.
+        if self.filter == "steam" {
+            v.extend(st.owned().iter().filter(|g| Library::fits(st, "steam", g)));
         }
         if let Some(sys) = self.system.as_deref().filter(|_| self.filter == "emu") {
             v.retain(|g| rare_emu::roms::system_of(&g.id).is_some_and(|s| s.id == sys));
