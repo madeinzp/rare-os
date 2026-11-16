@@ -119,6 +119,8 @@ pub struct App {
     hints: Vec<Hint>,
     tab_spots: HashMap<Tab, Spot>,
     overlay_spot: Option<Spot>,
+    /// Where the focus was when the Options sheet opened: it goes back there when the sheet closes.
+    options_spot: Option<Spot>,
     /// Motion on (off for the first frame and golden images until the first input).
     animate: bool,
     clock: String,
@@ -442,6 +444,7 @@ impl App {
             hints: Vec::new(),
             tab_spots: HashMap::new(),
             overlay_spot: None,
+            options_spot: None,
             animate: false,
             clock: clock_text(),
             next_poll: 0.0,
@@ -2741,8 +2744,16 @@ impl App {
         // The Options sheet.
         let want = self.st.options.as_ref().map(|o| o.title.clone());
         if want != self.options.as_ref().map(|s| s.what.clone()) {
+            let had = self.options.is_some();
             if let Some(old) = self.options.take() {
                 drop_slot(&mut self.scene, old);
+            }
+            // The focus goes back where it was when the sheet closes (a game deep in the Library
+            // grid, not its first tile), as for the overlay.
+            match &want {
+                Some(_) if !had => self.options_spot = self.nav.spot(),
+                None => self.nav.restore_later(self.options_spot.take(), now),
+                _ => {}
             }
             if let Some(t) = want {
                 // Its own layer: a layer lays its wrappers out side by side, so a sheet sharing
