@@ -243,6 +243,7 @@ translate! { game {
     press_again_delete: "再按一次以删除",
     open_in_browser: "在浏览器中打开",
     screenshots: "截图",
+    store_shots: "From the store",
     updates: "更新",
     news: "新闻",
     dlc: "DLC",
