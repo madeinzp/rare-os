@@ -202,7 +202,7 @@ pub fn downloads() -> Vec<(String, String, u64, u64, bool)> {
 /// "Installing 42% · 1.2 GB of 12.3 GB · 8 min left"
 pub fn job_line(j: &Job) -> String {
     let mut parts = vec![match j.phase {
-        Phase::Running if j.pct > 0.0 => format!("{} {:.0}%", status_text(j), j.pct),
+        Phase::Running if j.pct > 0.0 => format!("{} {}%", status_text(j), whole_pct(j)),
         _ => status_text(j),
     }];
     if j.setup {
@@ -324,6 +324,14 @@ fn store_named(s: &str) -> Option<Store> {
         "gog" => Some(Store::Gog),
         _ => None,
     }
+}
+
+/// A job's percent as its downloads row shows it: bytes done of the total when the size is known
+/// (`jobs::downloads` gives the row those), else the tool's percent; whole, rounded down. legendary's
+/// own percent counts chunks, so at 936 MB of 54.8 GB the row read 1 % and the line 2 %.
+fn whole_pct(j: &Job) -> u32 {
+    let p = if j.total > 0 { j.done.min(j.total) as f64 * 100.0 / j.total as f64 } else { j.pct as f64 };
+    p.clamp(0.0, 100.0).floor() as u32
 }
 
 /// A download's status in the UI language: rare-stores words it in English (`Job::status`).
@@ -502,7 +510,7 @@ fn row_sheet(st: &mut State, id: &str) {
 pub fn menu_line() -> Option<String> {
     let list: Vec<Job> = jobs::list().into_iter().filter(|j| matches!(j.phase, Phase::Running | Phase::Queued)).collect();
     let first = list.first()?;
-    Some(if list.len() == 1 { format!("{}, {:.0}%", status_text(first), first.pct) } else { trf!(tr().features_more.stores_n_downloading, n = list.len(), pct = format!("{:.0}", first.pct)) })
+    Some(if list.len() == 1 { format!("{}, {}%", status_text(first), whole_pct(first)) } else { trf!(tr().features_more.stores_n_downloading, n = list.len(), pct = whole_pct(first)) })
 }
 
 /// A finished Epic or GOG install: the "finished downloading" notice Steam's installs post.
