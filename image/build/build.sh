@@ -362,6 +362,10 @@ listing="$(lsinitrd "/usr/lib/modules/$KVER/initramfs.img")"
 grep -q 'plymouth/themes/rare/rare.plymouth' <<<"$listing" || { echo "initramfs: no rare plymouth theme" >&2; exit 1; }
 # The initramfs stays small: the NVIDIA firmware nouveau would bring is 100 MB of boot-time disk reads.
 if grep -q 'lib/firmware/nvidia/' <<<"$listing"; then echo "initramfs: NVIDIA firmware is in it" >&2; exit 1; fi
+# The SuiPlay0X1's EC drivers load from the root filesystem, where rare-suiplay-ec.conf and its hook
+# pick ayaneo_ec_suiplay. In the initramfs udev would load the kernel's ayaneo_ec (or ayaneo_platform)
+# first and ours would fail at switch-root (rare-market/rare-os#8). dracut leaves them out today.
+if grep -Eq 'ayaneo[-_](ec|platform)' <<<"$listing"; then echo "initramfs: an AYANEO EC driver is in it" >&2; exit 1; fi
 ls -l "/usr/lib/modules/$KVER/initramfs.img"
 echo "::endgroup::"
 

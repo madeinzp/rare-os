@@ -1,0 +1,18 @@
+#!/usr/bin/sh
+# modprobe.d install hook for ayaneo_ec and ayaneo_platform (/usr/lib/modprobe.d/rare-suiplay-ec.conf):
+#   ec-driver <module> [options]
+# On a SuiPlay0X1, ayaneo_ec_suiplay drives the EC instead; <module> is loaded only when that
+# fails. Anywhere else, <module> loads as if there were no hook.
+# RARE_DMI_DIR and MODPROBE are for tests.
+mod="$1"
+shift
+dmi="${RARE_DMI_DIR:-/sys/class/dmi/id}"
+modprobe="${MODPROBE:-/usr/sbin/modprobe}"
+if [ "$(cat "$dmi/sys_vendor" 2>/dev/null)" = "Mysten Labs, Inc." ] &&
+    [ "$(cat "$dmi/product_name" 2>/dev/null)" = "SuiPlay0X1" ]; then
+    if "$modprobe" ayaneo_ec_suiplay; then
+        exit 0
+    fi
+    echo "<4>rare: ayaneo_ec_suiplay did not load, using $mod" 2>/dev/null >/dev/kmsg
+fi
+exec "$modprobe" --ignore-install "$mod" "$@"

@@ -9,7 +9,7 @@
  #define AYANEO_PWM_ENABLE_REG	 0x4A
  #define AYANEO_PWM_REG		 0x4B
  #define AYANEO_PWM_MODE_AUTO	 0x00
-@@ -75,80 +77,34 @@
+@@ -75,79 +77,33 @@
  	.has_magic_modules = true,
  };
  
@@ -36,7 +36,7 @@
 -			DMI_MATCH(DMI_BOARD_NAME, "AYANEO 2"),
 -		},
  		.driver_data = (void *)&quirk_fan,
--	},
+ 	},
 -	{
 -		.matches = {
 -			DMI_MATCH(DMI_BOARD_VENDOR, "AYANEO"),
@@ -85,7 +85,7 @@
 -			DMI_EXACT_MATCH(DMI_BOARD_NAME, "KUN"),
 -		},
 -		.driver_data = (void *)&quirk_charge_limit,
- 	},
+-	},
 -	{
 -		.matches = {
 -			DMI_MATCH(DMI_BOARD_VENDOR, "AYANEO"),
@@ -95,7 +95,7 @@
 -	},
  	{},
  };
- 
++
 +/*
 + * Rare OS: charge_control=1 adds the AYANEO 2S charge quirk (EC reg 0x1e, 0xaa auto / 0x55
 + * inhibit) as BAT0 charge_behaviour, the same power_supply extension upstream registers for
@@ -105,10 +105,9 @@
 +static bool charge_control;
 +module_param(charge_control, bool, 0444);
 +MODULE_PARM_DESC(charge_control, "Expose BAT0 charge_behaviour (auto, inhibit-charge) on the SuiPlay0X1 (default off)");
-+
+ 
  /* Callbacks for hwmon interface */
  static umode_t ayaneo_ec_hwmon_is_visible(const void *drvdata,
- 					  enum hwmon_sensor_types type, u32 attr,
 @@ -484,6 +440,19 @@
  
  	data->pdev = pdev;
@@ -139,23 +138,27 @@
  }
  
  static int ayaneo_freeze(struct device *dev)
-@@ -559,11 +529,40 @@
- 	return 0;
- }
- 
+@@ -555,15 +525,44 @@
+ 		if (ret)
+ 			return ret;
+ 	}
++
++	return 0;
++}
++
 +/* Rare OS: the stick rings go dark in suspend and come back on resume (suiplay-rgb.c). */
 +static int ayaneo_suspend(struct device *dev)
 +{
 +	suiplay_rgb_suspend(dev);
 +	return 0;
 +}
-+
+ 
 +static int ayaneo_resume(struct device *dev)
 +{
 +	suiplay_rgb_resume(dev);
-+	return 0;
-+}
-+
+ 	return 0;
+ }
+ 
  static const struct dev_pm_ops ayaneo_pm_ops = {
 +	.suspend = ayaneo_suspend,
 +	.resume = ayaneo_resume,
@@ -180,7 +183,7 @@
  static struct platform_driver ayaneo_platform_driver = {
  	.driver = {
  		.name = "ayaneo-ec",
-@@ -571,6 +570,7 @@
+@@ -571,12 +570,28 @@
  		.pm = pm_sleep_ptr(&ayaneo_pm_ops),
  	},
  	.probe = ayaneo_ec_probe,
@@ -188,7 +191,28 @@
  };
  
  static struct platform_device *ayaneo_platform_device;
-@@ -596,5 +596,5 @@
+ 
+ static int __init ayaneo_ec_init(void)
+ {
++	struct device *taken;
++
++	/*
++	 * Rare OS: the kernel's ayaneo_ec matches the SuiPlay0X1 too since OGC 7.3 ("Add SuiPlay0X1
++	 * support"), and so does ShadowBlip's ayaneo_platform. /usr/lib/modprobe.d/rare-suiplay-ec.conf
++	 * keeps both off this device. If ayaneo_ec got here anyway (loaded by hand), say so and stay
++	 * out, rather than fail on the duplicate "ayaneo-ec" device with a sysfs warning.
++	 */
++	taken = bus_find_device_by_name(&platform_bus_type, NULL, "ayaneo-ec");
++	if (taken || driver_find("ayaneo-ec", &platform_bus_type)) {
++		put_device(taken);
++		pr_err("ayaneo_ec_suiplay: the EC already has a driver (the kernel's ayaneo_ec?); rmmod ayaneo_ec, then modprobe ayaneo_ec_suiplay\n");
++		return -EBUSY;
++	}
++
+ 	ayaneo_platform_device =
+ 		platform_create_bundle(&ayaneo_platform_driver,
+ 				       ayaneo_ec_probe, NULL, 0, NULL, 0);
+@@ -596,5 +611,5 @@
  module_exit(ayaneo_ec_exit);
  
  MODULE_AUTHOR("Antheas Kapenekakis <lkml@antheas.dev>");

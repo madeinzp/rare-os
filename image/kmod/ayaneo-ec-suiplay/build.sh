@@ -3,8 +3,10 @@
 # (/usr/lib/modules/<kver>/extra/ayaneo-ec-suiplay.ko, depmod runs in the final stage).
 #
 # Why: the SuiPlay0X1 is an AYANEO 2S whose DMI says "Mysten Labs, Inc." / "SuiPlay0X1", so the
-# kernel's ayaneo-ec (AYANEO board vendor only) never binds and there is no fan hwmon for
-# rare-fand. Source: drivers/platform/x86/ayaneo-ec.c from the OGC kernel tag v7.2.11-ogc4, with
+# kernel's ayaneo-ec (AYANEO board vendor only, up to OGC 7.2) never bound and there was no fan
+# hwmon for rare-fand. Since OGC 7.3 the kernel's ayaneo_ec matches it too (fan only) and Bazzite
+# ships ShadowBlip's ayaneo_platform (the ring LED) for it; /usr/lib/modprobe.d/rare-suiplay-ec.conf
+# loads this module instead of either on a SuiPlay0X1 (rare-market/rare-os#8). Source: drivers/platform/x86/ayaneo-ec.c from the OGC kernel tag v7.2.11-ogc4, with
 # suiplay.patch (SuiPlay-only DMI table, fan quirk, as in Bazzite's kernel; charge_control=1
 # adds the 2S charge quirk, BAT0 charge_behaviour, off by default), and suiplay-rgb.c for the stick
 # ring lights (/sys/class/leds/ayaneo:rgb:joystick_rings, untouched until userspace writes).

@@ -25,11 +25,12 @@
  *     Gawah)
  * None of them has been seen to show two colors on a SuiPlay0X1: stock GameOS, hhd and
  * InputPlumber only drive the one multicolor LED (both rings, one color), so 1 and 2 always get
- * the same values and nothing tells left from right. Rare OS 0.1.3 trusted 1 = left, 2 = right,
- * and on a real SuiPlay0X1 (user report, 2026-11-15) a left-only frame lit both rings and a
- * right-only frame changed nothing: group 1 reaches both rings and group 2 neither. Whether
- * the rings can be told apart at all (another group, or zones split between the rings) is not
- * known yet, so:
+ * the same values and nothing tells left from right. A report on Rare OS 0.1.3 (Left lit both
+ * rings, Right changed neither) was first read as "group 1 reaches both rings, group 2 neither",
+ * but this driver never ran there: the kernel's ayaneo_ec had taken the "ayaneo-ec" device
+ * (rare-market/rare-os#8, now /usr/lib/modprobe.d/rare-suiplay-ec.conf), and rare-fand drew the
+ * left color on ayaneo-platform's one-color LED, which is exactly what was seen. So 1 = left,
+ * 2 = right is still the sources' word, not yet seen on a SuiPlay0X1, and:
  *   - rgb_map says where each of the eight zones is written (group:position, "-" for none), at
  *     load (module parameter) or live (sysfs). Default: the sources' 1:3 1:6 1:9 1:12, 2:3 ...;
  *   - rgb_rings tells userspace how many rings it can color apart (default 1, Settings then
@@ -648,11 +649,6 @@ static const struct attribute_group rgb_group = {
 	.attrs = rgb_attrs,
 };
 
-static const struct attribute_group *rgb_groups[] = {
-	&rgb_group,
-	NULL
-};
-
 /* ------------------------------------------------------------------ life cycle */
 
 /* Stops the work and gives the LEDs back to the EC (unload, shutdown). */
@@ -668,6 +664,13 @@ static void rgb_stop(struct suiplay_rgb *r)
 			r->hw = HW_OEM;
 	}
 	mutex_unlock(&r->hw_lock);
+}
+
+static void rgb_remove_group(void *data)
+{
+	struct suiplay_rgb *r = data;
+
+	sysfs_remove_group(&r->mc.led_cdev.dev->kobj, &rgb_group);
 }
 
 static void rgb_teardown(void *data)
@@ -714,7 +717,6 @@ int suiplay_rgb_probe(struct device *dev)
 	r->mc.led_cdev.color = LED_COLOR_ID_RGB;
 	r->mc.led_cdev.max_brightness = 255;
 	r->mc.led_cdev.brightness_set_blocking = rgb_brightness_set;
-	r->mc.led_cdev.groups = rgb_groups;
 	/* Unregistering must not write "off"; rgb_teardown hands the LEDs to the EC instead. */
 	r->mc.led_cdev.flags = LED_RETAIN_AT_SHUTDOWN;
 
@@ -728,6 +730,17 @@ int suiplay_rgb_probe(struct device *dev)
 		dev_warn(dev, "stick lights not registered (%d)\n", ret);
 		return 0;
 	}
+	/*
+	 * rgb_mode, rgb_zones, rgb_map, rgb_rings and rgb_raw go on the LED once it is registered:
+	 * led_classdev_multicolor_register_ext() sets led_cdev.groups to its own (multi_intensity,
+	 * multi_index), so groups set before it never appeared (Rare OS 0.1.3: rare-fand found no
+	 * rgb_zones and drew one color). Removed before the LED goes (devm runs in reverse).
+	 */
+	ret = sysfs_create_group(&r->mc.led_cdev.dev->kobj, &rgb_group);
+	if (!ret)
+		ret = devm_add_action_or_reset(dev, rgb_remove_group, r);
+	if (ret)
+		dev_warn(dev, "stick lights: no rgb_zones (%d), one color only\n", ret);
 	the_rgb = r;
 	dev_info(dev, "stick lights at %s (map %s, %u ring%s); the EC keeps them until written\n",
 		 r->mc.led_cdev.name, rgb_map, r->rings, r->rings == 1 ? "" : "s");
