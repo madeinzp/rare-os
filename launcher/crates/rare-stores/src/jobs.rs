@@ -1,11 +1,16 @@
 //! The Epic and GOG download queue: installs, updates and repairs, one at a time, with progress,
 //! pause (stops the tool; both tools pick up where they stopped), resume and cancel. Its rows join
 //! Steam's in the launcher's downloads list (`downloads`, the same shape as rare-library's).
+//!
+//! The queue is kept in `~/.config/rare/stores/downloads.json`, so a restart (or a crash) does not
+//! lose it: `restore` puts it back at start, and the tools carry on from their own resume data.
 
 use crate::progress::{self, Update};
 use crate::tools::{self, GOGDL, LEGENDARY};
 use crate::Store;
 use std::path::PathBuf;
+use serde_json::{json, Value};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -116,6 +121,7 @@ pub fn add(id: &str, title: &str, kind: Kind) -> Result<(), String> {
         } else {
             st.jobs.push(Job { id: id.into(), title: title.into(), kind, phase: Phase::Queued, pct: 0.0, done: 0, total: 0, speed: 0.0, eta: None, verifying: false, setup: false });
         }
+        save(&st.jobs);
     }
     crate::changed();
     start_worker();
@@ -137,6 +143,7 @@ fn halt(id: &str, pause: bool) {
     } else {
         st.jobs.retain(|j| j.id != id);
     }
+    save(&st.jobs);
     drop(st);
     crate::changed();
 }
@@ -156,6 +163,7 @@ pub fn resume(id: &str) {
     if let Some(j) = st.jobs.iter_mut().find(|j| j.id == id && matches!(j.phase, Phase::Paused | Phase::Failed(_))) {
         j.phase = Phase::Queued;
     }
+    save(&st.jobs);
     drop(st);
     crate::changed();
     start_worker();
@@ -193,6 +201,7 @@ pub fn run_now(id: &str, title: &str, kind: Kind) -> Result<(), String> {
 
 /// A job as it would show (fixtures for screenshots: RR_STORE_JOB in the native launcher).
 pub fn show(job: Job) {
+    FIXTURE.store(true, Ordering::Relaxed);
     let mut st = q().lock().unwrap();
     st.jobs.retain(|j| j.id != job.id);
     st.jobs.push(job);
@@ -252,7 +261,9 @@ fn start_worker() {
                     j.phase = Phase::Running;
                     j.verifying = false;
                     j.speed = 0.0;
-                    Some(j.clone())
+                    let j = j.clone();
+                    save(&st.jobs);
+                    Some(j)
                 }
                 None => {
                     st.worker = false;
@@ -287,6 +298,7 @@ fn start_worker() {
                 }
             }
         }
+        save(&st.jobs);
         drop(st);
         crate::changed();
         if let (Some(j), Some(f)) = (ended, ON_DONE.get()) {
@@ -336,6 +348,7 @@ fn run(job: &Job) -> Result<(), String> {
     let id = job.id.clone();
     let mut started = |pid: u32| q().lock().unwrap().pid = Some(pid);
     let mut last = std::time::Instant::now();
+    let mut saved = std::time::Instant::now();
     let mut line = |l: &str| {
         if let Some(u) = progress::parse(l) {
             apply(&id, u);
@@ -343,6 +356,11 @@ fn run(job: &Job) -> Result<(), String> {
             if last.elapsed().as_millis() > 400 {
                 last = std::time::Instant::now();
                 crate::changed();
+            }
+            // The percent on disk for after a restart, every few seconds.
+            if saved.elapsed().as_secs() >= 5 {
+                saved = std::time::Instant::now();
+                save(&q().lock().unwrap().jobs);
             }
         }
     };
@@ -402,6 +420,89 @@ fn run(job: &Job) -> Result<(), String> {
     }
 }
 
+/// Set by `show`: a screenshot fixture is on screen, so nothing is written to disk.
+static FIXTURE: AtomicBool = AtomicBool::new(false);
+
+fn saved_path() -> std::path::PathBuf {
+    crate::rare_dir().join("downloads.json")
+}
+
+/// Writes the queue to disk. Only installs, updates and repairs are kept: saves and setup run
+/// beside a start and are not queued, and a failed job shows its error once.
+fn save(jobs: &[Job]) {
+    if FIXTURE.load(Ordering::Relaxed) || cfg!(test) {
+        return;
+    }
+    crate::write_json(&saved_path(), &to_value(jobs));
+}
+
+fn to_value(jobs: &[Job]) -> Value {
+    let rows: Vec<Value> = jobs
+        .iter()
+        .filter_map(|j| {
+            let kind = match &j.kind {
+                Kind::Install { base } => json!({ "kind": "install", "base": base }),
+                Kind::Update => json!({ "kind": "update" }),
+                Kind::Repair => json!({ "kind": "repair" }),
+                Kind::Saves | Kind::Setup => return None,
+            };
+            let phase = match j.phase {
+                Phase::Paused => "paused",
+                Phase::Queued | Phase::Running => "queued",
+                Phase::Failed(_) => return None,
+            };
+            Some(json!({ "id": j.id, "title": j.title, "job": kind, "phase": phase, "pct": j.pct, "done": j.done, "total": j.total }))
+        })
+        .collect();
+    json!({ "jobs": rows })
+}
+
+/// The saved queue as jobs: a job that was running comes back queued, a paused one stays paused.
+fn from_value(v: &Value) -> Vec<Job> {
+    let Some(rows) = v["jobs"].as_array() else { return vec![] };
+    rows.iter()
+        .filter_map(|r| {
+            let id = r["id"].as_str()?;
+            Store::of(id)?;
+            let kind = match r["job"]["kind"].as_str()? {
+                "install" => Kind::Install { base: r["job"]["base"].as_str()?.into() },
+                "update" => Kind::Update,
+                "repair" => Kind::Repair,
+                _ => return None,
+            };
+            let phase = if r["phase"] == "paused" { Phase::Paused } else { Phase::Queued };
+            let pct = r["pct"].as_f64().unwrap_or(0.0) as f32;
+            let done = r["done"].as_u64().unwrap_or(0);
+            let total = r["total"].as_u64().unwrap_or(0);
+            Some(Job { id: id.into(), title: r["title"].as_str().unwrap_or(id).into(), kind, phase, pct, done, total, speed: 0.0, eta: None, verifying: false, setup: false })
+        })
+        .collect()
+}
+
+/// Once at start: the queue from before a restart, and the worker for what was not paused.
+/// legendary and gogdl skip what they already fetched, so a job carries on rather than restarts.
+pub fn restore() {
+    static DONE: AtomicBool = AtomicBool::new(false);
+    if DONE.swap(true, Ordering::Relaxed) || FIXTURE.load(Ordering::Relaxed) {
+        return;
+    }
+    let Some(v) = crate::read_json(&saved_path()) else { return };
+    let saved = from_value(&v);
+    if saved.is_empty() {
+        return;
+    }
+    {
+        let mut st = q().lock().unwrap();
+        for j in saved {
+            if !st.jobs.iter().any(|k| k.id == j.id) {
+                st.jobs.push(j);
+            }
+        }
+    }
+    crate::changed();
+    start_worker();
+}
+
 /// A tool's error as a line for the player.
 fn friendly(e: &str) -> String {
     let l = e.to_lowercase();
@@ -416,5 +517,59 @@ fn friendly(e: &str) -> String {
     } else {
         log::warn!("store job: {e}");
         "It stopped with an error. Try again.".into()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn job(id: &str, kind: Kind, phase: Phase) -> Job {
+        Job { id: id.into(), title: format!("T {id}"), kind, phase, pct: 42.5, done: 4_250, total: 10_000, speed: 1e6, eta: Some(9), verifying: true, setup: false }
+    }
+
+    #[test]
+    fn the_queue_survives_a_restart() {
+        let jobs = vec![
+            job("epic:a", Kind::Install { base: "/g/Epic".into() }, Phase::Running),
+            job("gog:1", Kind::Update, Phase::Queued),
+            job("epic:b", Kind::Repair, Phase::Paused),
+        ];
+        let back = from_value(&to_value(&jobs));
+        assert_eq!(back.len(), 3);
+        // Running comes back queued so the worker picks it up again; paused stays paused.
+        assert_eq!(back[0].phase, Phase::Queued);
+        assert_eq!(back[0].kind, Kind::Install { base: "/g/Epic".into() });
+        assert_eq!(back[1].phase, Phase::Queued);
+        assert_eq!(back[2].phase, Phase::Paused);
+        // Where it got to shows at once; the live numbers start fresh.
+        assert_eq!((back[0].pct, back[0].done, back[0].total), (42.5, 4_250, 10_000));
+        assert_eq!((back[0].speed, back[0].eta, back[0].verifying), (0.0, None, false));
+        assert_eq!(back[0].title, "T epic:a");
+    }
+
+    #[test]
+    fn failed_saves_and_setup_jobs_are_not_kept() {
+        let jobs = vec![
+            job("epic:a", Kind::Update, Phase::Failed("x".into())),
+            job("epic:b", Kind::Saves, Phase::Running),
+            job("gog:2", Kind::Setup, Phase::Queued),
+        ];
+        assert_eq!(to_value(&jobs), json!({ "jobs": [] }));
+    }
+
+    #[test]
+    fn a_bad_saved_file_gives_an_empty_queue() {
+        assert!(from_value(&json!(null)).is_empty());
+        assert!(from_value(&json!({ "jobs": "x" })).is_empty());
+        let v = json!({ "jobs": [
+            { "id": "steam:1", "job": { "kind": "update" } },
+            { "id": "epic:a", "job": { "kind": "warp" } },
+            { "id": "epic:b", "job": { "kind": "install" } },
+            { "id": "epic:c", "job": { "kind": "update" } }
+        ] });
+        let back = from_value(&v);
+        assert_eq!(back.len(), 1);
+        assert_eq!((back[0].id.as_str(), back[0].title.as_str(), back[0].phase.clone()), ("epic:c", "epic:c", Phase::Queued));
     }
 }

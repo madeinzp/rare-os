@@ -100,6 +100,8 @@ pub fn boot() {
             jobs::show(Job { id: p[0].into(), title: p[1].into(), setup: kind == Kind::Setup, kind, phase: Phase::Running, pct, done: (total as f64 * pct as f64 / 100.0) as u64, total, speed: 24_600_000.0, eta: Some(400), verifying: false });
         }
     }
+    // The queue from before a restart carries on.
+    jobs::restore();
     static STARTED: AtomicBool = AtomicBool::new(false);
     if STARTED.swap(true, Ordering::Relaxed) {
         return;
