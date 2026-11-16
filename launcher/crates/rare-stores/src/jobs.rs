@@ -345,6 +345,9 @@ fn check_space(base: &std::path::Path, need: u64) -> Result<(), String> {
 
 fn run(job: &Job) -> Result<(), String> {
     let (store, sid) = Store::of(&job.id).ok_or("Not an Epic or GOG game")?;
+    if !matches!(job.kind, Kind::Saves | Kind::Setup) {
+        stop_leftovers(std::slice::from_ref(job));
+    }
     let id = job.id.clone();
     let mut started = |pid: u32| q().lock().unwrap().pid = Some(pid);
     let mut last = std::time::Instant::now();
@@ -503,6 +506,41 @@ pub fn restore() {
     start_worker();
 }
 
+/// A tool runs in a process group of its own, so a launcher that quits or restarts (not a reboot)
+/// leaves it running. A job for the same game (restored, or Install pressed again) would run a
+/// second copy beside it; seen with legendary, the second one ended at once with nothing done and
+/// the job counted as finished. So `run` stops the one left over first (both tools keep what they
+/// fetched), at most a few seconds' wait.
+fn stop_leftovers(jobs: &[Job]) {
+    let Ok(dir) = std::fs::read_dir("/proc") else { return };
+    let mut left = Vec::new();
+    for e in dir.flatten() {
+        let Some(pid) = e.file_name().to_str().and_then(|s| s.parse::<u32>().ok()) else { continue };
+        let Ok(raw) = std::fs::read(e.path().join("cmdline")) else { continue };
+        let args: Vec<String> = raw.split(|b| *b == 0).map(|a| String::from_utf8_lossy(a).into_owned()).collect();
+        if leftover_for(&args, jobs) {
+            left.push(pid);
+        }
+    }
+    for pid in &left {
+        log::info!("store job: stopping a download the last launcher left running ({pid})");
+        tools::stop(*pid);
+    }
+    let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while std::time::Instant::now() < until && left.iter().any(|p| std::path::Path::new(&format!("/proc/{p}")).exists()) {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    }
+}
+
+/// A process's arguments are the tool itself (`legendary` or `gogdl`, run directly or by its
+/// interpreter) downloading one of `jobs`' games: an install, update or repair, never a quick
+/// query on the same game (`legendary info`, which the install sheet runs for the size).
+fn leftover_for(args: &[String], jobs: &[Job]) -> bool {
+    let is_tool = |a: &String| [LEGENDARY, GOGDL].iter().any(|t| a == t || a.ends_with(&format!("/{t}")));
+    let downloads = args.iter().any(|a| matches!(a.as_str(), "install" | "repair" | "update" | "download"));
+    args.iter().take(2).any(is_tool) && downloads && jobs.iter().any(|j| Store::of(&j.id).is_some_and(|(_, sid)| args.iter().any(|a| a == sid)))
+}
+
 /// A tool's error as a line for the player.
 fn friendly(e: &str) -> String {
     let l = e.to_lowercase();
@@ -556,6 +594,19 @@ mod tests {
             job("gog:2", Kind::Setup, Phase::Queued),
         ];
         assert_eq!(to_value(&jobs), json!({ "jobs": [] }));
+    }
+
+    #[test]
+    fn a_leftover_tool_is_found_by_its_game() {
+        let jobs = vec![job("epic:abc", Kind::Update, Phase::Queued), job("gog:42", Kind::Repair, Phase::Paused)];
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(leftover_for(&a(&["python3", "/usr/libexec/rare/stores/legendary", "-y", "install", "abc", "--base-path", "/g"]), &jobs));
+        assert!(leftover_for(&a(&["/x/bin/gogdl", "download", "42"]), &jobs));
+        // Another game, another program, or the tool's helpers (the game id only inside -c code).
+        assert!(!leftover_for(&a(&["python3", "/usr/libexec/rare/stores/legendary", "install", "other"]), &jobs));
+        assert!(!leftover_for(&a(&["vim", "abc"]), &jobs));
+        assert!(!leftover_for(&a(&["python3", "/usr/libexec/rare/stores/legendary", "info", "abc", "--json"]), &jobs));
+        assert!(!leftover_for(&a(&["/usr/bin/python3", "-c", "main()", "/usr/libexec/rare/stores/legendary", "install", "abc"]), &jobs));
     }
 
     #[test]
