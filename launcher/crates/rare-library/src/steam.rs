@@ -321,11 +321,12 @@ fn current_account(root: &Path) -> Option<String> {
     best.map(|(_, _, id64)| (id64.wrapping_sub(76561197960265728) & 0xffff_ffff).to_string())
 }
 
-/// App ids in the account's library. Steam keeps one file per app it has shown in
-/// userdata/<account>/config/librarycache/<appid>.json, and the library's art for every app in the
-/// account's library in appcache/librarycache/<appid>/ (owned and free apps, DLC and tools too; the
-/// caller keeps games). The first alone missed most of a large library: on one device it had 20
-/// apps, the art cache 555.
+/// App ids in the account's library, from three places Steam keeps on disk (owned and free apps, DLC
+/// and tools too; the caller keeps games): a file per app it has shown in
+/// userdata/<account>/config/librarycache/<appid>.json, the library's art in
+/// appcache/librarycache/<appid>/, and the apps of every package the account holds a licence for
+/// (appcache/packageinfo.vdf, `appinfo::licensed`). Each alone misses part of a large library: on
+/// one device the first had 20 apps, the art cache 554, the licences 749 (all 554 among them).
 fn library_appids(root: &Path) -> HashSet<u32> {
     let users = root.join("userdata");
     let dirs: Vec<PathBuf> = match current_account(root).map(|a| users.join(a)).filter(|d| d.is_dir()) {
@@ -352,6 +353,8 @@ fn library_appids(root: &Path) -> HashSet<u32> {
             add(&e.file_name().to_string_lossy());
         }
     }
+    // The account's licences (packageinfo.vdf): every app a package it owns covers, art or not.
+    out.extend(super::appinfo::licensed(root).into_iter().filter(|id| *id > 0 && *id < 0x8000_0000));
     out
 }
 
