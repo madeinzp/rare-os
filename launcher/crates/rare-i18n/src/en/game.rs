@@ -359,6 +359,8 @@ strings! {
     open_in_browser: "Open in browser",
     /// Section headings under the game
     screenshots: "Screenshots",
+    /// The game page's rail of the store page's screenshots
+    store_shots: "From the store",
     updates: "Updates",
     news: "News",
     dlc: "DLC",

@@ -1,10 +1,11 @@
-//! The game page under the fold: Rare's screenshots of the game (a full-screen viewer with delete
-//! and Share), its news and patch notes (a reader paragraph by paragraph), its DLC (installed,
+//! The game page under the fold: its store screenshots (a full-screen viewer, so an owned game shows
+//! what it is before it downloads), Rare's screenshots of the game (a viewer with delete and Share),
+//! its news and patch notes (a reader paragraph by paragraph), its DLC (installed,
 //! turned off, or in the store; A turns owned DLC on or off) and its manual. Everything is read off
 //! the UI thread (`extras_data`) and kept, so a revisit shows the last answer at once. The sections
 //! sit below the hero, so nothing above moves when they land.
 
-use super::extras_data::{self as data, Dlc, NewsItem, ParaKind, Remote, Source};
+use super::extras_data::{self as data, Dlc, NewsItem, ParaKind, Remote, Source, StoreShot};
 use crate::act::Act;
 use rare_i18n::{tr, trf};
 use crate::data::model::Game;
@@ -26,6 +27,7 @@ const DLC: u32 = 30_000;
 const MANUAL: u32 = 40_000;
 const STILL: u32 = 40_001;
 const PARA: u32 = 50_000;
+const STORE: u32 = 60_000;
 pub const FIRST: u32 = SHOT;
 
 #[derive(Default)]
@@ -43,6 +45,8 @@ enum Mode {
     Page,
     Viewer(usize),
     Reader(usize),
+    /// A store screenshot, full screen.
+    Store(usize),
 }
 
 impl Default for Mode {
@@ -115,7 +119,7 @@ impl Extras {
     pub fn load(&self, st: &State, fx: &mut Fx, g: &Game) {
         let src = match steam_appid(g) {
             Some(a) => Some(Source::Steam(a)),
-            _ => sui_slug(st, g).map(Source::Sui),
+            _ => sui_slug(st, g).map(Source::Sui).or_else(|| matches!(g.source.as_str(), "epic" | "gog").then(|| Source::Title(g.title.clone()))),
         };
         {
             let mut i = self.inner.lock().unwrap();
@@ -183,6 +187,13 @@ impl Extras {
                 }
             }
             c if (DLC..MANUAL).contains(&c) => self.dlc_press(st, fx, g, (c - DLC) as usize, now),
+            c if (STORE..STORE + 1000).contains(&c) => {
+                if ((c - STORE) as usize) < self.store_shots().len() {
+                    self.back_to = Some(c);
+                    self.mode = Mode::Store((c - STORE) as usize);
+                    fx.fb(Feedback::Open);
+                }
+            }
             MANUAL => {
                 let url = self.inner.lock().unwrap().remote.as_ref().and_then(|r| r.manual.clone());
                 if let Some(u) = url {
@@ -295,6 +306,26 @@ impl Extras {
                 Self::bump(&self.ver);
                 true
             }
+            Mode::Store(i) => {
+                let n = self.store_shots().len();
+                match b {
+                    Btn::B => self.close(fx),
+                    Btn::Left | Btn::Lb if i > 0 => {
+                        self.mode = Mode::Store(i - 1);
+                        self.back_to = Some(STORE + i as u32 - 1);
+                        fx.fb(Feedback::Move);
+                    }
+                    Btn::Right | Btn::Rb if i + 1 < n => {
+                        self.mode = Mode::Store(i + 1);
+                        self.back_to = Some(STORE + i as u32 + 1);
+                        fx.fb(Feedback::Move);
+                    }
+                    Btn::Guide | Btn::GuideHold | Btn::Qam | Btn::ExitHold => return false,
+                    _ => {}
+                }
+                Self::bump(&self.ver);
+                true
+            }
             Mode::Reader(_) => match b {
                 Btn::B => {
                     self.close(fx);
@@ -316,6 +347,10 @@ impl Extras {
         self.mode = Mode::Page;
         self.armed = None;
         fx.fb(Feedback::Back);
+    }
+
+    fn store_shots(&self) -> Vec<StoreShot> {
+        self.inner.lock().unwrap().remote.as_ref().map(|r| r.store_shots.clone()).unwrap_or_default()
     }
 
     fn reading(&self) -> Option<NewsItem> {
@@ -370,6 +405,7 @@ impl Extras {
                 hint(Key::Y, tr().common.share),
                 hint(Key::B, tr().common.back),
             ]),
+            Mode::Store(_) => Some(vec![hint(Key::Lb, tr().game.previous), hint(Key::Rb, tr().common.next), hint(Key::B, tr().common.back)]),
             Mode::Reader(_) => {
                 let mut v = Vec::new();
                 if self.reading().is_some_and(|n| !n.url.is_empty()) {
@@ -404,6 +440,14 @@ impl Extras {
                 };
                 Some(viewer(ui, acts, g, &c, i, n, self.armed.is_some()))
             }
+            Mode::Store(i) => {
+                let shots = self.store_shots();
+                let Some(shot) = shots.get(i) else {
+                    self.mode = Mode::Page;
+                    return None;
+                };
+                Some(store_viewer(ui, acts, g, shot, i, shots.len()))
+            }
             Mode::Reader(_) => match self.reading() {
                 Some(item) => Some(reader(ui, acts, &item)),
                 None => {
@@ -427,6 +471,22 @@ impl Extras {
             }
             t
         };
+        // The store's screenshots, first: on a game not installed yet they show what it is.
+        if let Some(r) = inn.remote.as_ref().filter(|r| !r.store_shots.is_empty()) {
+            let tiles: Vec<El> = r
+                .store_shots
+                .iter()
+                .enumerate()
+                .map(|(i, shot)| {
+                    let t = tag(acts, STORE + i as u32);
+                    let pic = kit::art(ui, s().fill(), &[shot.thumb.clone()], 16.0, 9.0, ArtFit::Cover(0.5), None);
+                    let b = ui.bx(s().wh(16.0, 9.0)).bg(tok::L2).radius(ui.r(0.5)).clip().child(pic);
+                    kit::nav(kit::tile(b, 1.06), t, Some(tr().common.view), None, false).key(key(&shot.full))
+                })
+                .collect();
+            let n = r.store_shots.len().to_string();
+            col.push(kit::rail(ui, s(), "game-store-shots", Some(tr().game.store_shots), Some(&n), tiles).key(key("game-store-shots")));
+        }
         // Screenshots.
         if !inn.shots.is_empty() {
             let tiles: Vec<El> = inn
@@ -541,6 +601,19 @@ fn viewer(ui: &mut Ui, acts: &mut Acts, g: &Game, c: &Capture, i: usize, n: usiz
         cap = cap.child(ui.text(tr().game.press_x_delete, T::new(Ty::Small).w(600).c(tok::ATTN)));
     }
     // The caption sits inside the focused picture so it draws over it.
+    let t = acts.game(Act::Local(STILL), &g.id);
+    let still = kit::nav(ui.bx(s().abs(Some(0.0), Some(0.0), Some(3.0), Some(0.0))).child(pic).child(cap), t, None, None, true);
+    ui.bx(s().fill()).bg(tok::BLACK).enter(Motion::FADE).child(still)
+}
+
+/// A store screenshot full screen: the picture and "Game · 3 of 12".
+fn store_viewer(ui: &mut Ui, acts: &mut Acts, g: &Game, shot: &StoreShot, i: usize, n: usize) -> El {
+    let (w, h) = (ui.w / ui.rem, ui.h / ui.rem);
+    // The thumbnail while the full picture loads.
+    let thumb = kit::art(ui, s().fill(), &[shot.thumb.clone()], w, h - 3.0, ArtFit::Contain(0.5, 0.5), None);
+    let pic = kit::art(ui, s().fill(), &[shot.full.clone()], w, h - 3.0, ArtFit::Contain(0.5, 0.5), Some(thumb));
+    let line = trf!(tr().game.viewer_pos, game = g.title, i = i + 1, n = n);
+    let cap = ui.bx(s().abs(None, None, Some(0.75), Some(2.5)).row().items_center().px(1.0).py(0.5)).bg(tok::BG.alpha(0.75)).radius(ui.r(0.5)).child(ui.text(line, T::new(Ty::Small).w(500).c(tok::fg(0.85))));
     let t = acts.game(Act::Local(STILL), &g.id);
     let still = kit::nav(ui.bx(s().abs(Some(0.0), Some(0.0), Some(3.0), Some(0.0))).child(pic).child(cap), t, None, None, true);
     ui.bx(s().fill()).bg(tok::BLACK).enter(Motion::FADE).child(still)

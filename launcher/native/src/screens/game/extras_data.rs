@@ -1,7 +1,8 @@
 //! What the game page's lower sections show, read off the UI thread and kept: a Steam game's news
 //! (Steam's public ISteamNews, no key) or a Sui game's (rare.market's catalog), its DLC (the store's
 //! list and art, what the appmanifest says is installed or turned off), its manual (Steam's
-//! /manual/<appid> link when it leads to a file), and Rare's own screenshots of it.
+//! /manual/<appid> link when it leads to a file), its store screenshots (Steam's, also for an Epic or
+//! GOG game found on Steam by its exact name), and Rare's own screenshots of it.
 //!
 //! The network answers are kept on disk (`keep::save`) so a revisit or a restart shows the last
 //! ones at once; they refresh in the background after `FRESH_S`.
@@ -50,6 +51,15 @@ pub struct Dlc {
     pub price: Option<String>,
 }
 
+/// One screenshot from the game's store page.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct StoreShot {
+    /// 600 px wide, for the rail.
+    pub thumb: String,
+    /// Full size, for the viewer.
+    pub full: String,
+}
+
 /// The network part, kept per game.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Remote {
@@ -58,6 +68,8 @@ pub struct Remote {
     pub news: Vec<NewsItem>,
     pub dlc: Vec<Dlc>,
     pub manual: Option<String>,
+    #[serde(default)]
+    pub store_shots: Vec<StoreShot>,
 }
 
 fn now_s() -> u64 {
@@ -98,6 +110,9 @@ fn store(id: &str, r: &Remote) {
 pub enum Source {
     Steam(u32),
     Sui(String),
+    /// An Epic or GOG game: its store screenshots from the Steam page with exactly its name, if any.
+    /// Only those: news and DLC of a wrongly matched page would mislead.
+    Title(String),
 }
 
 /// Reads everything for `src` (blocking, on a worker) and keeps it. A part that fails keeps the
@@ -110,11 +125,59 @@ pub fn fetch(id: &str, src: &Source) -> Remote {
             news: steam_news(*appid).unwrap_or(last.news),
             dlc: steam_dlc(*appid).unwrap_or(last.dlc),
             manual: steam_manual(*appid).unwrap_or(last.manual),
+            store_shots: steam_shots(*appid).unwrap_or(last.store_shots),
         },
-        Source::Sui(slug) => Remote { at: now_s(), news: sui_news(slug).unwrap_or(last.news), dlc: Vec::new(), manual: None },
+        Source::Sui(slug) => Remote { at: now_s(), news: sui_news(slug).unwrap_or(last.news), dlc: Vec::new(), manual: None, store_shots: Vec::new() },
+        Source::Title(title) => {
+            let shots = match steam_app_named(title) {
+                Some(Some(appid)) => steam_shots(appid),
+                Some(None) => Some(Vec::new()),
+                None => None,
+            };
+            Remote { at: now_s(), news: Vec::new(), dlc: Vec::new(), manual: None, store_shots: shots.unwrap_or(last.store_shots) }
+        }
     };
     store(id, &r);
     r
+}
+
+// ---------------------------------------------------------------- store screenshots
+
+/// The store page's screenshots for `appid` (None when the store did not answer).
+fn steam_shots(appid: u32) -> Option<Vec<StoreShot>> {
+    let v = get_json(&format!("https://store.steampowered.com/api/appdetails?appids={appid}&filters=screenshots"))?;
+    Some(parse_shots(v.get(appid.to_string())?))
+}
+
+fn parse_shots(data: &serde_json::Value) -> Vec<StoreShot> {
+    if data.get("success").and_then(|s| s.as_bool()) != Some(true) {
+        return Vec::new();
+    }
+    let list = data.get("data").and_then(|d| d.get("screenshots")).and_then(|s| s.as_array()).cloned().unwrap_or_default();
+    list.iter()
+        .filter_map(|it| {
+            let full = it.get("path_full")?.as_str()?.to_string();
+            let thumb = it.get("path_thumbnail").and_then(|t| t.as_str()).map(String::from).unwrap_or_else(|| full.clone());
+            Some(StoreShot { thumb, full })
+        })
+        .take(30)
+        .collect()
+}
+
+/// The Steam app whose name is exactly `title` (case, punctuation and marks aside): Some(None) when
+/// the search answered with no such app, None when it did not answer.
+fn steam_app_named(title: &str) -> Option<Option<u32>> {
+    let v = get_json(&format!("https://store.steampowered.com/api/storesearch/?term={}&cc=us&l=en", urlencode(title)))?;
+    let items = v.get("items").and_then(|i| i.as_array()).cloned().unwrap_or_default();
+    Some(items.iter().find(|it| it.get("name").and_then(|n| n.as_str()).is_some_and(|n| same_name(n, title))).and_then(|it| it.get("id")?.as_u64()).map(|a| a as u32))
+}
+
+/// Two store names for one game: equal once lowercased with everything but letters and digits
+/// dropped ("APE OUT" and "Ape Out", "Observer_" and ">observer_").
+fn same_name(a: &str, b: &str) -> bool {
+    let norm = |s: &str| s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect::<String>();
+    let (a, b) = (norm(a), norm(b));
+    !a.is_empty() && a == b
 }
 
 // ---------------------------------------------------------------- Steam news
@@ -429,6 +492,31 @@ mod tests {
         assert!(manual_link("https://store.steampowered.com/").is_none());
         assert_eq!(parse_iso("2026-10-27T16:18:20.082Z"), Some(1_793_117_880));
         assert_eq!(date_label(1_793_117_880), "Oct 27, 2026");
+    }
+
+    #[test]
+    fn store_shots_and_names() {
+        let ok = serde_json::json!({"success": true, "data": {"screenshots": [
+            {"id": 0, "path_thumbnail": "https://x/ss_1.600x338.jpg", "path_full": "https://x/ss_1.1920x1080.jpg"},
+            {"id": 1, "path_full": "https://x/ss_2.jpg"},
+            {"id": 2}
+        ]}});
+        let shots = parse_shots(&ok);
+        assert_eq!(shots.len(), 2);
+        assert_eq!(shots[0], StoreShot { thumb: "https://x/ss_1.600x338.jpg".into(), full: "https://x/ss_1.1920x1080.jpg".into() });
+        assert_eq!(shots[1].thumb, "https://x/ss_2.jpg");
+        assert!(parse_shots(&serde_json::json!({"success": false})).is_empty());
+        assert!(same_name("APE OUT", "Ape Out"));
+        assert!(same_name(">observer_", "Observer"));
+        assert!(!same_name("Batman: Arkham City", "Batman: Arkham Knight"));
+        assert!(!same_name("", ""));
+    }
+
+    #[test]
+    fn kept_answers_without_store_shots_still_read() {
+        let old = serde_json::json!({"at": 1, "news": [], "dlc": [], "manual": null});
+        let r: Remote = serde_json::from_value(old).unwrap();
+        assert!(r.store_shots.is_empty());
     }
 
     #[test]
