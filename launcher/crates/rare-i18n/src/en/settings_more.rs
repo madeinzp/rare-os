@@ -495,6 +495,12 @@ strings! {
     /// {error} is an English sentence from the updater
     upd_retry_suffix: "{error} It tries again by itself.",
     upd_offline: "No internet connection. It tries again by itself.",
+    /// The update check failed, in plain words (from the updater's error)
+    upd_signature: "The update's signature could not be checked, so it was not installed. It tries again by itself.",
+    upd_cert: "The connection to the update server could not be verified. Check that the date and time are right and that the Wi-Fi does not need a sign-in page.",
+    upd_busy: "The update server is busy right now. It tries again by itself.",
+    upd_dropped: "The connection dropped during the download. It goes on from where it stopped.",
+    upd_lock: "Another system change is still running. It tries again by itself.",
     /// Row title; {version} is a version number
     upd_ready_to: "Ready. Restart to update to {version}",
     upd_ready: "Ready. Restart to update",
@@ -659,6 +665,7 @@ strings! {
     lv_bt_pairing_hint: "Put it in pairing mode and try again.",
 
     lv_check_wifi_hint: "Check your Wi-Fi and try again.",
+    lv_update_auto_hint: "Rare OS also checks by itself every hour.",
     /// Sound: the built-in output device
     snd_dev_speaker: "Speaker",
     /// Sound: the built-in input device

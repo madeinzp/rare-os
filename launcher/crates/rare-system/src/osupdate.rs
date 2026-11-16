@@ -180,8 +180,20 @@ pub fn status() -> OsUpdate {
 
 /// Ask the updater to download now (also on battery, down to 15%). Returns at once; the download
 /// goes on in the background, its progress and the staged version show up in `status`.
+///
+/// pkexec is tried three times (polkitd starting, or busy right after the device woke) before the
+/// error is shown, except when polkit said no: that does not change by trying again.
 pub fn check_now() -> Result<(), String> {
-    admin(&["update-now"])
+    let mut last = String::new();
+    for wait in [0u64, 2, 5] {
+        std::thread::sleep(std::time::Duration::from_secs(wait));
+        match admin(&["update-now"]) {
+            Ok(()) => return Ok(()),
+            Err(e) if e.to_lowercase().contains("not authorized") => return Err(e),
+            Err(e) => last = e,
+        }
+    }
+    Err(last)
 }
 
 /// Make the previous Rare OS version the next start (and restart with `reboot`).

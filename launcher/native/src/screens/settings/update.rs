@@ -107,20 +107,32 @@ pub struct UpdateLine {
 pub const CHECK_FAILED: &str = "Rare OS could not check for updates. It tries again by itself.";
 
 /// A failed check in plain words, and the raw error to keep behind Details. os-update's own
-/// sentences for free space and battery stay as they are; no network says so; anything else
-/// (a missing or bad signature, a registry error) gets the generic words.
+/// sentences for free space and battery stay as they are; a bad signature, the clock or a sign-in
+/// page, a busy server, a dropped download, another system change and no network each say so,
+/// from os-update's words or from bootc's own (an older image's os-update passes those through);
+/// anything else gets the generic words.
 pub fn failed_words(err: Option<&str>) -> (String, Option<String>) {
-    let Some(e) = err.map(str::trim).filter(|e| !e.is_empty()) else { return (tr().settings_more.upd_check_failed.into(), None) };
+    let t = &tr().settings_more;
+    let Some(e) = err.map(str::trim).filter(|e| !e.is_empty()) else { return (t.upd_check_failed.into(), None) };
     let l = e.to_lowercase();
     if l.starts_with("there is not enough free space") || l.starts_with("the battery is at") {
-        let body = if l.contains("try again") || l.contains("tries again") { e.to_string() } else { trf!(tr().settings_more.upd_retry_suffix, error = e) };
+        let body = if l.contains("try again") || l.contains("tries again") { e.to_string() } else { trf!(t.upd_retry_suffix, error = e) };
         return (body, None);
     }
-    let offline = ["offline", "could not be reached", "resolv", "temporary failure", "network is unreachable", "no route", "dns", "timed out", "timeout", "connection refused"];
-    if offline.iter().any(|w| l.contains(w)) {
-        return (tr().settings_more.upd_offline.into(), Some(e.to_string()));
+    let kinds: [(&[&str], &str); 6] = [
+        (&["signature", "source image rejected", "rejected by policy"], t.upd_signature),
+        (&["x509", "certificate", "date and time are right"], t.upd_cert),
+        (&["busy right now", "too many requests", " 429", " 500 ", " 502 ", " 503 ", " 504 ", "internal server error", "bad gateway", "service unavailable"], t.upd_busy),
+        (&["unexpected eof", "connection reset", "broken pipe", "connection to the update server dropped"], t.upd_dropped),
+        (&["another system change", "sysroot lock", "acquire lock", "transaction in progress", "another operation"], t.upd_lock),
+        (&["offline", "not connected to the internet", "could not be reached", "resolv", "temporary failure", "network is unreachable", "network is down", "no such host", "dial tcp", "no route", "dns", "timed out", "timeout", "connection refused"], t.upd_offline),
+    ];
+    for (words, body) in kinds {
+        if words.iter().any(|w| l.contains(w)) {
+            return (body.into(), Some(e.to_string()));
+        }
     }
-    (tr().settings_more.upd_check_failed.into(), Some(e.to_string()))
+    (t.upd_check_failed.into(), Some(e.to_string()))
 }
 
 /// The Updates row's words for a state. `checking` is a check started from this launcher.
@@ -496,8 +508,18 @@ mod tests {
         let raw = "Fetching manifest: failed to invoke method OpenImage: A signature was required, but no signature exists";
         let l = update_line(&OsUpdate { check_ok: Some(false), check_error: Some(raw.into()), ..Default::default() }, false, NOW);
         assert_eq!(l.title, "Could not update");
-        assert_eq!(l.body, CHECK_FAILED);
+        assert_eq!(l.body, "The update's signature could not be checked, so it was not installed. It tries again by itself.");
         assert_eq!(l.detail.as_deref(), Some(raw));
+        let words = |e: &str| update_line(&OsUpdate { check_ok: Some(false), check_error: Some(e.into()), ..Default::default() }, false, NOW).body;
+        assert!(words("tls: failed to verify certificate: x509: certificate has expired or is not yet valid").starts_with("The connection to the update server could not be verified."));
+        assert_eq!(words("reading manifest stable: received unexpected HTTP status: 503 Service Unavailable"), "The update server is busy right now. It tries again by itself.");
+        assert_eq!(words("Importing: fetching layer: unexpected EOF"), "The connection dropped during the download. It goes on from where it stopped.");
+        assert_eq!(words("Another system change is still running. Try again in a few minutes."), "Another system change is still running. It tries again by itself.");
+        assert_eq!(words("The device is not connected to the internet. Connect to Wi-Fi and try again."), "No internet connection. It tries again by itself.");
+        // bootc's own words when Wi-Fi is up but DNS is not (an older os-update passes them on)
+        assert_eq!(words("Creating importer: failed to invoke method OpenImage: pinging container registry ghcr.io: Get \"https://ghcr.io/v2/\": dial tcp: lookup ghcr.io: no such host"), "No internet connection. It tries again by itself.");
+        // "clock" holds "lock": not another system change
+        assert_eq!(words("Some new error about the clock"), CHECK_FAILED);
         let off = update_line(&OsUpdate { check_ok: Some(false), check_error: Some("The device is offline or the update server could not be reached.".into()), ..Default::default() }, false, NOW);
         assert_eq!(off.body, "No internet connection. It tries again by itself.");
         assert!(off.detail.is_some());

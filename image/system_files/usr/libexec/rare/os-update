@@ -56,6 +56,13 @@ AUTO_FLOOR=30   # % battery an automatic download needs off the charger
 AUTO_STOP=25    # % where a running automatic download stops
 MANUAL_FLOOR=15 # % battery a download someone asked for needs off the charger
 DUE_SECS=$((20 * 3600))
+# Seconds between tries of a check or a download that failed on the way (a Wi-Fi that just woke
+# up, a dropped connection, a busy server): three tries in all before the run says it failed.
+RETRY_DELAYS=${RARE_UPDATE_RETRY_DELAYS:-"10 30"}
+# How long a run someone asked for waits for NetworkManager to report a connection (the Wi-Fi
+# reconnecting after sleep); an automatic run does not wait.
+NMCLI=${RARE_NMCLI:-nmcli}
+ONLINE_WAIT=30
 NOTES_MAX=4000
 mkdir -p "$STATE_DIR" "$RUN_DIR"
 
@@ -140,15 +147,40 @@ blocker() {
     [[ "${1:-start}" == start ]] && metered && { echo metered; return; }
 }
 
-# bootc's last line, in words a player reads.
+# bootc's last line, in words a player reads. The launcher shows it under "Could not update".
 plain_error() {
     local e="$1"
     case "${e,,}" in
         *"no space left"*) echo "There is not enough free space for the update. Free some space and try again." ;;
+        *signature* | *"source image rejected"* | *"rejected by policy"*) echo "The update's signature could not be checked, so it was not installed. It tries again later." ;;
+        *x509* | *certificate*) echo "The connection to the update server could not be checked. Make sure the date and time are right and the Wi-Fi does not need a sign-in page, then try again." ;;
+        *"too many requests"* | *" 429"* | *" 500 "* | *" 502 "* | *" 503 "* | *" 504 "* | *"internal server error"* | *"bad gateway"* | *"service unavailable"*) echo "The update server is busy right now. It tries again later." ;;
         *denied* | *unauthorized* | *"not found"* | *manifest\ unknown*) echo "The update server refused the request." ;;
-        *resolv* | *"temporary failure"* | *"network is unreachable"* | *"connection refused"* | *timeout* | *"timed out"* | *"no route"* | *dns*) echo "The device is offline or the update server could not be reached." ;;
+        *"unexpected eof"* | *"connection reset"* | *"broken pipe"*) echo "The connection to the update server dropped. Update now goes on from where it stopped." ;;
+        *resolv* | *"temporary failure"* | *"network is unreachable"* | *"network is down"* | *"no such host"* | *"dial tcp"* | *"connection refused"* | *timeout* | *"timed out"* | *"no route"* | *dns*) echo "The device is offline or the update server could not be reached." ;;
+        *lock* | *"transaction in progress"* | *"another operation"* | *busy*) echo "Another system change is still running. Try again in a few minutes." ;;
         *) echo "${e:0:300}" ;;
     esac
+}
+# A failure another try will not change: no room, a refused or unknown image, a bad signature.
+lasting_error() {
+    case "${1,,}" in
+        *"no space left"* | *signature* | *"source image rejected"* | *"rejected by policy"* | *denied* | *unauthorized* | *"manifest unknown"* | *"not found"*) return 0 ;;
+    esac
+    return 1
+}
+# NetworkManager has a connection, waiting up to $1 seconds for one. True when NetworkManager
+# cannot be asked (no nmcli, not running): then bootc's own error says what is wrong.
+online() {
+    command -v "$NMCLI" >/dev/null 2>&1 || return 0
+    local waited=0 st
+    while :; do
+        st="$("$NMCLI" -t -f STATE general 2>/dev/null 9>&-)" || return 0
+        case "$st" in connected*) return 0 ;; disconnected | asleep | connecting | disconnecting) ;; *) return 0 ;; esac
+        ((waited >= $1)) && return 1
+        sleep 2
+        waited=$((waited + 2))
+    done
 }
 
 # --- the parts -------------------------------------------------------------------------------
@@ -248,12 +280,30 @@ run_update() {
     state_merge --argjson m "$(is_manual && echo true || echo false)" \
         '.phase = "checking" | .manual = $m | .startedAt = $_now | .updatedAt = $_now | del(.waitReason, .bytes, .bytesTotal, .steps, .stepsTotal, .offerVersion)'
 
+    # No connection at all: say so in plain words instead of bootc's DNS error. A run someone
+    # asked for gives the Wi-Fi a moment to come back (just woken from sleep).
+    if ! online 0 && ! { is_manual && online "$ONLINE_WAIT"; }; then
+        log "no network connection; not checking"
+        finish failed false "The device is not connected to the internet. Connect to Wi-Fi and try again; updates also download by themselves once it is online."
+        return 0
+    fi
+
     # Metadata first: what would be downloaded. A version that did not start here is skipped.
     # fd 9 (the run lock) stays with this script: a helper bootc leaves behind must not hold it.
-    out="$("$BOOTC" upgrade --check 2>&1 9>&-)"
-    rc=$?
+    # A failure on the way (DNS just after waking, a dropped connection, a busy server) is tried
+    # again before the run reports it.
+    local delay tries=0
+    for delay in $RETRY_DELAYS ""; do
+        out="$("$BOOTC" upgrade --check 2>&1 9>&-)"
+        rc=$?
+        tries=$((tries + 1))
+        ((rc == 0)) && break
+        log "check failed (exit $rc, try $tries): ${out##*$'\n'}"
+        [[ -z "$delay" ]] || lasting_error "$out" && break
+        state_merge '.updatedAt = $_now'
+        sleep "$delay"
+    done
     if ((rc != 0)); then
-        log "check failed (exit $rc): ${out##*$'\n'}"
         finish failed false "$(plain_error "${out##*$'\n'}")"
         return $rc
     fi
@@ -284,26 +334,38 @@ run_update() {
     fi
 
     [[ -n "$offer" ]] && state_merge --arg v "$offer" '.offerVersion = $v'
-    tmp="$(mktemp)"
-    "$BOOTC" upgrade --quiet --progress-fd 3 >"$tmp" 2>&1 9>&- 3> >(progress_reader 9>&-) &
-    pid=$!
-    while kill -0 "$pid" 2>/dev/null; do
-        sleep 5
-        if ! is_manual; then
-            reason="$(blocker run)"
-            if [[ -n "$reason" ]]; then
-                stop="$reason"
-                log "stopping the download ($reason); it goes on from here later"
-                kill -TERM "$pid" 2>/dev/null
-                break
+    # A download that fails on the way is tried again (every finished layer stays, so a new try
+    # fetches only what is missing).
+    tries=0
+    for delay in $RETRY_DELAYS ""; do
+        tmp="$(mktemp)"
+        "$BOOTC" upgrade --quiet --progress-fd 3 >"$tmp" 2>&1 9>&- 3> >(progress_reader 9>&-) &
+        pid=$!
+        while kill -0 "$pid" 2>/dev/null; do
+            sleep 5
+            if ! is_manual; then
+                reason="$(blocker run)"
+                if [[ -n "$reason" ]]; then
+                    stop="$reason"
+                    log "stopping the download ($reason); it goes on from here later"
+                    kill -TERM "$pid" 2>/dev/null
+                    break
+                fi
             fi
-        fi
+        done
+        wait "$pid"
+        rc=$?
+        out="$(cat "$tmp")"
+        rm -f "$tmp"
+        [[ -n "$out" ]] && echo "$out"
+        tries=$((tries + 1))
+        [[ -n "$stop" ]] || ((rc == 0)) && break
+        log "download failed (exit $rc, try $tries): ${out##*$'\n'}"
+        [[ -z "$delay" ]] || lasting_error "$out" && break
+        state_merge '.updatedAt = $_now'
+        sleep "$delay"
+        online "$ONLINE_WAIT" || true
     done
-    wait "$pid"
-    rc=$?
-    out="$(cat "$tmp")"
-    rm -f "$tmp"
-    [[ -n "$out" ]] && echo "$out"
     if [[ -n "$stop" ]]; then
         wait_for "$stop"
         return 0

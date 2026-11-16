@@ -1180,7 +1180,9 @@ pub fn run(act: &str, arg: Option<String>, waker: Arc<dyn Fn() + Send + Sync>) -
             spawn(&w, move || {
                 if let Err(e) = sys::osupdate::check_now() {
                     edit(|s| s.system.checking = false, true);
-                    toast(failed(tr().settings_more.lv_couldnt_check_for_updates, &e, Some(tr().settings_more.lv_check_wifi_hint)), true);
+                    // os-admin only starts the run (the download goes on in the background), so this is pkexec or
+                    // polkit, never the Wi-Fi: say what it said, and that the hourly check still runs.
+                    toast(failed(tr().settings_more.lv_couldnt_check_for_updates, &e, Some(tr().settings_more.lv_update_auto_hint)), true);
                     return;
                 }
                 // Follow the updater for as long as it works (an 8 GB download takes a while): its
