@@ -10,4 +10,7 @@ Type=oneshot
 Nice=19
 IOSchedulingClass=idle
 TimeoutStartSec=infinity
+# At power-off a download in progress stops at once (it goes on from there at the next start);
+# never hold the shutdown for it.
+TimeoutStopSec=10s
 ExecStart=/usr/libexec/rare/os-update

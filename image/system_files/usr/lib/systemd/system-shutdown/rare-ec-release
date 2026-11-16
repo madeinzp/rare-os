@@ -1,0 +1,8 @@
+#!/bin/sh
+# Rare OS: the last step before the device turns off or restarts (systemd-shutdown runs this after
+# every service has stopped). The EC gets the fan, the stick lights and charging back, as
+# rare-fand.service does when it stops; this covers a shutdown where that stop did not happen
+# (forced after the shutdown time limit, or rare-fand killed). The kernel module's shutdown hook
+# hands the fan and lights back again just before power-off. Nothing to do on other devices.
+[ -x /usr/libexec/rare/rare-fand ] || exit 0
+exec /usr/libexec/rare/rare-fand release

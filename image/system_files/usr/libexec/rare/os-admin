@@ -235,7 +235,8 @@ case "${1:-}" in
         # run is already at work (the timer's, or an earlier press), it carries on as asked for.
         systemctl reset-failed rare-update-now.service 2>/dev/null || true
         if ! systemd-run --no-block --unit=rare-update-now --nice=19 --property=IOSchedulingClass=idle \
-            --property=TimeoutStartSec=infinity /usr/libexec/rare/os-update --now 2>/dev/null; then
+            --property=TimeoutStartSec=infinity \
+            --property=TimeoutStopSec=10s /usr/libexec/rare/os-update --now 2>/dev/null; then
             /usr/libexec/rare/os-update --now
         fi
         ;;

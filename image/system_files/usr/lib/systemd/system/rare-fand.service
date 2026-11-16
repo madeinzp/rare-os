@@ -13,6 +13,8 @@ ExecStart=/usr/libexec/rare/rare-fand run
 # charge_behaviour goes back to auto.
 ExecStopPost=/usr/libexec/rare/rare-fand release
 Restart=on-failure
+# Its stop and the release after it take milliseconds; never hold a power-off for them.
+TimeoutStopSec=5s
 RestartSec=2
 StateDirectory=rare
 # Writes only /sys (hwmon, power_supply, leds) and /var/lib/rare; talks only to the system bus.

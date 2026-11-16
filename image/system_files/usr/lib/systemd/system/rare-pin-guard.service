@@ -7,6 +7,7 @@ Type=simple
 ExecCondition=/usr/libexec/rare/rare-pin-guard check
 ExecStart=/usr/libexec/rare/rare-pin-guard
 Restart=always
+TimeoutStopSec=5s
 RestartSec=1
 StateDirectory=rare-pin-guard
 StateDirectoryMode=0700

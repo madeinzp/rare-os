@@ -139,7 +139,7 @@
  }
  
  static int ayaneo_freeze(struct device *dev)
-@@ -559,11 +529,32 @@
+@@ -559,11 +529,40 @@
  	return 0;
  }
  
@@ -163,16 +163,24 @@
  	.restore = ayaneo_restore,
  };
  
-+/* Rare OS: the EC gets the stick rings back at power off and reboot. */
++/*
++ * Rare OS: the EC gets the stick rings and the fan back at power off and reboot. rare-fand hands
++ * the fan back when its service stops; this also covers a shutdown where it did not get to (killed,
++ * or a stop that ran out of time), so the fan never stays at the last speed the OS set.
++ */
 +static void ayaneo_shutdown(struct platform_device *pdev)
 +{
++	struct ayaneo_ec_platform_data *data = platform_get_drvdata(pdev);
++
 +	suiplay_rgb_shutdown(&pdev->dev);
++	if (data && data->quirks->has_fan_control)
++		ec_write(AYANEO_PWM_ENABLE_REG, AYANEO_PWM_MODE_AUTO);
 +}
 +
  static struct platform_driver ayaneo_platform_driver = {
  	.driver = {
  		.name = "ayaneo-ec",
-@@ -571,6 +562,7 @@
+@@ -571,6 +570,7 @@
  		.pm = pm_sleep_ptr(&ayaneo_pm_ops),
  	},
  	.probe = ayaneo_ec_probe,
@@ -180,7 +188,7 @@
  };
  
  static struct platform_device *ayaneo_platform_device;
-@@ -596,5 +588,5 @@
+@@ -596,5 +596,5 @@
  module_exit(ayaneo_ec_exit);
  
  MODULE_AUTHOR("Antheas Kapenekakis <lkml@antheas.dev>");
