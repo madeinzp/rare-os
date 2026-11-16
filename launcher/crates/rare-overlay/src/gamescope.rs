@@ -173,7 +173,7 @@ fn write_rare_first() -> Result<(), String> {
     let atom = intern(&conn, CTRL_APPID)?;
     let reply = conn.get_property(false, root, atom, AtomEnum::ANY, 0, 256).map_err(|e| e.to_string())?.reply().map_err(|e| e.to_string())?;
     let list: Vec<u64> = reply.value32().map(|v| v.map(u64::from).collect()).unwrap_or_default();
-    if let Some(next) = super::appid::place(&list, true, None, &super::appid::all()) {
+    if let Some(next) = super::appid::place(&list, true, None, &super::appid::all(), &[]) {
         let values: Vec<u32> = next.iter().map(|v| *v as u32).collect();
         conn.change_property32(PropMode::REPLACE, root, atom, AtomEnum::CARDINAL, &values).map_err(|e| e.to_string())?;
         conn.sync().map_err(|e| e.to_string())?;
@@ -312,10 +312,15 @@ fn keep_rare_listed(display: &str) -> Result<(), String> {
     }
     let _unknown = Unknown;
     conn.change_window_attributes(root, &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE)).map_err(|e| e.to_string())?;
-    let ensure = |(first, front): (bool, Option<u32>)| -> Result<(), String> {
+    // gamescope's focusable apps, so a Steam game Steam left out of its list still gets the screen.
+    let focusable_apps = || -> Result<Vec<u64>, String> {
+        let reply = conn.get_property(false, root, focusable, AtomEnum::CARDINAL, 0, 256).map_err(|e| e.to_string())?.reply().map_err(|e| e.to_string())?;
+        Ok(reply.value32().map(|v| v.map(u64::from).collect()).unwrap_or_default())
+    };
+    let ensure = |(first, front): (bool, Option<u32>), apps: &[u64]| -> Result<(), String> {
         let reply = conn.get_property(false, root, atom, AtomEnum::ANY, 0, 256).map_err(|e| e.to_string())?.reply().map_err(|e| e.to_string())?;
         let list: Vec<u64> = reply.value32().map(|v| v.map(u64::from).collect()).unwrap_or_default();
-        if let Some(next) = super::appid::place(&list, first, front, &super::appid::all()) {
+        if let Some(next) = super::appid::place(&list, first, front, &super::appid::all(), apps) {
             let values: Vec<u32> = next.iter().map(|v| *v as u32).collect();
             conn.change_property32(PropMode::REPLACE, root, atom, AtomEnum::CARDINAL, &values).map_err(|e| e.to_string())?;
             conn.flush().map_err(|e| e.to_string())?;
@@ -325,7 +330,8 @@ fn keep_rare_listed(display: &str) -> Result<(), String> {
     };
     let want = || (rare_first(), front_app());
     let mut last = want();
-    ensure(last)?;
+    let mut apps = focusable_apps()?;
+    ensure(last, &apps)?;
     let mut ticks = 0u32;
     loop {
         // Steam's writes arrive as events; the front changes in-process, so look every 100 ms.
@@ -346,14 +352,17 @@ fn keep_rare_listed(display: &str) -> Result<(), String> {
         if ticks % 5 == 0 {
             // A game that ended hands the screen back without waiting for a button press, and the
             // started programs that have a window now count as shown (the launch progress, and "didn't start").
-            let reply = conn.get_property(false, root, focusable, AtomEnum::CARDINAL, 0, 256).map_err(|e| e.to_string())?.reply().map_err(|e| e.to_string())?;
-            let apps: Vec<u64> = reply.value32().map(|v| v.map(u64::from).collect()).unwrap_or_default();
-            crate::host::host().focusable_apps_seen(&apps);
+            let seen = focusable_apps()?;
+            crate::host::host().focusable_apps_seen(&seen);
+            if seen != apps {
+                apps = seen;
+                dirty = true;
+            }
         }
         let now = want();
         if dirty || now != last {
             last = now;
-            ensure(last)?;
+            ensure(last, &apps)?;
         }
         std::thread::sleep(Duration::from_millis(100));
     }
