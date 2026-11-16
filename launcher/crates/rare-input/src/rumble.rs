@@ -5,8 +5,12 @@
 //! the rumble differs from the last one, then a single EV_FF play write. Nothing is ever written
 //! while idle and a zero effect is never uploaded: gilrs used to re-upload an idle zero rumble
 //! every 50 ms for every pad, each an ioctl plus a write InputPlumber (root) logged and forwarded
-//! to the physical pad, a constant ~5 % CPU (30b93f9). The kernel times the effect (replay
-//! length), so no stop write is needed either.
+//! to the physical pad, a constant ~5 % CPU (30b93f9).
+//!
+//! The effect is stopped by hand after its length. A real pad's driver times it (replay length),
+//! but a virtual one (uinput: Steam Input's "X-Box 360 pad", InputPlumber's) hands play and stop
+//! to the program behind it, and Steam keeps the motors running until a stop comes: one move in
+//! the launcher left the pad rumbling with no end.
 
 /// One rumble: how long, and the light (weak) and heavy (strong) motor, 0..=1.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -157,6 +161,15 @@ mod player {
                                 false
                             }
                         });
+                        // Its length, then a stop for the pads that do not time it themselves.
+                        if r.effect().0 > 0 || r.effect().1 > 0 {
+                            std::thread::sleep(Duration::from_millis(r.ms as u64));
+                            for p in pads.values_mut() {
+                                if let Some(e) = p.effect.as_mut() {
+                                    let _ = e.stop();
+                                }
+                            }
+                        }
                     }
                 })
                 .expect("rumble thread");
