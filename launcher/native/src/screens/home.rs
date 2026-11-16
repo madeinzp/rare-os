@@ -151,8 +151,7 @@ impl Home {
         for (i, g) in games.iter().take(16).enumerate() {
             let i = i + 1;
             let running = st.is_running(&g.id);
-            let cover = if g.art.cover.is_empty() { &g.art.header } else { &g.art.cover };
-            let pic = if parts::icon_art(g) { parts::app_art(ui, g) } else { parts::art(ui, cover, &g.title, Variant::Cover, TILE, TILE, 0.28) };
+            let pic = if parts::icon_art(g) { parts::app_art(ui, g) } else { strip_art(ui, g) };
             let mut inner = ui.bx(s().fill()).radius(ui.r(0.5)).clip().child(pic);
             if running {
                 inner = inner.child(kit::dot(ui, s().abs(Some(0.4), Some(0.4), None, None), DotTone::Primary, true));
@@ -512,6 +511,24 @@ pub const APPS: [(&str, &str, &str); 12] = [
     ("telegram", "Telegram", "apps/telegram.png"),
     ("x", "X", "apps/x.png"),
 ];
+
+/// A game's square on the shelf. A portrait cover (2:3) cut square loses its top or bottom, where
+/// the title usually is, so a game with a hero and a logo that loads shows the hero with the whole
+/// logo over it, as Steam's own shelves do. Otherwise (no logo, a logo URL that 404s, or one still
+/// loading): the cover from its top, where most covers carry the title, then the landscape header.
+fn strip_art(ui: &mut Ui, g: &Game) -> El {
+    let pad = TILE * 0.12;
+    let (lw, lh) = (TILE - 2.0 * pad, TILE - 2.0 * pad);
+    let logo = if g.art.hero.is_empty() { None } else { ui.arts.key(ui.img, &g.art.logo, ui.r(lw), ui.r(lh), ArtFit::Contain(0.5, 0.5)) };
+    if let Some(k) = logo {
+        let hero = parts::art(ui, &g.art.hero, &g.title, Variant::Hero, TILE, TILE, 0.5);
+        let logo = kit::art::image(k, ArtFit::Contain(0.5, 0.5)).with_style(s().fill().to_style(ui.rem));
+        let over = ui.bx(s().abs(Some(0.0), Some(0.0), Some(0.0), Some(0.0)).p(pad)).bg(tok::BG.alpha(0.25)).child(logo);
+        return ui.bx(s().fill()).child(hero).child(over);
+    }
+    let cover = if g.art.cover.is_empty() { &g.art.header } else { &g.art.cover };
+    parts::art(ui, cover, &g.title, Variant::Cover, TILE, TILE, 0.0)
+}
 
 /// A PC game's cover (stream/tiles.tsx StreamTile): opens the PC game sheet.
 pub fn pc_tile(ui: &mut Ui, st: &State, acts: &mut Acts, pc: &crate::data::model::PcShelf, a: &crate::data::model::PcApp, w: f32, def: bool) -> El {
