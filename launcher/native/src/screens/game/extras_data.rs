@@ -164,12 +164,52 @@ fn parse_shots(data: &serde_json::Value) -> Vec<StoreShot> {
         .collect()
 }
 
-/// The Steam app whose name is exactly `title` (case, punctuation and marks aside): Some(None) when
-/// the search answered with no such app, None when it did not answer.
+/// The Steam app whose name is exactly `title` (case, punctuation and marks aside), else exactly its
+/// name without an edition ("BioShock Infinite: Complete Edition" is "BioShock Infinite" on Steam):
+/// Some(None) when the search answered with no such app, None when it did not answer.
 fn steam_app_named(title: &str) -> Option<Option<u32>> {
-    let v = get_json(&format!("https://store.steampowered.com/api/storesearch/?term={}&cc=us&l=en", urlencode(title)))?;
-    let items = v.get("items").and_then(|i| i.as_array()).cloned().unwrap_or_default();
-    Some(items.iter().find(|it| it.get("name").and_then(|n| n.as_str()).is_some_and(|n| same_name(n, title))).and_then(|it| it.get("id")?.as_u64()).map(|a| a as u32))
+    let mut answered = false;
+    for name in std::iter::once(title.to_string()).chain(base_name(title)) {
+        let Some(v) = get_json(&format!("https://store.steampowered.com/api/storesearch/?term={}&cc=us&l=en", urlencode(&name))) else { continue };
+        answered = true;
+        let items = v.get("items").and_then(|i| i.as_array()).cloned().unwrap_or_default();
+        if let Some(id) = items.iter().find(|it| it.get("name").and_then(|n| n.as_str()).is_some_and(|n| same_name(n, &name))).and_then(|it| it.get("id")?.as_u64()) {
+            return Some(Some(id as u32));
+        }
+    }
+    answered.then_some(None)
+}
+
+/// A store name without its edition: "Batman™ Arkham City - Game of the Year Edition" is "Batman
+/// Arkham City". None when there is no edition to drop. Only a trailing "... Edition" (or
+/// "Remastered", "Director's Cut") after a dash or colon, or a whole known one, goes: the rest must
+/// still match a Steam name exactly.
+fn base_name(title: &str) -> Option<String> {
+    let t = title.replace(['\u{2122}', '\u{00ae}', '\u{00a9}'], "");
+    let t = t.trim();
+    let lower = t.to_lowercase();
+    // Byte offsets in `lower` slice `t`: only while lowercasing kept every length.
+    if lower.len() != t.len() {
+        return None;
+    }
+    let ends = ["edition", "remastered", "director's cut", "directors cut"];
+    // The last dash or colon whose tail is an edition: "Game of the Year Edition", "Trials of Fear Edition".
+    let cut = [" - ", ": ", " \u{2013} ", " \u{2014} "]
+        .iter()
+        .filter_map(|sep| lower.rfind(sep).map(|i| (i, i + sep.len())))
+        .filter(|(_, tail)| ends.iter().any(|e| lower[*tail..].ends_with(e)))
+        .map(|(i, _)| i)
+        .max();
+    let base = match cut {
+        Some(i) => t[..i].trim().to_string(),
+        // "Darksiders II Deathinitive Edition": a known edition word before " Edition", no dash.
+        None => {
+            let known = ["game of the year edition", "goty edition", "complete edition", "definitive edition", "deluxe edition", "enhanced edition", "ultimate edition", "gold edition", "special edition", "anniversary edition", "deathinitive edition", "warmastered edition"];
+            let k = known.iter().find(|k| lower.ends_with(&format!(" {k}")))?;
+            t[..t.len() - k.len()].trim().to_string()
+        }
+    };
+    (!base.is_empty() && base != t).then_some(base)
 }
 
 /// Two store names for one game: equal once lowercased with everything but letters and digits
@@ -510,6 +550,15 @@ mod tests {
         assert!(same_name(">observer_", "Observer"));
         assert!(!same_name("Batman: Arkham City", "Batman: Arkham Knight"));
         assert!(!same_name("", ""));
+        assert_eq!(base_name("Batman\u{2122} Arkham City - Game of the Year Edition").as_deref(), Some("Batman Arkham City"));
+        assert_eq!(base_name("BioShock Infinite: Complete Edition").as_deref(), Some("BioShock Infinite"));
+        assert_eq!(base_name("Darksiders II Deathinitive Edition").as_deref(), Some("Darksiders II"));
+        assert_eq!(base_name("Dandara: Trials of Fear Edition").as_deref(), Some("Dandara"));
+        assert_eq!(base_name("The Outer Worlds: Spacer's Choice Edition").as_deref(), Some("The Outer Worlds"));
+        // No edition, or a subtitle that is part of the name: nothing to drop.
+        assert_eq!(base_name("DREDGE"), None);
+        assert_eq!(base_name("A Plague Tale: Innocence"), None);
+        assert_eq!(base_name("Death Stranding Director's Cut").as_deref(), None);
     }
 
     #[test]
