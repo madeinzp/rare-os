@@ -92,9 +92,9 @@ translate! { common {
     items_n: "{n}個のアイテム",
     unit_gb: "{n} GB",
     unit_mb: "{n} MB",
-    secs: "{n} s",
+    secs: "{n}秒",
     unit_tb: "{n} TB",
     unit_kb: "{n} KB",
     watts: "{n} W",
-    per_sec: "{size}/s",
+    per_sec: "{size}/秒",
 }}

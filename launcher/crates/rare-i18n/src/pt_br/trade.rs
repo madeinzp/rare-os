@@ -17,7 +17,7 @@ translate! { trade {
     linked_wallets: "Vinculado a {n} carteira|Vinculado a {n} carteiras",
     tag_holder: "Holder",
     tag_swing: "Swing trader",
-    tag_early: "Early buyer",
+    tag_early: "Comprador antecipado",
     tag_scalper: "Scalper",
     tag_sniper: "Sniper",
     holders_n: "{n} detentor|{n} detentores",
