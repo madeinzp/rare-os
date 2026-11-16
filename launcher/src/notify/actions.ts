@@ -1,5 +1,5 @@
 // What A does on a notice: open the item or collection in Marketplace, the position or coin in
-// Trade, or the transaction on SuiVision through the external-open bridge.
+// Trade, or the transaction on tide through the external-open bridge.
 
 import { openSettingsSection } from "../screens/settings/jump";
 import { useApp } from "../lib/store";
@@ -45,7 +45,7 @@ export function actionLabel(a: NoticeAction | null | undefined, n?: Notice | nul
   }
 }
 
-export const txUrl = (digest: string) => `https://suivision.xyz/txblock/${digest}`;
+export const txUrl = (digest: string) => `https://tide.ad/tx/${digest}`;
 
 export function runAction(a: NoticeAction | null | undefined, digest?: string | null, n?: Notice | null) {
   if (isOfferNotice(n)) return void acceptFromNotice(n);

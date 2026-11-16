@@ -19,7 +19,7 @@ export function ActivityDetailPage({ view, active }: { view: Extract<WalletView,
   const q = useLoad<TxDetail | null>(address ? `tx:${view.digest}:${address}` : null, () => activityDetail(view.digest, address!), 0);
   const [open, setOpen] = useState(false);
   const d = q.data;
-  const url = `https://suiscan.xyz/mainnet/tx/${view.digest}`;
+  const url = `https://tide.ad/tx/${view.digest}`;
   useHints(active, [{ b: "a", label: "Select" }, { b: "b", label: "Back" }]);
 
   // what moved: the chain's view when we have it, else the list's summary changes
@@ -134,9 +134,9 @@ export function ActivityDetailPage({ view, active }: { view: Extract<WalletView,
         <Panel className="flex flex-col items-center p-5 text-center">
           <Qr text={url} className="size-[12rem]" />
           <p className="mt-3 text-sm font-semibold">Open on your phone</p>
-          <p className="mt-1 text-xs text-secondary">Scan to see this transaction on Suiscan.</p>
+          <p className="mt-1 text-xs text-secondary">Scan to see this transaction on tide.</p>
           <Btn size="md" className="mt-3 w-full" onClick={() => void native.openWeb(url)}>
-            View on Suiscan
+            View on tide
           </Btn>
         </Panel>
       </div>

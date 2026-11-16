@@ -393,7 +393,7 @@ pub fn open_sign_in(title: &str, url: &str, script: &str, nav: Arc<dyn Fn(&str) 
 /// Id of the window `open_external` uses.
 pub const EXTERNAL_ID: &str = "app:external";
 
-/// Opens a link (View in Marketplace, View on Suiscan) in the web window in app mode: no Rare
+/// Opens a link (View in Marketplace, View on tide) in the web window in app mode: no Rare
 /// Wallet and no Local API in the page.
 pub fn open_external(url: &str) -> Result<(), String> {
     open_with(EXTERNAL_ID, "Browser", url, Some(json!({ "input": "focus", "wallet": false })))

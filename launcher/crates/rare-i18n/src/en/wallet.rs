@@ -271,9 +271,9 @@ strings! {
     obj_received: "Received",
     /// Heading above a QR code
     open_on_phone: "Open on your phone",
-    scan_suiscan: "Scan to see this transaction on Suiscan.",
+    scan_explorer: "Scan to see this transaction on tide.",
     /// Button
-    view_on_suiscan: "View on Suiscan",
+    view_on_explorer: "View on tide",
     /// Label above the amount of one coin the account holds
     your_balance: "Your balance",
     /// Row label: the coin price in USD

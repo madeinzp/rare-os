@@ -90,8 +90,8 @@ fn info(coins: &BTreeMap<String, CoinInfo>, t: &str) -> CoinInfo {
     coins.get(t).cloned().unwrap_or_else(|| CoinInfo { symbol: t.rsplit("::").next().unwrap_or("?").to_string(), decimals: 9, logo: None, price: None, known: false })
 }
 
-pub fn suiscan(digest: &str) -> String {
-    format!("https://suiscan.xyz/mainnet/tx/{digest}")
+pub fn explorer_tx(digest: &str) -> String {
+    rare_notify::actions::tx_url(digest)
 }
 
 pub fn view(pr: &Props, st: &State) -> El<Msg> {
@@ -120,7 +120,7 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
     let fee = d.map(|d| d.fee_mist).unwrap_or(0);
     let sui = info(pr.coins, "0x2::sui::SUI");
     let fee_num = fee.unsigned_abs() as f64 / 1e9;
-    let url = suiscan(pr.digest);
+    let url = explorer_tx(pr.digest);
     let copied = |v: &str| st.copied.as_deref() == Some(v);
 
     let list = |t: &str, rows: &[&Flow], sign: &str| -> Option<El<Msg>> {
@@ -230,8 +230,8 @@ pub fn view(pr: &Props, st: &State) -> El<Msg> {
         vec![
             el(Tag::Qr(url.clone()), "size-[12rem]"),
             p("mt-3 text-sm font-semibold").text(tr().wallet.open_on_phone),
-            p("mt-1 text-xs text-secondary").text(tr().wallet.scan_suiscan),
-            btn_full(tr().wallet.view_on_suiscan, Variant::Secondary, Size::Md, false, "mt-3 w-full", Some(Msg::OpenWeb(url.clone()))),
+            p("mt-1 text-xs text-secondary").text(tr().wallet.scan_explorer),
+            btn_full(tr().wallet.view_on_explorer, Variant::Secondary, Size::Md, false, "mt-3 w-full", Some(Msg::OpenWeb(url.clone()))),
         ],
     );
     page(
@@ -298,7 +298,7 @@ mod tests {
             v.texts(),
             [
                 "Received", "Oct 27, 2026, 2:12 PM", "Status", "Success", "You received", "SUI", "$0.91", "+25 SUI", "$22.65", "From", "0xababab...ababab", "Network fee", "0.001998 SUI", "$0.00", "Digest", "9xQm3Z...5eAa", "Sender",
-                "0xabab...abab", "Details", "Open on your phone", "Scan to see this transaction on Suiscan.", "View on Suiscan",
+                "0xabab...abab", "Details", "Open on your phone", "Scan to see this transaction on tide.", "View on tide",
             ]
         );
         update(&mut st, Msg::Details);

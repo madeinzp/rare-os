@@ -122,7 +122,7 @@ impl rare_core::Host for WebWindows {
     }
 }
 
-/// The one way to open an external link (View in Marketplace, View on Suiscan, Launchpad): the
+/// The one way to open an external link (View in Marketplace, View on tide, Launchpad): the
 /// web window in app mode, no wallet in the page. B or the Rare button closes it.
 pub fn open_external(url: &str) -> Result<(), String> {
     install();
@@ -334,7 +334,7 @@ pub fn pad_input(i: Input) -> Option<Input> {
         return Some(i);
     }
     match i {
-        // An external link (View on Suiscan): B and the Rare button close it and the launcher is back.
+        // An external link (View on tide): B and the Rare button close it and the launcher is back.
         Input::Press(e) if rare_webgame::external_open() && matches!(e.pad, Pad::B | Pad::Guide | Pad::GuideHold) => {
             rare_webgame::close_external();
             None

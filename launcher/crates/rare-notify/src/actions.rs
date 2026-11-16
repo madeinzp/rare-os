@@ -1,5 +1,5 @@
 //! What A does on a notice: open the item or collection in Marketplace, the position or coin in
-//! Trade, the transaction on SuiVision, and so on. The label is here; the screen to open is
+//! Trade, the transaction on tide, and so on. The label is here; the screen to open is
 //! returned as an [`ActionTarget`] for the UI to navigate to, since navigation belongs to it.
 
 use crate::types::{Notice, NoticeAction, NoticeKind};
@@ -31,8 +31,9 @@ pub fn action_label(a: Option<&NoticeAction>, n: Option<&Notice>) -> &'static st
     }
 }
 
+/// Every Sui explorer link in Rare goes to tide (mainnet).
 pub fn tx_url(digest: &str) -> String {
-    format!("https://suivision.xyz/txblock/{digest}")
+    format!("https://tide.ad/tx/{digest}")
 }
 
 /// Where A on a notice goes.
@@ -117,7 +118,7 @@ mod tests {
         assert_eq!(action_label(Some(&offer.action), Some(&offer)), "Accept offer");
         assert_eq!(notice_target(&offer), ActionTarget::AcceptOffer { item_id: "0xi".into() });
         assert_eq!(action_label(Some(&NoticeAction::Battery), None), "Open power");
-        assert_eq!(action_target(Some(&NoticeAction::Tx { digest: "D".into() }), None, None), ActionTarget::Web { url: "https://suivision.xyz/txblock/D".into() });
+        assert_eq!(action_target(Some(&NoticeAction::Tx { digest: "D".into() }), None, None), ActionTarget::Web { url: "https://tide.ad/tx/D".into() });
         assert_eq!(action_target(None, Some("D"), None), ActionTarget::Web { url: tx_url("D") });
         assert_eq!(action_target(None, None, None), ActionTarget::Nothing);
         assert_eq!(action_label(None, None), "Open");
