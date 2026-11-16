@@ -321,8 +321,11 @@ fn current_account(root: &Path) -> Option<String> {
     best.map(|(_, _, id64)| (id64.wrapping_sub(76561197960265728) & 0xffff_ffff).to_string())
 }
 
-/// App ids in the account's library: Steam keeps one file per app it lists in
-/// userdata/<account>/config/librarycache/<appid>.json (owned and free apps, tools included).
+/// App ids in the account's library. Steam keeps one file per app it has shown in
+/// userdata/<account>/config/librarycache/<appid>.json, and the library's art for every app in the
+/// account's library in appcache/librarycache/<appid>/ (owned and free apps, DLC and tools too; the
+/// caller keeps games). The first alone missed most of a large library: on one device it had 20
+/// apps, the art cache 555.
 fn library_appids(root: &Path) -> HashSet<u32> {
     let users = root.join("userdata");
     let dirs: Vec<PathBuf> = match current_account(root).map(|a| users.join(a)).filter(|d| d.is_dir()) {
@@ -330,14 +333,23 @@ fn library_appids(root: &Path) -> HashSet<u32> {
         None => fs::read_dir(&users).map(|rd| rd.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect()).unwrap_or_default(),
     };
     let mut out = HashSet::new();
+    let mut add = |name: &str| {
+        // Non-Steam shortcuts have ids above 2^31.
+        if let Some(id) = name.parse::<u32>().ok().filter(|id| *id > 0 && *id < 0x8000_0000) {
+            out.insert(id);
+        }
+    };
     for d in dirs {
         let Ok(rd) = fs::read_dir(d.join("config/librarycache")) else { continue };
         for e in rd.flatten() {
-            let name = e.file_name().to_string_lossy().into_owned();
-            // Non-Steam shortcuts have ids above 2^31.
-            if let Some(id) = name.strip_suffix(".json").and_then(|s| s.parse::<u32>().ok()).filter(|id| *id > 0 && *id < 0x8000_0000) {
-                out.insert(id);
+            if let Some(stem) = e.file_name().to_string_lossy().strip_suffix(".json") {
+                add(stem);
             }
+        }
+    }
+    if let Ok(rd) = fs::read_dir(root.join("appcache/librarycache")) {
+        for e in rd.flatten().filter(|e| e.path().is_dir()) {
+            add(&e.file_name().to_string_lossy());
         }
     }
     out
@@ -578,5 +590,27 @@ mod download_tests {
     fn installed_games_and_empty_queues_are_not_downloads() {
         assert!(dl(4, 0, 0).is_none());
         assert!(dl(1028, 0, 0).is_none());
+    }
+}
+
+#[cfg(test)]
+mod owned_tests {
+    use super::*;
+
+    #[test]
+    fn the_library_is_read_from_both_caches() {
+        let t = tempfile::tempdir().unwrap();
+        let root = t.path();
+        let user = root.join("userdata/42/config/librarycache");
+        fs::create_dir_all(&user).unwrap();
+        fs::write(user.join("620.json"), "{}").unwrap();
+        fs::write(user.join("notes.txt"), "").unwrap();
+        for d in ["620", "1145350", "2764460", "3000000000", "readme"] {
+            fs::create_dir_all(root.join("appcache/librarycache").join(d)).unwrap();
+        }
+        // A loose file in the art cache is not an app.
+        fs::write(root.join("appcache/librarycache/999.json"), "").unwrap();
+        let ids = library_appids(root);
+        assert_eq!(ids, HashSet::from([620, 1145350, 2764460]));
     }
 }
