@@ -131,12 +131,21 @@ pub struct GameInfo {
     pub runs: Option<Runs>,
 }
 
+/// A discount in percent, 0..=100. The prices API sends a negative one when the price went up
+/// (`-26`); as a u32 that failed the whole batch, so the wishlist had no prices and no drop notices.
+/// A rise is no discount: 0. A missing or odd value is 0 too.
+fn discount<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u32, D::Error> {
+    let v = serde_json::Value::deserialize(d)?;
+    Ok(v.as_f64().map(|c| c.round().clamp(0.0, 100.0) as u32).unwrap_or(0))
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
 #[serde(default)]
 pub struct Deal {
     pub store: String,
     pub price: f64,
     pub retail: f64,
+    #[serde(deserialize_with = "discount")]
     pub cut: u32,
     pub url: String,
 }
@@ -156,6 +165,7 @@ pub struct Price {
     pub steam_app_id: Option<u32>,
     pub price: Option<f64>,
     pub retail: Option<f64>,
+    #[serde(deserialize_with = "discount")]
     pub cut: u32,
     pub store: Option<String>,
     pub url: Option<String>,
@@ -704,6 +714,22 @@ fn fixture_hits(q: &str) -> Vec<Hit> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_price_rise_is_no_discount_and_keeps_the_batch() {
+        let v = serde_json::json!({"data": [
+            {"id": "steam:1", "title": "Up", "price": 12.99, "retail": 9.99, "cut": -26, "deals": [{"store": "Steam", "price": 12.99, "retail": 9.99, "cut": -26, "url": "u"}]},
+            {"id": "steam:2", "title": "Down", "price": 5.0, "retail": 10.0, "cut": 50},
+            {"id": "steam:3", "title": "Odd", "cut": "x"}
+        ]});
+        #[derive(serde::Deserialize)]
+        struct R {
+            data: Vec<super::Price>,
+        }
+        let r: R = serde_json::from_value(v).unwrap();
+        assert_eq!(r.data.iter().map(|p| p.cut).collect::<Vec<_>>(), vec![0, 50, 0]);
+        assert_eq!(r.data[0].deals[0].cut, 0);
+    }
+
     use super::*;
 
     #[test]
