@@ -22,7 +22,9 @@
 //!   SetLights(s spec)              `mode=on effect=breathe left=4da2ff right=4da2ff brightness=80`
 //!                                  (lights.rs Spec); mode=default gives the rings back to the EC
 //! Properties (read-only, anyone): Available b (the LED is there), Lights s (the spec),
-//!   Rings u (rings that take their own color: 2, or 1 when both show the left one; 0 no LED)
+//!   Rings u (rings that take their own color: 2, or 1 when both show the left one; 0 no LED),
+//!   Effects b (Breathe and Rainbow animate; false on a driver without rgb_zones, where they
+//!   show a still color)
 
 use crate::curve::Preset;
 use crate::daemon::Daemon;
@@ -222,6 +224,11 @@ impl LightsIface {
     #[zbus(property)]
     fn rings(&self) -> u32 {
         self.lock().rings() as u32
+    }
+
+    #[zbus(property)]
+    fn effects(&self) -> bool {
+        self.lock().effects()
     }
 }
 

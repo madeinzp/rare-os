@@ -14,8 +14,22 @@
 //! /var/lib/rare/lights: `mode=on effect=breathe left=4da2ff right=4da2ff brightness=80`.
 //! "default" leaves the rings to the EC, which is what a device nobody configured shows.
 //!
-//! Cost: a static color is written once; breathe redraws every 100 ms and cycle every 200 ms,
-//! and the driver writes only the subpixels that changed, sleeping between EC writes.
+//! Cost. Every color the rings show goes through the EC, one register at a time: on
+//! ayaneo_ec_suiplay a ring whose colors changed is 12 subpixel writes plus a 3/0/0 close, each
+//! five EC register writes and a 2-3 ms wait, so a frame where both rings change (every frame of
+//! Breathe and Rainbow) is 26 subpixel writes, 130 EC transactions, ~70 ms of the driver's worker
+//! and a few hundred ACPI interrupts (irq 9). ayaneo-platform writes the same registers for one
+//! color, from a kernel thread that busy-waits between them. Rare OS 0.1.3 redrew Breathe every
+//! 100 ms: on ayaneo-platform that was ~4,100 interrupts a second and its writer at ~55 % CPU with
+//! nothing else running (rare-market/rare-os#8). So:
+//! - a still color is written once, and nothing is written while it stays the same;
+//! - an animated effect draws one frame a second (FRAME), on ayaneo_ec_suiplay only. Breathe and
+//!   Rainbow are slow enough that a step a second reads as motion (BREATH, TURN);
+//! - on any other driver (no rgb_zones) effects are not animated: Breathe shows its color still,
+//!   Rainbow the left color, written once;
+//! - while the screen is off (every connected DRM connector reports dpms Off) an effect holds a
+//!   still frame and only looks at the screen once a second. In suspend rare-fand is frozen and the
+//!   driver keeps the rings dark (suiplay-rgb.c), then the effect goes on.
 
 use std::fmt::Write as _;
 use std::fs;
@@ -156,8 +170,13 @@ pub fn hue(h: f32) -> Rgb {
     [(r * 255.0f32).round() as u8, (g * 255.0f32).round() as u8, (b * 255.0f32).round() as u8]
 }
 
-pub const BREATH: f32 = 4.0;
-pub const TURN: f32 = 8.0;
+/// One breath, in seconds: eight frames at FRAME.
+pub const BREATH: f32 = 8.0;
+/// One turn of the rainbow, in seconds: 15 degrees of hue a frame at FRAME.
+pub const TURN: f32 = 24.0;
+/// The time between two frames of an animated effect. A frame where both rings change costs
+/// ~130 EC transactions (see the top of this file), so this is what an effect costs a second.
+pub const FRAME: Duration = Duration::from_secs(1);
 /// The dimmest point of a breath, as a share of the brightness: the ring never goes fully dark.
 const BREATH_FLOOR: f32 = 0.08;
 
@@ -203,10 +222,34 @@ pub fn render(spec: &Spec, t: f32) -> Out {
 /// How long until the frame changes again; None for a still one.
 pub fn interval(spec: &Spec) -> Option<Duration> {
     match (spec.mode, spec.effect) {
-        (Mode::On, Effect::Breathe) => Some(Duration::from_millis(100)),
-        (Mode::On, Effect::Cycle) => Some(Duration::from_millis(200)),
+        (Mode::On, Effect::Breathe | Effect::Cycle) => Some(FRAME),
         _ => None,
     }
+}
+
+/// The spec held still: Breathe at its full color, Rainbow as the left color.
+pub fn still(spec: &Spec) -> Spec {
+    Spec { effect: Effect::Solid, ..spec.clone() }
+}
+
+/// False only when the device has a connected display and every connected one is off (DPMS). No
+/// DRM in sysfs (a test, a container): on.
+pub fn screen_on(root: &Path) -> bool {
+    let Ok(dir) = fs::read_dir(root.join("sys/class/drm")) else { return true };
+    let mut connected = false;
+    for e in dir.flatten() {
+        let p = e.path();
+        // Connectors are card<N>-<name> (card1-eDP-1); card<N> and renderD<N> have no status.
+        let Ok(status) = fs::read_to_string(p.join("status")) else { continue };
+        if status.trim() != "connected" {
+            continue;
+        }
+        connected = true;
+        if fs::read_to_string(p.join("dpms")).map_or(true, |d| d.trim() != "Off") {
+            return true;
+        }
+    }
+    !connected
 }
 
 pub fn encode_frame(f: &Frame) -> String {
@@ -227,6 +270,14 @@ pub struct Led {
     zones: bool,
     /// Rings that take their own color: 1 or 2.
     pub rings: u8,
+}
+
+impl Led {
+    /// Whether animated effects run here (one frame a second). Only ayaneo_ec_suiplay: any other
+    /// driver gets a still color (see the top of this file).
+    pub fn animates(&self) -> bool {
+        self.zones
+    }
 }
 
 impl Led {
@@ -294,8 +345,18 @@ pub fn release(root: &Path) -> io::Result<bool> {
     }
 }
 
+/// How long after start rare-fand looks again for the LED (or its rgb_zones) when it found none:
+/// 70-rare-fand.rules starts it when the driver's hwmon appears, and the driver registers the LED
+/// and its files just after.
+const REFIND_FOR: Duration = Duration::from_secs(30);
+const REFIND_EVERY: Duration = Duration::from_secs(2);
+
 pub struct Lights {
     led: Option<Led>,
+    started: Instant,
+    refind: Option<Instant>,
+    /// The sysfs root (the screen's state is read under it).
+    root: PathBuf,
     path: PathBuf,
     spec: Spec,
     /// The effect's time zero (a new spec restarts it).
@@ -310,9 +371,10 @@ impl Lights {
         let led = Led::find(root);
         let spec = load(path);
         if let Some(l) = &led {
-            eprintln!("rare-fand: stick lights at {}, {} ring{}, {}", l.dir.display(), l.rings, if l.rings == 1 { "" } else { "s" }, spec.encode());
+            let kind = if l.zones { "rgb_zones" } else { "plain multicolor LED, effects held still" };
+            eprintln!("rare-fand: stick lights at {} ({kind}), {} ring{}, {}", l.dir.display(), l.rings, if l.rings == 1 { "" } else { "s" }, spec.encode());
         }
-        Lights { led, path: path.to_path_buf(), spec, t0: Instant::now(), last: None, next: None, error: None }
+        Lights { led, started: Instant::now(), refind: None, root: root.to_path_buf(), path: path.to_path_buf(), spec, t0: Instant::now(), last: None, next: None, error: None }
     }
 
     pub fn available(&self) -> bool {
@@ -322,6 +384,11 @@ impl Lights {
     /// Rings that take their own color (0 without the LED).
     pub fn rings(&self) -> u8 {
         self.led.as_ref().map_or(0, |l| l.rings)
+    }
+
+    /// Whether Breathe and Rainbow animate on this driver (false without the LED).
+    pub fn effects(&self) -> bool {
+        self.led.as_ref().is_some_and(Led::animates)
     }
 
     pub fn spec(&self) -> &Spec {
@@ -341,18 +408,35 @@ impl Lights {
             self.t0 = now;
         }
         eprintln!("rare-fand: lights {}", spec.encode());
+        if interval(&spec).is_some() && self.led.as_ref().is_some_and(|l| !l.animates()) {
+            eprintln!("rare-fand: this stick lights driver has no rgb_zones: the effect shows as a still color");
+        }
         self.spec = spec;
         self.next = None;
     }
 
     /// Draws the frame due at `now`; cheap when nothing is due.
     pub fn tick(&mut self, now: Instant) {
+        self.refind(now);
         let Some(led) = &self.led else { return };
         if self.next.is_some_and(|n| now < n) {
             return;
         }
-        let out = render(&for_rings(&self.spec, led.rings), (now - self.t0).as_secs_f32());
-        self.next = interval(&self.spec).map(|d| now + d);
+        let spec = for_rings(&self.spec, led.rings);
+        let animated = interval(&spec).is_some();
+        let (spec, next) = if !animated {
+            (spec, None)
+        } else if !led.animates() {
+            // Another driver: the color, still, once.
+            (still(&spec), None)
+        } else if !screen_on(&self.root) {
+            // Nobody sees it: hold still, look at the screen again in a frame.
+            (still(&spec), Some(now + FRAME))
+        } else {
+            (spec, Some(now + FRAME))
+        };
+        let out = render(&spec, (now - self.t0).as_secs_f32());
+        self.next = next;
         if self.last.as_ref() == Some(&out) {
             return;
         }
@@ -370,6 +454,24 @@ impl Lights {
                 self.last = None;
                 self.next = Some(now + Duration::from_secs(5));
             }
+        }
+    }
+
+    /// Soon after start, an LED that showed up late (or gained rgb_zones) replaces what was found.
+    fn refind(&mut self, now: Instant) {
+        if self.led.as_ref().is_some_and(|l| l.zones) || now.saturating_duration_since(self.started) > REFIND_FOR {
+            return;
+        }
+        if self.refind.is_some_and(|r| now < r) {
+            return;
+        }
+        self.refind = Some(now + REFIND_EVERY);
+        let Some(l) = Led::find(&self.root) else { return };
+        if self.led.is_none() || l.zones {
+            eprintln!("rare-fand: stick lights at {} ({})", l.dir.display(), if l.zones { "rgb_zones" } else { "plain multicolor LED" });
+            self.led = Some(l);
+            self.last = None;
+            self.next = None;
         }
     }
 
@@ -518,7 +620,7 @@ mod tests {
         let mut l = Lights::new(&root, &root.join("lights"));
         assert_eq!(l.rings(), 1);
         l.set(Spec { mode: Mode::On, effect: Effect::Breathe, left: [255, 0, 0], right: [0, 255, 0], brightness: 100 }, t);
-        l.tick(t + Duration::from_secs(2));
+        l.tick(t + Duration::from_secs_f32(BREATH / 2.0));
         assert_eq!(fs::read_to_string(led.join("rgb_zones")).unwrap(), ["ff0000"; 8].join(" "));
         // The saved spec keeps both colors (a driver with two rings shows them again).
         assert_eq!(l.spec().right, [0, 255, 0]);
@@ -542,6 +644,154 @@ mod tests {
         l.tick(t);
         assert_eq!(fs::read_to_string(led.join("brightness")).unwrap(), "0");
         assert_eq!(release(&root).unwrap(), false);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// Every write to rgb_zones / multi_intensity as it happens: ticks every 100 ms (rare-fand's
+    /// loop) for `secs`, and the frames that landed.
+    fn run(l: &mut Lights, led: &Path, file: &str, t: Instant, secs: u32) -> Vec<String> {
+        let mut frames = Vec::new();
+        for i in 0..=secs * 10 {
+            fs::write(led.join(file), "x").unwrap();
+            l.tick(t + Duration::from_millis(100 * i as u64));
+            let now = fs::read_to_string(led.join(file)).unwrap();
+            if now != "x" {
+                frames.push(now);
+            }
+        }
+        frames
+    }
+
+    /// Issue #8: Breathe on a driver without rgb_zones (ayaneo-platform) redrew every 100 ms and
+    /// kept the EC busy. Now the color is written once and held.
+    #[test]
+    fn plain_driver_holds_effects_still() {
+        let root = fake("plain-fx", false);
+        let led = root.join(LED);
+        let t = Instant::now();
+        let mut l = Lights::new(&root, &root.join("lights"));
+        assert!(!l.effects());
+        l.set(Spec { mode: Mode::On, effect: Effect::Breathe, left: [200, 100, 0], right: [0, 0, 255], brightness: 50 }, t);
+        let frames = run(&mut l, &led, "multi_intensity", t, 30);
+        assert_eq!(frames, vec!["100 50 0".to_string()], "one still frame at the set brightness, then nothing");
+        // Rainbow: the left color, still; already showing, so nothing is written.
+        l.set(Spec { effect: Effect::Cycle, ..l.spec().clone() }, t);
+        assert_eq!(run(&mut l, &led, "multi_intensity", t, 30), Vec::<String>::new());
+        l.set(Spec { left: [0, 0, 200], ..l.spec().clone() }, t);
+        assert_eq!(run(&mut l, &led, "multi_intensity", t, 30), vec!["0 0 100".to_string()]);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// On ayaneo_ec_suiplay an effect draws at most one frame a second (each frame is ~130 EC
+    /// transactions), and every frame it draws is a new one.
+    #[test]
+    fn effects_draw_one_frame_a_second() {
+        let root = fake("rate", true);
+        let led = root.join(LED);
+        let t = Instant::now();
+        let mut l = Lights::new(&root, &root.join("lights"));
+        assert!(l.effects());
+        for effect in [Effect::Breathe, Effect::Cycle] {
+            l.set(Spec { mode: Mode::On, effect, left: [255, 0, 0], right: [255, 0, 0], brightness: 100 }, t);
+            let frames = run(&mut l, &led, "rgb_zones", t, 30);
+            assert!(frames.len() <= 31 && frames.len() >= 25, "{effect:?}: {} frames in 30 s", frames.len());
+            assert!(frames.windows(2).all(|w| w[0] != w[1]), "{effect:?}: a frame was written twice");
+        }
+        assert_eq!(interval(&l.spec().clone()), Some(FRAME));
+        assert!(FRAME >= Duration::from_secs(1));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn connector(root: &Path, name: &str, status: &str, dpms: &str) {
+        let d = root.join("sys/class/drm").join(name);
+        fs::create_dir_all(&d).unwrap();
+        fs::write(d.join("status"), format!("{status}\n")).unwrap();
+        fs::write(d.join("dpms"), format!("{dpms}\n")).unwrap();
+    }
+
+    #[test]
+    fn screen_state_from_drm() {
+        let root = std::env::temp_dir().join(format!("rare-fand-lights-{}-drm", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        assert!(screen_on(&root), "no DRM: on");
+        fs::create_dir_all(root.join("sys/class/drm/card1")).unwrap();
+        connector(&root, "card1-DP-1", "disconnected", "Off");
+        assert!(screen_on(&root), "nothing connected: on");
+        connector(&root, "card1-eDP-1", "connected", "Off");
+        assert!(!screen_on(&root));
+        connector(&root, "card1-DP-1", "connected", "On");
+        assert!(screen_on(&root), "a TV on the dock is on");
+        connector(&root, "card1-DP-1", "connected", "Off");
+        assert!(!screen_on(&root));
+        connector(&root, "card1-eDP-1", "connected", "On");
+        assert!(screen_on(&root));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// Screen off: the effect stops (one still frame, then nothing); back on, it goes on.
+    #[test]
+    fn effects_stop_while_the_screen_is_off() {
+        let root = fake("screen", true);
+        let led = root.join(LED);
+        connector(&root, "card1-eDP-1", "connected", "Off");
+        let t = Instant::now();
+        let mut l = Lights::new(&root, &root.join("lights"));
+        l.set(Spec { mode: Mode::On, effect: Effect::Breathe, left: [0, 0, 255], right: [0, 0, 255], brightness: 100 }, t);
+        let frames = run(&mut l, &led, "rgb_zones", t, 20);
+        assert_eq!(frames, vec![["0000ff"; 8].join(" ")], "held at its color while the screen is off");
+        connector(&root, "card1-eDP-1", "connected", "On");
+        let frames = run(&mut l, &led, "rgb_zones", t + Duration::from_secs(21), 10);
+        assert!(frames.len() >= 8, "breathing again: {} frames in 10 s", frames.len());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// A device nobody configured (no /var/lib/rare/lights): Default, nothing written, on
+    /// either driver. Rare OS 0.1.3 had the same default; Breathe is only ever a choice.
+    #[test]
+    fn untouched_by_default() {
+        assert_eq!(Spec::default().mode, Mode::Default);
+        assert_eq!(Spec::default().effect, Effect::Solid);
+        for zones in [true, false] {
+            let root = fake(if zones { "fresh-z" } else { "fresh-p" }, zones);
+            let led = root.join(LED);
+            let t = Instant::now();
+            let mut l = Lights::new(&root, &root.join("var/lib/rare/lights"));
+            assert_eq!(l.spec(), &Spec::default());
+            for i in 0..50 {
+                l.tick(t + Duration::from_millis(100 * i));
+            }
+            assert_eq!(fs::read_to_string(led.join("multi_intensity")).unwrap(), "0");
+            if zones {
+                assert_eq!(fs::read_to_string(led.join("rgb_mode")).unwrap(), "oem");
+                assert_eq!(fs::read_to_string(led.join("rgb_zones")).unwrap(), "");
+            }
+            let _ = fs::remove_dir_all(root);
+        }
+    }
+
+    /// rare-fand starts on the driver's hwmon; the LED and its rgb_zones come just after.
+    #[test]
+    fn a_late_led_is_picked_up() {
+        let root = std::env::temp_dir().join(format!("rare-fand-lights-{}-late", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        let t = Instant::now();
+        let mut l = Lights::new(&root, &root.join("lights"));
+        assert!(!l.available());
+        l.set(Spec { mode: Mode::On, left: [1, 2, 3], right: [1, 2, 3], ..Spec::default() }, t);
+        l.tick(t);
+        // The multicolor files first, then rgb_zones.
+        let led = root.join(LED);
+        fs::create_dir_all(&led).unwrap();
+        for f in ["brightness", "multi_intensity"] {
+            fs::write(led.join(f), "0").unwrap();
+        }
+        l.tick(t + Duration::from_secs(3));
+        assert!(l.available() && !l.effects());
+        fs::write(led.join("rgb_mode"), "oem").unwrap();
+        fs::write(led.join("rgb_zones"), "").unwrap();
+        l.tick(t + Duration::from_secs(6));
+        assert!(l.effects());
+        assert_eq!(fs::read_to_string(led.join("rgb_zones")).unwrap(), ["010203"; 8].join(" "));
         let _ = fs::remove_dir_all(root);
     }
 
