@@ -523,7 +523,6 @@ pub fn holder_row(ui: &mut Ui, r: &Holder, tag: u32) -> El {
     fill_nav(el, tag, None, None, false)
 }
 
-/// The search field look (HomePage and SearchPage): a bordered box, transparent, the search icon.
 /// The search box at the right of the Market's section bar: one look on every section
 /// (Collections, Coins, Perps, Traders), so LT/RT changes only its words.
 pub fn section_search(ui: &mut Ui, label: &str, tag: u32, hint: Option<&str>) -> El {
@@ -537,6 +536,7 @@ pub fn section_search(ui: &mut Ui, label: &str, tag: u32, hint: Option<&str>) ->
     super::host::fill_nav(el, tag, hint, None, false)
 }
 
+/// The search field look (HomePage and SearchPage): a bordered box, transparent, the search icon.
 pub fn search_field(ui: &mut Ui, st: S, h: f32, text: &str, placeholder: bool, ty: Ty, icon_size: f32, tag: u32) -> El {
     let ic = icon(ui, "search", icon_size, tok::ICON2);
     let look = Look::default().radius(ui.r(0.25)).border(1.0, tok::BORDER_LIGHT);

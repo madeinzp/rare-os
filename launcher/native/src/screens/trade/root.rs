@@ -9,7 +9,7 @@ use super::model::*;
 use super::review::{review_sheet, Review};
 use super::ui::{action, coin_logo, Action, Tone, Val};
 use crate::kit::format::{num_text, NumKind, NumOptions};
-use crate::kit::{cell, glyph, head_row, icon, nav, num, panel, rail, row, section_head, tabs, tile, GSize, Pb, TabItem};
+use crate::kit::{cell, glyph, head_row, nav, num, panel, rail, row, section_head, tabs, tile, GSize, Pb, TabItem};
 use crate::screens::market::host::*;
 use rare_render::input::Pad;
 use rare_render::view::El;
