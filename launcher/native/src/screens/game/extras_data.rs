@@ -70,6 +70,10 @@ pub struct Remote {
     pub manual: Option<String>,
     #[serde(default)]
     pub store_shots: Vec<StoreShot>,
+    /// An Epic or GOG game's Steam app, once the store search found it: a refresh reads its
+    /// screenshots without searching again.
+    #[serde(default)]
+    pub store_app: Option<u32>,
 }
 
 fn now_s() -> u64 {
@@ -120,21 +124,31 @@ pub enum Source {
 pub fn fetch(id: &str, src: &Source) -> Remote {
     let last = cached(id).unwrap_or_default();
     let r = match src {
-        Source::Steam(appid) => Remote {
-            at: now_s(),
-            news: steam_news(*appid).unwrap_or(last.news),
-            dlc: steam_dlc(*appid).unwrap_or(last.dlc),
-            manual: steam_manual(*appid).unwrap_or(last.manual),
-            store_shots: steam_shots(*appid).unwrap_or(last.store_shots),
-        },
-        Source::Sui(slug) => Remote { at: now_s(), news: sui_news(slug).unwrap_or(last.news), dlc: Vec::new(), manual: None, store_shots: Vec::new() },
+        Source::Steam(appid) => {
+            // One appdetails call for the DLC list and the screenshots, as many store calls as the
+            // page made before it showed screenshots.
+            let details = app_details(*appid, "basic,screenshots");
+            Remote {
+                at: now_s(),
+                news: steam_news(*appid).unwrap_or(last.news),
+                dlc: details.as_ref().map(steam_dlc).unwrap_or(last.dlc),
+                manual: steam_manual(*appid).unwrap_or(last.manual),
+                store_shots: details.as_ref().map(parse_shots).unwrap_or(last.store_shots),
+                store_app: None,
+            }
+        }
+        Source::Sui(slug) => Remote { at: now_s(), news: sui_news(slug).unwrap_or(last.news), ..Remote::default() },
         Source::Title(title) => {
-            let shots = match steam_app_named(title) {
-                Some(Some(appid)) => steam_shots(appid),
+            let app = match last.store_app {
+                Some(a) => Some(Some(a)),
+                None => steam_app_named(title),
+            };
+            let shots = match app {
+                Some(Some(appid)) => app_details(appid, "screenshots").as_ref().map(parse_shots),
                 Some(None) => Some(Vec::new()),
                 None => None,
             };
-            Remote { at: now_s(), news: Vec::new(), dlc: Vec::new(), manual: None, store_shots: shots.unwrap_or(last.store_shots) }
+            Remote { at: now_s(), store_shots: shots.unwrap_or(last.store_shots), store_app: app.flatten().or(last.store_app), ..Remote::default() }
         }
     };
     store(id, &r);
@@ -143,10 +157,10 @@ pub fn fetch(id: &str, src: &Source) -> Remote {
 
 // ---------------------------------------------------------------- store screenshots
 
-/// The store page's screenshots for `appid` (None when the store did not answer).
-fn steam_shots(appid: u32) -> Option<Vec<StoreShot>> {
-    let v = get_json(&format!("https://store.steampowered.com/api/appdetails?appids={appid}&filters=screenshots"))?;
-    Some(parse_shots(v.get(appid.to_string())?))
+/// The store's appdetails entry for `appid` with `filters` (None when the store did not answer).
+fn app_details(appid: u32, filters: &str) -> Option<serde_json::Value> {
+    let mut v = get_json(&format!("https://store.steampowered.com/api/appdetails?appids={appid}&filters={filters}"))?;
+    Some(v.get_mut(appid.to_string())?.take())
 }
 
 fn parse_shots(data: &serde_json::Value) -> Vec<StoreShot> {
@@ -167,17 +181,17 @@ fn parse_shots(data: &serde_json::Value) -> Vec<StoreShot> {
 /// The Steam app whose name is exactly `title` (case, punctuation and marks aside), else exactly its
 /// name without an edition ("BioShock Infinite: Complete Edition" is "BioShock Infinite" on Steam):
 /// Some(None) when the search answered with no such app, None when it did not answer.
+///
+/// The search is the one the art picker uses (`gamemgmt::art::steam_search`). Offline, the first
+/// search fails and the name without its edition is not tried.
 fn steam_app_named(title: &str) -> Option<Option<u32>> {
-    let mut answered = false;
     for name in std::iter::once(title.to_string()).chain(base_name(title)) {
-        let Some(v) = get_json(&format!("https://store.steampowered.com/api/storesearch/?term={}&cc=us&l=en", urlencode(&name))) else { continue };
-        answered = true;
-        let items = v.get("items").and_then(|i| i.as_array()).cloned().unwrap_or_default();
-        if let Some(id) = items.iter().find(|it| it.get("name").and_then(|n| n.as_str()).is_some_and(|n| same_name(n, &name))).and_then(|it| it.get("id")?.as_u64()) {
-            return Some(Some(id as u32));
+        let hits = crate::features::gamemgmt::art::steam_search(&name).ok()?;
+        if let Some((id, _)) = hits.iter().find(|(_, n)| same_name(n, &name)) {
+            return u32::try_from(*id).ok().map(Some);
         }
     }
-    answered.then_some(None)
+    Some(None)
 }
 
 /// A store name without its edition: "Batman™ Arkham City - Game of the Year Edition" is "Batman
@@ -322,16 +336,15 @@ fn parse_iso(s: &str) -> Option<i64> {
 
 // ---------------------------------------------------------------- Steam DLC
 
-/// The store's DLC list for the game, with names, art and prices (one batched call).
-fn steam_dlc(appid: u32) -> Option<Vec<Dlc>> {
-    let v = get_json(&format!("https://store.steampowered.com/api/appdetails?appids={appid}&filters=basic"))?;
-    let data = v.get(appid.to_string())?;
+/// The store's DLC list for the game (from its appdetails entry), with names, art and prices (one
+/// batched call).
+fn steam_dlc(data: &serde_json::Value) -> Vec<Dlc> {
     if data.get("success").and_then(|s| s.as_bool()) != Some(true) {
-        return Some(Vec::new());
+        return Vec::new();
     }
     let ids: Vec<u32> = data.get("data").and_then(|d| d.get("dlc")).and_then(|d| d.as_array()).map(|a| a.iter().filter_map(|x| x.as_u64().map(|x| x as u32)).collect()).unwrap_or_default();
     if ids.is_empty() {
-        return Some(Vec::new());
+        return Vec::new();
     }
     let mut out = Vec::new();
     for chunk in ids.chunks(50) {
@@ -347,7 +360,7 @@ fn steam_dlc(appid: u32) -> Option<Vec<Dlc>> {
             out.push(dlc_from(*id, it));
         }
     }
-    Some(out)
+    out
 }
 
 fn dlc_from(id: u32, it: Option<&serde_json::Value>) -> Dlc {

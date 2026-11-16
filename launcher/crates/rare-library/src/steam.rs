@@ -348,7 +348,8 @@ fn library_appids(root: &Path) -> HashSet<u32> {
         }
     }
     if let Ok(rd) = fs::read_dir(root.join("appcache/librarycache")) {
-        for e in rd.flatten().filter(|e| e.path().is_dir()) {
+        // file_type comes with the directory entry: no stat for each of hundreds of apps.
+        for e in rd.flatten().filter(|e| e.file_type().is_ok_and(|t| t.is_dir())) {
             add(&e.file_name().to_string_lossy());
         }
     }

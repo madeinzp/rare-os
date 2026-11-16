@@ -521,7 +521,8 @@ fn strip_art(ui: &mut Ui, g: &Game) -> El {
     let (lw, lh) = (TILE - 2.0 * pad, TILE - 2.0 * pad);
     let logo = if g.art.hero.is_empty() { None } else { ui.arts.key(ui.img, &g.art.logo, ui.r(lw), ui.r(lh), ArtFit::Contain(0.5, 0.5)) };
     if let Some(k) = logo {
-        let hero = parts::art(ui, &g.art.hero, &g.title, Variant::Hero, TILE, TILE, 0.5);
+        // A hero link that 404s falls back to the header, as the stage behind Home does.
+        let hero = parts::art(ui, &backdrop_srcs(g), &g.title, Variant::Hero, TILE, TILE, 0.5);
         let logo = kit::art::image(k, ArtFit::Contain(0.5, 0.5)).with_style(s().fill().to_style(ui.rem));
         let over = ui.bx(s().abs(Some(0.0), Some(0.0), Some(0.0), Some(0.0)).p(pad)).bg(tok::BG.alpha(0.25)).child(logo);
         return ui.bx(s().fill()).child(hero).child(over);

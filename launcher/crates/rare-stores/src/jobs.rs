@@ -432,11 +432,23 @@ fn saved_path() -> std::path::PathBuf {
 
 /// Writes the queue to disk. Only installs, updates and repairs are kept: saves and setup run
 /// beside a start and are not queued, and a failed job shows its error once.
+/// What was last written (or read at start): the same queue is not written again, so a stalled
+/// download, or progress that did not move, costs no write.
+static SAVED: Mutex<Option<Value>> = Mutex::new(None);
+
 fn save(jobs: &[Job]) {
     if FIXTURE.load(Ordering::Relaxed) || cfg!(test) {
         return;
     }
-    crate::write_json(&saved_path(), &to_value(jobs));
+    let v = to_value(jobs);
+    let mut last = SAVED.lock().unwrap_or_else(|e| e.into_inner());
+    if last.as_ref() == Some(&v) {
+        return;
+    }
+    // write_json writes a temporary file and renames it over the old one, so a power cut leaves the
+    // old queue or the new one, never half of one.
+    crate::write_json(&saved_path(), &v);
+    *last = Some(v);
 }
 
 fn to_value(jobs: &[Job]) -> Value {
@@ -491,6 +503,7 @@ pub fn restore() {
     }
     let Some(v) = crate::read_json(&saved_path()) else { return };
     let saved = from_value(&v);
+    *SAVED.lock().unwrap_or_else(|e| e.into_inner()) = Some(to_value(&saved));
     if saved.is_empty() {
         return;
     }
@@ -523,13 +536,35 @@ fn stop_leftovers(jobs: &[Job]) {
         }
     }
     for pid in &left {
-        log::info!("store job: stopping a download the last launcher left running ({pid})");
-        tools::stop(*pid);
+        // legendary's download workers are forks with the same arguments: the group they share
+        // goes with its leader. A tool that is not its group's leader was started by something
+        // else (Heroic runs legendary in its own group): only that process is stopped, never the
+        // program that started it.
+        match pgid(*pid) {
+            Some(g) if g == *pid => {
+                log::info!("store job: stopping a download the last launcher left running ({pid})");
+                tools::stop(*pid);
+            }
+            Some(g) if left.contains(&g) => {}
+            _ => {
+                log::info!("store job: stopping a download left running ({pid})");
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(*pid as i32, libc::SIGTERM);
+                }
+            }
+        }
     }
     let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
     while std::time::Instant::now() < until && left.iter().any(|p| std::path::Path::new(&format!("/proc/{p}")).exists()) {
         std::thread::sleep(std::time::Duration::from_millis(200));
     }
+}
+
+/// A process's group id (/proc/<pid>/stat, the fifth field; the name in field two may hold spaces).
+fn pgid(pid: u32) -> Option<u32> {
+    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+    stat.rsplit_once(')')?.1.split_whitespace().nth(2)?.parse().ok()
 }
 
 /// A process's arguments are the tool itself (`legendary` or `gogdl`, run directly or by its
@@ -545,18 +580,25 @@ fn leftover_for(args: &[String], jobs: &[Job]) -> bool {
 fn friendly(e: &str) -> String {
     let l = e.to_lowercase();
     if l.contains("space") {
-        "Not enough space on that drive.".into()
+        ERR_SPACE.into()
     } else if l.contains("login") || l.contains("credentials") || l.contains("auth") || l.contains("sign in") {
-        "Sign in again in Settings > Accounts.".into()
+        ERR_SIGN_IN.into()
     } else if l.contains("connection") || l.contains("timed out") || l.contains("resolve") || l.contains("network") {
-        "No connection. Check Wi-Fi and try again.".into()
+        ERR_OFFLINE.into()
     } else if e.is_empty() {
-        "It stopped with an error. Try again.".into()
+        ERR_GENERIC.into()
     } else {
         log::warn!("store job: {e}");
-        "It stopped with an error. Try again.".into()
+        ERR_GENERIC.into()
     }
 }
+
+/// The failures `friendly` words (in English: the launcher shows them in the UI language,
+/// features::stores::status_text, by these values).
+pub const ERR_SPACE: &str = "Not enough space on that drive.";
+pub const ERR_SIGN_IN: &str = "Sign in again in Settings > Accounts.";
+pub const ERR_OFFLINE: &str = "No connection. Check Wi-Fi and try again.";
+pub const ERR_GENERIC: &str = "It stopped with an error. Try again.";
 
 #[cfg(test)]
 mod tests {
@@ -607,6 +649,14 @@ mod tests {
         assert!(!leftover_for(&a(&["vim", "abc"]), &jobs));
         assert!(!leftover_for(&a(&["python3", "/usr/libexec/rare/stores/legendary", "info", "abc", "--json"]), &jobs));
         assert!(!leftover_for(&a(&["/usr/bin/python3", "-c", "main()", "/usr/libexec/rare/stores/legendary", "install", "abc"]), &jobs));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_process_group_is_read() {
+        let me = std::process::id();
+        assert_eq!(pgid(me), Some(unsafe { libc::getpgid(0) } as u32));
+        assert_eq!(pgid(u32::MAX), None);
     }
 
     #[test]

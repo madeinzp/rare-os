@@ -129,7 +129,7 @@ pub fn game_tile(ui: &mut Ui, st: &State, acts: &mut Acts, g: &Game, def: bool, 
         let sub = if running {
             tr().common.playing.to_string()
         } else if let Some(j) = crate::features::stores::job(&g.id) {
-            j.status()
+            crate::features::stores::status_text(&j)
         } else if !g.installed {
             trf!(tr().game.source_not_installed, source = source_label(&g.source))
         } else {
