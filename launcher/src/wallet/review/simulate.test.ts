@@ -200,6 +200,9 @@ describe('packages', () => {
   it('names known protocols and shortens ids', () => {
     expect(knownPackage(CETUS)).toBe('Cetus')
     expect(knownPackage('0x0000000000000000000000000000000000000000000000000000000000000002')).toBe('Sui')
+    // Aftermath perpetuals, original and v2
+    expect(knownPackage('0x3ec740df8428aa9c93aaef7f8cc1542ac3194fd014826b51bfe245346d64efc7')).toBe('Aftermath')
+    expect(knownPackage('0xe54757433d663835bda85cfc89c6c44bc8d952e941affa5ae57bba0baa226c1b')).toBe('Aftermath')
     expect(shortId('0x2')).toBe('0x2')
     expect(shortId(CETUS)).toBe('0x1eab…b2fb')
     expect(objectLabel('0x3::sui_system::SuiSystemState').title).toBe('Sui System State')

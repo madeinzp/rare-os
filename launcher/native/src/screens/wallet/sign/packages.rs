@@ -21,6 +21,9 @@ const KNOWN: &[(&str, &str)] = &[
     ("0x91bfbc386a41afcfd9b2533058d7e915a1d3829089cc268ff4333d54d6339ca1", "Turbos"),
     ("0x3492c874c1e3b3e2984e8c41b589e642d4d0a5d6459e5a9cfc2d52fd7c89c267", "Bluefin"),
     ("0xefe170ec0be4d762196bedecd7a065816576198a6527c99282a2551aaa7da38c", "Aftermath"),
+    // Aftermath perpetuals: original id (types, events) and v2 (2026-11-15), which the calls target
+    ("0x3ec740df8428aa9c93aaef7f8cc1542ac3194fd014826b51bfe245346d64efc7", "Aftermath"),
+    ("0xe54757433d663835bda85cfc89c6c44bc8d952e941affa5ae57bba0baa226c1b", "Aftermath"),
     ("0xa0eba10b173538c8fecca1dff298e488402cc9ff374f8a12ca7758eebe830b66", "Kriya"),
     ("0xba153169476e8c3114962261d1edc70de5ad9781b83cc617ecc8c1923191cae0", "FlowX"),
     ("0xf95b06141ed4a174f239417323bde3f209b972f5930d8521ea38a52aff3a6ddf", "Suilend"),
@@ -161,5 +164,17 @@ mod tests {
         let mut o = BTreeMap::new();
         o.insert(norm_id("0xabcdef0123456789"), "0x1eabed72c53feb3805120a081dc15963c204dc8d091542592abaf7a35689b2fb".to_string());
         assert_eq!(call_label(&c, &o).1, "Cetus");
+    }
+
+    #[test]
+    fn aftermath_perps() {
+        let o = BTreeMap::new();
+        for pkg in [
+            "0x3ec740df8428aa9c93aaef7f8cc1542ac3194fd014826b51bfe245346d64efc7",
+            "0xe54757433d663835bda85cfc89c6c44bc8d952e941affa5ae57bba0baa226c1b",
+        ] {
+            let c = MoveCallRef { package: pkg.into(), module: "clearing_house".into(), function: "place_market_order".into() };
+            assert_eq!(call_label(&c, &o), ("clearing_house::place_market_order".to_string(), "Aftermath".to_string()));
+        }
     }
 }
