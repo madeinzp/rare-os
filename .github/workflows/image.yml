@@ -17,6 +17,10 @@ on:
         description: Switch a stock Fedora bootc VM to Rare OS with get-rare-os.sh, then roll back
         type: boolean
         default: true
+      update_test:
+        description: Install the previous published release in a VM and update it to this image as a device does
+        type: boolean
+        default: true
       publish:
         description: Push to the image repo (RARE_IMAGE_REPO) and sign with cosign (the package must be public for devices to pull it)
         type: boolean
@@ -137,6 +141,14 @@ jobs:
           sudo -E SOURCE_IMGREF=oci:/output/rare-oci:test image/vm/test.sh fresh
           sudo rm -rf "$WORK/rare-oci"
 
+      - name: VM test, update from the previous release
+        # Every device updates from the release before (Settings > System > Update now, os-update, its own bootc and
+        # signature policy): the previous published release (:stable until this run publishes) is installed, updated
+        # to this image from a local registry (zstd, signed with a throwaway key it trusts for that registry only),
+        # booted, and its power-off timed. No test did this before 0.1.3, the first image after the rechunk.
+        if: steps.build.outcome == 'success' && (github.event_name == 'push' || inputs.update_test) && !cancelled()
+        run: sudo -E FROM_IMAGE=ghcr.io/rare-market/rare-os:stable image/vm/test.sh update
+
       - name: VM test, switch from a stock OS and roll back
         if: steps.build.outcome == 'success' && (github.event_name == 'push' || inputs.rebase_test) && !cancelled()
         # The stock OS is installed straight from its registry (same podman 4.9 limit as above). Fedora 43, as GameOS 43
@@ -158,21 +170,28 @@ jobs:
             exit 1
           fi
           echo "$GH_TOKEN" | sudo podman login ghcr.io -u "${{ github.actor }}" --password-stdin
-          for tag in stable "$RARE_VERSION"; do
-            sudo podman push --compression-format zstd --digestfile /tmp/digest "$IMAGE" "docker://$REGISTRY_IMAGE:$tag"
-          done
+          # The version tag first, signed and checked, and only then :stable: devices follow :stable, and one that
+          # checked between the push and the signature got "A signature was required, but no signature exists".
+          sudo podman push --compression-format zstd --digestfile /tmp/digest "$IMAGE" "docker://$REGISTRY_IMAGE:$RARE_VERSION"
           # cosign v2 writes legacy sha256-<digest>.sig attachments, the only format devices read (containers/image,
           # use-sigstore-attachments); v3 writes the new bundle format by default. No transparency-log entry:
           # the device policy checks the key only.
           curl -fsSLo /tmp/cosign https://github.com/sigstore/cosign/releases/download/v2.4.3/cosign-linux-amd64
           echo "caaad125acef1cb81d58dcdc454a1e429d09a750d1e9e2b3ed1aed8964454708  /tmp/cosign" | sha256sum -c --quiet && chmod +x /tmp/cosign
           echo "$GH_TOKEN" | /tmp/cosign login ghcr.io -u "${{ github.actor }}" --password-stdin
-          /tmp/cosign sign -y --tlog-upload=false --key env://COSIGN_PRIVATE_KEY "$REGISTRY_IMAGE@$(cat /tmp/digest)"
           # Checked as a device does: the .sig tag exists and the device policy accepts the image.
           auth="$RUNNER_TEMP/ghcr-auth-check.json"
           trap 'rm -f "$auth"' EXIT
           (umask 077; echo "{\"auths\":{\"ghcr.io\":{\"auth\":\"$(printf '%s:%s' "${{ github.actor }}" "$GH_TOKEN" | base64 -w0)\"}}}" > "$auth")
-          tools/check-device-signature.sh "$REGISTRY_IMAGE" "$(cat /tmp/digest)" "$auth"
+          sign() {
+            /tmp/cosign sign -y --tlog-upload=false --key env://COSIGN_PRIVATE_KEY "$REGISTRY_IMAGE@$1"
+            tools/check-device-signature.sh "$REGISTRY_IMAGE" "$1" "$auth"
+          }
+          sign "$(cat /tmp/digest)"
+          cp /tmp/digest /tmp/digest-version
+          sudo podman push --compression-format zstd --digestfile /tmp/digest "$IMAGE" "docker://$REGISTRY_IMAGE:stable"
+          # The same image pushes to the same digest; if a second push ever wrote another manifest, sign that one too.
+          cmp -s /tmp/digest /tmp/digest-version || { echo "::warning:::stable got another digest than $RARE_VERSION"; sign "$(cat /tmp/digest)"; }
 
       - name: Make screenshots and logs readable
         if: always()

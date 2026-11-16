@@ -7,6 +7,10 @@
 #                             tools/get-rare-os.sh, boot Rare OS, roll back, boot the old OS
 #   image/vm/test.sh handheld a Bazzite handheld reachable only over SSH, switched offline from an
 #                             OCI archive (RARE_ARCHIVE), checked and rolled back (see handheld())
+#   image/vm/test.sh update   install the previous published release (FROM_IMAGE), then update it
+#                             the way a device does (Settings > System > Update now: os-admin
+#                             update-now, os-update, bootc upgrade, signature policy) to the image
+#                             under test, boot it, and time a power-off (update())
 #   image/vm/test.sh usbiso   the USB installer ISO (RARE_ISO) as an owner uses it: written to a USB
 #                             stick, a blank (or Windows) NVMe drive, a USB drive and an SD card that
 #                             must stay untouched; install, restart, boot without the stick (usbiso())
@@ -34,6 +38,7 @@ mkdir -p "$WORK" "$OUT" "$RARE_VM_STATE"
 cp "$RARE_VM_KEY.pub" "$WORK/id.pub"
 
 KARGS=(--karg systemd.wants=sshd.service --karg console=tty0 --karg console=ttyS0,115200)
+INSTALL_ARGS=()
 
 # Rare OS starts with SSH off (rare-keep-ssh turns sshd off on the first start, as on a device), so
 # the fresh and rebase tests reach the guest over a vsock instead: QEMU gets a vhost-vsock device and
@@ -58,7 +63,7 @@ install_disk() { # image disk-file size filesystem
     rm -f "$disk"; truncate -s "$size" "$disk"
     podman run --rm --privileged --pid=host --security-opt label=type:unconfined_t \
         -v /dev:/dev -v "$STORAGE:/var/lib/containers/storage" -v "$WORK:/output" \
-        "$img" bootc install to-disk ${SOURCE_IMGREF:+--source-imgref "$SOURCE_IMGREF"} --via-loopback --generic-image --wipe --skip-fetch-check \
+        "$img" bootc install to-disk ${SOURCE_IMGREF:+--source-imgref "$SOURCE_IMGREF"} "${INSTALL_ARGS[@]}" --via-loopback --generic-image --wipe --skip-fetch-check \
         --filesystem "$fs" --root-ssh-authorized-keys /output/id.pub "${KARGS[@]}" \
         "/output/$(basename "$disk")"
 }
@@ -517,6 +522,153 @@ usbiso() {
 
 # The blue key screen (shim's MokManager) at the first start with Secure Boot on, walked with the
 # keys the installer's screen and docs/INSTALL.md list: Enroll MOK, Continue, Yes, password, Reboot.
+# A device on the previous release takes the new one the way Settings > System > Update now does it:
+# pkexec os-admin update-now (polkit org.rare.os.admin for the launcher's session), os-update --now
+# in rare-update-now.service, `bootc upgrade --check` then `bootc upgrade` with the device's own
+# bootc and containers signature policy, the staged deployment finalized at shutdown, and the new
+# version booted. 0.1.3 was the first image after the rechunk (128 new zstd layers, a manifest
+# without a mediaType field), and no test had updated an installed release before.
+#
+#   FROM_IMAGE   the release devices run now (default ghcr.io/rare-market/rare-os:0.1.2), installed
+#                from the registry with its update source set to ghcr.io/rare-market/rare-os:stable,
+#                signature-checked (ostree-image-signed:, what rare-signed-switch leaves on a device)
+#   UPDATE_TO    local (default): the image under test ($IMAGE), pushed zstd to a local registry as
+#                the publish step pushes it and signed with a throwaway cosign key; the guest trusts
+#                that key for that registry only, with the same sigstoreSigned policy as ghcr.io.
+#                published: the device's own source as it is, ghcr.io/rare-market/rare-os:stable,
+#                checked with the image's own key (proves a release that is already out).
+#   COSIGN       a cosign v2 binary (default: v2.4.3 downloaded and checked, as image.yml does)
+# Checks: the launcher's process may run os-admin (pkcheck), a power-off during the download ends
+# within POWEROFF_MAX seconds and the download goes on after it, the update stages the expected
+# digest, a power-off with it staged (ostree-finalize-staged installs it on the way down) ends
+# within POWEROFF_MAX, the device boots it, and a power-off on the new version ends in time too.
+update() {
+    use_vsock
+    local from="${FROM_IMAGE:-ghcr.io/rare-market/rare-os:0.1.2}" to="${UPDATE_TO:-local}" ok=0
+    local poweroff_max="${POWEROFF_MAX:-90}" want policy_sh ck="$RARE_VM_STATE/cosign-test"
+    check() { if eval "$2"; then echo "CHECK $1: PASS"; else echo "CHECK $1: FAIL"; ok=1; fi; }
+    # Seconds until the guest has powered off and QEMU has exited, after `systemctl poweroff`.
+    poweroff_secs() {
+        local pid t0 n=0; pid="$(cat "$RARE_VM_STATE/qemu.pid")"; t0=$(date +%s)
+        $H ssh --timeout 15 --cmd "systemctl poweroff" >/dev/null 2>&1 || true
+        while kill -0 "$pid" 2>/dev/null && (( n < 900 )); do sleep 1; n=$((n + 1)); done
+        kill -0 "$pid" 2>/dev/null && { $H stop; echo 9999; return; }
+        rm -f "$RARE_VM_STATE/qmp.sock" "$RARE_VM_STATE/qemu.pid"
+        echo $(( $(date +%s) - t0 ))
+    }
+    # The update state as the launcher reads it, until the run is over (no fresh heartbeat).
+    wait_update() { # timeout-secs
+        $H ssh --timeout "$(( $1 + 60 ))" --cmd "for i in \$(seq 1 $(( $1 / 10 ))); do
+            s=\$(cat /var/lib/rare/update-state.json 2>/dev/null); ph=\$(jq -r '.phase // empty' <<<\"\$s\")
+            if ! systemctl -q is-active rare-update-now.service rare-update.service && [[ \$ph != checking && \$ph != downloading ]]; then break; fi
+            sleep 10; done; jq -c 'del(.notes)' /var/lib/rare/update-state.json"
+    }
+
+    echo "::group::install the previous release ($from)"
+    local reg=10.0.2.2:5000/rare-os:test
+    [[ "$to" == published ]] && reg=ghcr.io/rare-market/rare-os:stable
+    # The update source a device on that release has. rare-signed-switch would move an unsigned
+    # source to the signed one with `rpm-ostree rebase` (a pull of its own), so the test sets the
+    # signed source itself and keeps that unit from running.
+    KARGS+=(--karg systemd.mask=rare-signed-switch.service --karg systemd.mask=rare-signed-switch.timer)
+    INSTALL_ARGS=(--target-imgref "$reg")
+    SOURCE_IMGREF="registry:$from" install_disk "$from" "$WORK/update.raw" 64G btrfs
+    INSTALL_ARGS=()
+    # The installer image is not needed any more (CI runners are tight on disk).
+    [[ "${KEEP_FROM:-0}" == 1 ]] || podman rmi -f "$from" >/dev/null 2>&1 || true
+    echo "::endgroup::"
+
+    if [[ "$to" == local ]]; then
+        echo "::group::serve the image under test from a local registry, signed with a throwaway key"
+        local cosign="${COSIGN:-$WORK/cosign}"
+        if [[ ! -x "$cosign" ]]; then
+            curl -fsSLo "$cosign" https://github.com/sigstore/cosign/releases/download/v2.4.3/cosign-linux-amd64
+            echo "caaad125acef1cb81d58dcdc454a1e429d09a750d1e9e2b3ed1aed8964454708  $cosign" | sha256sum -c --quiet && chmod +x "$cosign"
+        fi
+        rm -f "$ck".key "$ck".pub
+        (cd "$RARE_VM_STATE" && COSIGN_PASSWORD="" "$cosign" generate-key-pair --output-key-prefix cosign-test >/dev/null)
+        podman rm -f rare-registry >/dev/null 2>&1 || true
+        mkdir -p "$WORK/registry"
+        podman run -d --name rare-registry -p 127.0.0.1:5000:5000 -v "$WORK/registry:/var/lib/registry" docker.io/library/registry:2
+        sleep 3
+        # As the publish step pushes it: zstd, the manifest podman writes.
+        podman push --tls-verify=false --compression-format zstd --digestfile "$WORK/update-digest" "$IMAGE" localhost:5000/rare-os:test
+        want="$(cat "$WORK/update-digest")"
+        COSIGN_PASSWORD="" "$cosign" sign -y --tlog-upload=false --allow-insecure-registry --key "$ck.key" "localhost:5000/rare-os@$want"
+        if [[ "${FREE_AFTER_PUSH:-0}" == 1 ]]; then podman rmi -f "$IMAGE" || true; podman image prune -af || true; fi
+        # The guest reaches the registry as 10.0.2.2; the signature names localhost:5000/rare-os, the name it was
+        # pushed under (exactRepository: that repository, any tag or digest).
+        policy_sh='install -m 0644 /var/tmp/rare-os-test.pub /etc/pki/containers/rare-os-test.pub
+            jq ".transports.docker[\"10.0.2.2:5000/rare-os\"] = [{\"type\": \"sigstoreSigned\", \"keyPath\": \"/etc/pki/containers/rare-os-test.pub\",
+                \"signedIdentity\": {\"type\": \"exactRepository\", \"dockerRepository\": \"localhost:5000/rare-os\"}}]" \
+                /etc/containers/policy.json > /etc/containers/policy.json.new && mv /etc/containers/policy.json.new /etc/containers/policy.json
+            printf "docker:\n  10.0.2.2:5000/rare-os:\n    use-sigstore-attachments: true\n" > /etc/containers/registries.d/rare-os-test.yaml
+            printf "[[registry]]\nlocation = \"10.0.2.2:5000\"\ninsecure = true\n" > /etc/containers/registries.conf.d/99-rare-os-test.conf'
+        echo "::endgroup::"
+    else
+        want="$(skopeo inspect --raw "docker://$reg" | sha256sum | cut -d' ' -f1)"; want="sha256:$want"
+        policy_sh=true
+    fi
+    echo "update to: $reg ($want)"
+
+    echo "::group::boot the previous release"
+    $H boot --disk "$WORK/update.raw" --name update-0-from --out "$OUT" --wait-launcher "${WAIT:-2700}" || ok=1
+    # The signed source a device has (rare-signed-switch's ostree-image-signed:docker://...).
+    [[ "$to" == local ]] && to_guest "$ck.pub" /var/tmp/rare-os-test.pub
+    $H ssh --cmd "$policy_sh
+        # /sysroot is read-only; bootc rewrites the booted deployment's origin in a mount namespace of its own.
+        rpm-ostree status --booted | grep -q 'ostree-image-signed:docker://$reg' ||
+            unshare -m sh -c 'mount -o remount,rw /sysroot && bootc switch --mutate-in-place --enforce-container-sigpolicy $reg'
+        systemctl restart rpm-ostreed; rpm-ostree status --booted; grep -E '^(VERSION|IMAGE_ID)=' /etc/os-release" | tee "$OUT/update-0-from.txt"
+    check "the previous release runs with the signed update source" "grep -q 'ostree-image-signed:docker://$reg' '$OUT/update-0-from.txt'"
+    # pkexec in the launcher asks polkit about the launcher's process: allowed without a password.
+    $H ssh --cmd 'p=$(pgrep -u 1000 -o -f rare-launcher); echo "launcher pid $p"; pkcheck --action-id org.rare.os.admin --process "$p" && echo POLKIT=yes || echo POLKIT=no' | tee "$OUT/update-polkit.txt"
+    check "the launcher may run os-admin" "grep -q POLKIT=yes '$OUT/update-polkit.txt'"
+    echo "::endgroup::"
+
+    echo "::group::Update now, then power off during the download"
+    $H ssh --cmd "/usr/libexec/rare/os-admin update-now; echo ADMIN_EXIT=\$?" | tee "$OUT/update-1-now.txt"
+    check "os-admin update-now starts the update" "grep -q ADMIN_EXIT=0 '$OUT/update-1-now.txt'"
+    $H ssh --timeout 900 --cmd 'for i in $(seq 1 90); do b=$(jq -r ".bytes // 0" /var/lib/rare/update-state.json 2>/dev/null); ph=$(jq -r ".phase // empty" /var/lib/rare/update-state.json 2>/dev/null); [[ $ph == downloading && $b -gt 0 ]] && break; [[ $ph == failed ]] && break; sleep 5; done; jq -c "del(.notes)" /var/lib/rare/update-state.json' | tee "$OUT/update-1-downloading.txt"
+    if grep -q '"phase":"downloading"' "$OUT/update-1-downloading.txt"; then
+        local secs; secs="$(poweroff_secs)"
+        echo "power-off during the download took ${secs} s"
+        check "power-off during the download ends within ${poweroff_max} s" "(( $secs <= $poweroff_max ))"
+        $H boot --disk "$WORK/update.raw" --name update-2-after-poweroff --out "$OUT" --wait-launcher "${WAIT:-2700}" || ok=1
+        $H ssh --cmd "/usr/libexec/rare/os-admin update-now; echo ADMIN_EXIT=\$?"
+    else
+        check "the download starts" false
+    fi
+    echo "::endgroup::"
+
+    echo "::group::the download finishes and stages"
+    wait_update 5400 | tee "$OUT/update-3-state.txt"
+    $H ssh --cmd "journalctl -b --no-pager -t rare-update | tail -n 30; rpm-ostree status --json | jq -c '[.deployments[] | {staged, booted, version, digest: .[\"container-image-reference-digest\"], ref: .[\"container-image-reference\"]}]'" | tee "$OUT/update-3-status.txt"
+    check "the update is staged" "grep -q '\"result\":\"staged\"' '$OUT/update-3-state.txt'"
+    check "the staged digest is $want" "grep -q '\"staged\":true,[^}]*\"digest\":\"$want\"' '$OUT/update-3-status.txt'"
+    echo "::endgroup::"
+    if ! grep -q '"result":"staged"' "$OUT/update-3-state.txt"; then
+        $H stop; [[ "$to" == local ]] && { podman rm -f rare-registry >/dev/null 2>&1; rm -rf "$WORK/registry"; }
+        return 1
+    fi
+
+    echo "::group::Turn off with the update staged (it installs on the way down), then start"
+    local secs; secs="$(poweroff_secs)"
+    echo "power-off with the update staged took ${secs} s"
+    check "power-off with the update staged ends within ${poweroff_max} s" "(( $secs <= $poweroff_max ))"
+    $H boot --disk "$WORK/update.raw" --name update-4-to --out "$OUT" --wait-launcher "${WAIT:-2700}" || ok=1
+    $H ssh --cmd "rpm-ostree status --booted --json | jq -c '.deployments[0] | {version, digest: .[\"container-image-reference-digest\"]}'; grep -E '^(VERSION|IMAGE_ID)=' /etc/os-release; systemctl --failed --no-pager --plain | head -20" | tee "$OUT/update-4-to.txt"
+    check "the device runs $want" "grep -q '\"digest\":\"$want\"' '$OUT/update-4-to.txt'"
+    secs="$(poweroff_secs)"
+    echo "power-off after the update took ${secs} s"
+    check "power-off ends within ${poweroff_max} s" "(( $secs <= $poweroff_max ))"
+    echo "::endgroup::"
+    cp "$RARE_VM_STATE"/serial-update.raw.log "$OUT/update-serial.log" 2>/dev/null || true
+    [[ "$to" == local ]] && { podman rm -f rare-registry >/dev/null 2>&1; rm -rf "$WORK/registry"; }
+    [[ "${KEEP_DISK:-0}" == 1 ]] || rm -f "$WORK/update.raw"
+    return $ok
+}
+
 mok_walk() {
     sleep "${MOK_WAIT:-40}"
     $H shot --out "$OUT/$1-mok-0.png" || true
@@ -530,5 +682,6 @@ case "${1:-}" in
     handheld) handheld ;;
     secureboot) secureboot ;;
     usbiso) usbiso ;;
-    *) echo "usage: $0 fresh|rebase|handheld|secureboot|usbiso" >&2; exit 2 ;;
+    update) update ;;
+    *) echo "usage: $0 fresh|rebase|handheld|secureboot|usbiso|update" >&2; exit 2 ;;
 esac
