@@ -173,7 +173,7 @@ fn write_rare_first() -> Result<(), String> {
     let atom = intern(&conn, CTRL_APPID)?;
     let reply = conn.get_property(false, root, atom, AtomEnum::ANY, 0, 256).map_err(|e| e.to_string())?.reply().map_err(|e| e.to_string())?;
     let list: Vec<u64> = reply.value32().map(|v| v.map(u64::from).collect()).unwrap_or_default();
-    if let Some(next) = super::appid::place(&list, true, None, &super::appid::all(), &[]) {
+    if let Some(next) = super::appid::place(&list, true, None, &super::appid::all(), None) {
         let values: Vec<u32> = next.iter().map(|v| *v as u32).collect();
         conn.change_property32(PropMode::REPLACE, root, atom, AtomEnum::CARDINAL, &values).map_err(|e| e.to_string())?;
         conn.sync().map_err(|e| e.to_string())?;
@@ -203,6 +203,12 @@ fn front_app() -> Option<u32> {
         return None;
     }
     crate::host::host().front_run().and_then(|r| super::appid::of(&r))
+}
+
+/// The app id of the Steam game Rare started that has the screen ("steam:<appid>"), if any.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn front_steam_game() -> Option<u64> {
+    crate::host::host().front_run()?.strip_prefix("steam:")?.parse().ok()
 }
 
 /// gamescope's choice in `--steam` mode (pick_primary_focus_and_override, Steam-controlled), for
@@ -312,15 +318,16 @@ fn keep_rare_listed(display: &str) -> Result<(), String> {
     }
     let _unknown = Unknown;
     conn.change_window_attributes(root, &ChangeWindowAttributesAux::new().event_mask(EventMask::PROPERTY_CHANGE)).map_err(|e| e.to_string())?;
-    // gamescope's focusable apps, so a Steam game Steam left out of its list still gets the screen.
+    // gamescope's focusable apps: the Steam game Rare put in front counts once it has a window.
     let focusable_apps = || -> Result<Vec<u64>, String> {
         let reply = conn.get_property(false, root, focusable, AtomEnum::CARDINAL, 0, 256).map_err(|e| e.to_string())?.reply().map_err(|e| e.to_string())?;
         Ok(reply.value32().map(|v| v.map(u64::from).collect()).unwrap_or_default())
     };
     let ensure = |(first, front): (bool, Option<u32>), apps: &[u64]| -> Result<(), String> {
+        let game = front_steam_game().filter(|g| apps.contains(g));
         let reply = conn.get_property(false, root, atom, AtomEnum::ANY, 0, 256).map_err(|e| e.to_string())?.reply().map_err(|e| e.to_string())?;
         let list: Vec<u64> = reply.value32().map(|v| v.map(u64::from).collect()).unwrap_or_default();
-        if let Some(next) = super::appid::place(&list, first, front, &super::appid::all(), apps) {
+        if let Some(next) = super::appid::place(&list, first, front, &super::appid::all(), game) {
             let values: Vec<u32> = next.iter().map(|v| *v as u32).collect();
             conn.change_property32(PropMode::REPLACE, root, atom, AtomEnum::CARDINAL, &values).map_err(|e| e.to_string())?;
             conn.flush().map_err(|e| e.to_string())?;
