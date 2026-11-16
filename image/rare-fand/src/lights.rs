@@ -4,6 +4,9 @@
 //! sysfs, /sys/class/leds/ayaneo:rgb:joystick_rings:
 //! - rgb_mode: "oem" (the EC's own lights), "on" (rgb_zones), "off" (dark, held)
 //! - rgb_zones: eight RRGGBB words, the left ring's four zones then the right ring's
+//! - rgb_rings: how many rings the driver can color apart. 1 (the default until a SuiPlay0X1
+//!   has shown two, see suiplay-rgb.c): both rings take the left color, and Settings offers
+//!   one color. Missing (Rare OS 0.1.3's module): 2
 //! - brightness, multi_intensity: the standard multicolor LED (both rings one color). Used when
 //!   the driver is another one (ShadowBlip's ayaneo-platform has no rgb_zones).
 //!
@@ -158,6 +161,14 @@ pub const TURN: f32 = 8.0;
 /// The dimmest point of a breath, as a share of the brightness: the ring never goes fully dark.
 const BREATH_FLOOR: f32 = 0.08;
 
+/// The spec as `rings` rings can show it: with one, both take the left ring's color.
+pub fn for_rings(spec: &Spec, rings: u8) -> Spec {
+    if rings >= 2 {
+        return spec.clone();
+    }
+    Spec { right: spec.left, ..spec.clone() }
+}
+
 /// What the rings show `t` seconds into the effect.
 pub fn render(spec: &Spec, t: f32) -> Out {
     match spec.mode {
@@ -214,6 +225,8 @@ pub struct Led {
     pub dir: PathBuf,
     /// ayaneo_ec_suiplay's rgb_zones and rgb_mode are there (else the plain multicolor files).
     zones: bool,
+    /// Rings that take their own color: 1 or 2.
+    pub rings: u8,
 }
 
 impl Led {
@@ -223,7 +236,15 @@ impl Led {
             return None;
         }
         let zones = dir.join("rgb_zones").exists() && dir.join("rgb_mode").exists();
-        Some(Led { dir, zones })
+        let rings = if !zones {
+            1
+        } else {
+            match fs::read_to_string(dir.join("rgb_rings")).ok().and_then(|s| s.trim().parse::<u8>().ok()) {
+                Some(1) => 1,
+                _ => 2,
+            }
+        };
+        Some(Led { dir, zones, rings })
     }
 
     pub fn write(&self, out: &Out) -> io::Result<()> {
@@ -289,13 +310,18 @@ impl Lights {
         let led = Led::find(root);
         let spec = load(path);
         if let Some(l) = &led {
-            eprintln!("rare-fand: stick lights at {}{}, {}", l.dir.display(), if l.zones { "" } else { " (one color)" }, spec.encode());
+            eprintln!("rare-fand: stick lights at {}, {} ring{}, {}", l.dir.display(), l.rings, if l.rings == 1 { "" } else { "s" }, spec.encode());
         }
         Lights { led, path: path.to_path_buf(), spec, t0: Instant::now(), last: None, next: None, error: None }
     }
 
     pub fn available(&self) -> bool {
         self.led.is_some()
+    }
+
+    /// Rings that take their own color (0 without the LED).
+    pub fn rings(&self) -> u8 {
+        self.led.as_ref().map_or(0, |l| l.rings)
     }
 
     pub fn spec(&self) -> &Spec {
@@ -325,7 +351,7 @@ impl Lights {
         if self.next.is_some_and(|n| now < n) {
             return;
         }
-        let out = render(&self.spec, (now - self.t0).as_secs_f32());
+        let out = render(&for_rings(&self.spec, led.rings), (now - self.t0).as_secs_f32());
         self.next = interval(&self.spec).map(|d| now + d);
         if self.last.as_ref() == Some(&out) {
             return;
@@ -457,12 +483,57 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    /// Settings' Left and Right rows: one ring's color changes, the other ring's zones stay, and
+    /// the left ring is always the first four words of rgb_zones (suiplay-rgb.c's order).
+    #[test]
+    fn left_and_right_land_on_their_own_zones() {
+        let root = fake("rings2", true);
+        let led = root.join(LED);
+        let t = Instant::now();
+        let mut l = Lights::new(&root, &root.join("lights"));
+        assert_eq!(l.rings(), 2, "0.1.3's module has no rgb_rings: two rings, as before");
+        let both = Spec { mode: Mode::On, effect: Effect::Solid, left: [0, 0, 255], right: [0, 0, 255], brightness: 100 };
+        l.set(both.clone(), t);
+        l.tick(t);
+        assert_eq!(fs::read_to_string(led.join("rgb_zones")).unwrap(), ["0000ff"; 8].join(" "));
+        l.set(Spec { left: [255, 0, 0], ..both.clone() }, t);
+        l.tick(t);
+        assert_eq!(fs::read_to_string(led.join("rgb_zones")).unwrap(), "ff0000 ff0000 ff0000 ff0000 0000ff 0000ff 0000ff 0000ff");
+        l.set(Spec { left: [255, 0, 0], right: [0, 255, 0], ..both }, t);
+        l.tick(t);
+        assert_eq!(fs::read_to_string(led.join("rgb_zones")).unwrap(), "ff0000 ff0000 ff0000 ff0000 00ff00 00ff00 00ff00 00ff00");
+        // Rainbow: zone n of both rings takes the same hue.
+        let Out::Frame(c) = render(&Spec { effect: Effect::Cycle, ..l.spec().clone() }, 1.0) else { panic!() };
+        assert_eq!(&c[..4], &c[4..]);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    /// A driver that can color only both rings together (rgb_rings 1): the left color everywhere.
+    #[test]
+    fn one_ring_driver_draws_the_left_color_on_both() {
+        let root = fake("rings1", true);
+        let led = root.join(LED);
+        fs::write(led.join("rgb_rings"), "1\n").unwrap();
+        let t = Instant::now();
+        let mut l = Lights::new(&root, &root.join("lights"));
+        assert_eq!(l.rings(), 1);
+        l.set(Spec { mode: Mode::On, effect: Effect::Breathe, left: [255, 0, 0], right: [0, 255, 0], brightness: 100 }, t);
+        l.tick(t + Duration::from_secs(2));
+        assert_eq!(fs::read_to_string(led.join("rgb_zones")).unwrap(), ["ff0000"; 8].join(" "));
+        // The saved spec keeps both colors (a driver with two rings shows them again).
+        assert_eq!(l.spec().right, [0, 255, 0]);
+        fs::write(led.join("rgb_rings"), "2\n").unwrap();
+        assert_eq!(Lights::new(&root, &root.join("lights")).rings(), 2);
+        let _ = fs::remove_dir_all(root);
+    }
+
     #[test]
     fn plain_multicolor_driver() {
         let root = fake("plain", false);
         let led = root.join(LED);
         let t = Instant::now();
         let mut l = Lights::new(&root, &root.join("lights"));
+        assert_eq!(l.rings(), 1);
         l.set(Spec { mode: Mode::On, left: [10, 20, 30], ..Spec::default() }, t);
         l.tick(t);
         assert_eq!(fs::read_to_string(led.join("multi_intensity")).unwrap(), "10 20 30");
@@ -479,6 +550,7 @@ mod tests {
         let root = std::env::temp_dir().join(format!("rare-fand-lights-{}-none", std::process::id()));
         let mut l = Lights::new(&root, &root.join("lights"));
         assert!(!l.available());
+        assert_eq!(l.rings(), 0);
         l.tick(Instant::now());
     }
 }

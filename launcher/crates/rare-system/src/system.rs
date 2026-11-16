@@ -714,6 +714,13 @@ pub fn lights_available() -> Option<bool> {
     busctl_value(&out)?.first().map(|v| v == "true")
 }
 
+/// Rings that take their own color: 2, or 1 when the driver colors both together. None when
+/// rare-fand is not there or is older than the property (0.1.3: two rings).
+pub fn lights_rings() -> Option<u32> {
+    let out = run("busctl", &["--system", "get-property", FAND, LIGHTS_PATH, LIGHTS_IFACE, "Rings"]).ok()?;
+    busctl_value(&out)?.first()?.parse().ok()
+}
+
 /// The lights as rare-fand runs them (`mode=on effect=breathe left=4da2ff ...`).
 pub fn lights_spec() -> Option<String> {
     let out = run("busctl", &["--system", "get-property", FAND, LIGHTS_PATH, LIGHTS_IFACE, "Lights"]).ok()?;

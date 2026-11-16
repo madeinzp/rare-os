@@ -7,18 +7,42 @@
  * Heslop; derived from Maya Matuszczyk's ayaled). Stock GameOS loads that driver on the
  * SuiPlay0X1, pinned at 9b2a602 "Add support for SuiPlay0X1 RGB":
  *
- *   one subpixel: 0x6d = group (1 left ring, 2 right ring, 3 both), 0xb1 = position,
- *                 0xb2 = value, 0xbf = 0x10 (write), about 2 ms, 0xbf = 0xfe (hold)
+ *   one subpixel: 0x6d = group, 0xb1 = position, 0xb2 = value, 0xbf = 0x10 (write),
+ *                 about 2 ms, 0xbf = 0xfe (hold)
  *   0xbf = 0x00   gives the LEDs back to the EC
  *   position 2    0xb1 on, 0x31 off, 0xc0 reset
  *   positions 3, 6, 9, 12: the four zones of a ring, red, green, blue at +0, +1, +2
  *   group 3, position 0, value 0 ends a batch. Values go up to 192 (0..255 scaled, as there).
  *
+ * The group register (0x6d), as the sources name it:
+ *   ayaneo-platform 9b2a602   AYANEO_LED_GROUP_LEFT 1, _RIGHT 2, _LEFT_RIGHT 3, _BUTTON 4 (KUN);
+ *                             the 2S path writes one color, group 1 then 2, each closed by 3/0/0
+ *   HandheldCompanion         LEDGroup StickLeft 1, StickRight 2, StickBoth 3, AYA 4; on the
+ *     (AYANEODeviceCEc.cs,    "CEc" devices (SuiPlay0X1 included) every subpixel is followed by
+ *      SuiPlay0X1.cs)         3/0/0, 5 ms each, "AYASpace does this"
+ *   HueSync (honjow)          the same 1/2/3, per-zone colors on SuiPlay0X1 through the 2S path
+ *   ayaled (Maccraft123,      Joystick Left 1, Right 2, ALL 3
+ *     Gawah)
+ * None of them has been seen to show two colors on a SuiPlay0X1: stock GameOS, hhd and
+ * InputPlumber only drive the one multicolor LED (both rings, one color), so 1 and 2 always get
+ * the same values and nothing tells left from right. Rare OS 0.1.3 trusted 1 = left, 2 = right,
+ * and on a real SuiPlay0X1 (user report, 2026-11-15) a left-only frame lit both rings and a
+ * right-only frame changed nothing: group 1 reaches both rings and group 2 neither. Whether
+ * the rings can be told apart at all (another group, or zones split between the rings) is not
+ * known yet, so:
+ *   - rgb_map says where each of the eight zones is written (group:position, "-" for none), at
+ *     load (module parameter) or live (sysfs). Default: the sources' 1:3 1:6 1:9 1:12, 2:3 ...;
+ *   - rgb_rings tells userspace how many rings it can color apart (default 1, Settings then
+ *     offers one color for both) until a SuiPlay0X1 shows two;
+ *   - rgb_raw writes "group position value" triples as they are, for rare-lights-test, which
+ *     walks a person through the groups and zones in under a minute and prints the map.
+ *
  * Differences from ayaneo-platform:
  *   - nothing is written until userspace asks. From boot the rings keep the EC's own behaviour
  *     (rgb_mode "oem"), so a device nobody configures looks as it always did;
- *   - each ring and each of its four zones takes its own color (rgb_zones), only subpixels that
- *     changed are written, and the writes run in a work item that sleeps between them (no busy
+ *   - each ring and each of its four zones takes its own color (rgb_zones). A ring whose colors
+ *     changed is written whole, closed by 3/0/0, the order ayaneo-platform and HueSync use; an
+ *     unchanged ring is skipped. The writes run in a work item that sleeps between them (no busy
  *     wait), so an effect at 10 frames a second costs next to no CPU;
  *   - in suspend the rings go dark unless the EC has them; on resume the last frame comes back;
  *   - at shutdown and unload the EC gets them back.
@@ -29,6 +53,9 @@
  *   rgb_mode   "oem" (the EC's own lights), "on" (the frame in rgb_zones), "off" (dark, held)
  *   rgb_zones  eight RRGGBB words: the left ring's zones 1-4, then the right ring's. One word
  *              sets all eight. Writing it sets rgb_mode to "on".
+ *   rgb_map    eight group:position words (or "-"), comma or space separated; root writes it
+ *   rgb_rings  1 or 2; root writes it
+ *   rgb_raw    root only, write only: "group position value" triples (0x.. or decimal)
  */
 
 #include <linux/acpi.h>
@@ -52,6 +79,15 @@ static bool rgb = true;
 module_param(rgb, bool, 0444);
 MODULE_PARM_DESC(rgb, "Stick ring lights on the SuiPlay0X1 (default on; the EC keeps them until userspace writes)");
 
+#define DEFAULT_MAP		"1:3,1:6,1:9,1:12,2:3,2:6,2:9,2:12"
+static char rgb_map[64] = DEFAULT_MAP;
+module_param_string(rgb_map, rgb_map, sizeof(rgb_map), 0444);
+MODULE_PARM_DESC(rgb_map, "Where the eight zones (left ring 1-4, right ring 1-4) are written: group:position each, - for none (default " DEFAULT_MAP ")");
+
+static uint rgb_rings = 1;
+module_param(rgb_rings, uint, 0444);
+MODULE_PARM_DESC(rgb_rings, "Rings the map colors apart, for userspace: 1 (one color for both, default) or 2");
+
 #define LED_GROUP_REG		0x6d
 #define LED_POS_REG		0xb1
 #define LED_VAL_REG		0xb2
@@ -63,6 +99,7 @@ MODULE_PARM_DESC(rgb, "Stick ring lights on the SuiPlay0X1 (default on; the EC k
 #define GROUP_LEFT		0x01
 #define GROUP_RIGHT		0x02
 #define GROUP_BOTH		0x03
+#define GROUP_MAX		0x04	/* 4: the KUN's button; higher ones are unknown */
 
 #define POS_ENABLE		0x02
 #define ENABLE_ON		0xb1
@@ -73,9 +110,13 @@ MODULE_PARM_DESC(rgb, "Stick ring lights on the SuiPlay0X1 (default on; the EC k
 #define ZONES			4
 #define MAX_VALUE		192
 #define GLOBAL_LOCK_MS		500
+#define RAW_MAX			48
 
-static const u8 zone_pos[ZONES] = { 3, 6, 9, 12 };
-static const u8 ring_group[RINGS] = { GROUP_LEFT, GROUP_RIGHT };
+/* Where one zone's red goes (green and blue follow). pos 0: the zone is not written. */
+struct zone_addr {
+	u8 group;
+	u8 pos;
+};
 
 enum rgb_mode { MODE_OEM, MODE_ON, MODE_OFF };
 static const char * const mode_names[] = {
@@ -97,6 +138,8 @@ struct suiplay_rgb {
 	struct mutex lock;
 	enum rgb_mode want_mode;
 	u8 want[RINGS][ZONES][3];
+	struct zone_addr map[RINGS][ZONES];
+	unsigned int rings;
 	bool stopped;
 
 	/* The worker's view of the EC (the work, suspend, resume and shutdown take it). */
@@ -190,9 +233,11 @@ static u8 rgb_scale(u8 v)
 }
 
 /* Brings the EC to `mode` (and the frame `want` for "on"). Called with hw_lock held. */
-static int rgb_apply(struct suiplay_rgb *r, enum rgb_mode mode, u8 want[RINGS][ZONES][3])
+static int rgb_apply(struct suiplay_rgb *r, enum rgb_mode mode, u8 want[RINGS][ZONES][3],
+		     struct zone_addr map[RINGS][ZONES])
 {
-	int ring, zone, ch, ret = 0, n = 0;
+	int ring, zone, ch, ret = 0;
+	bool valid;
 
 	if (r->settle) {
 		/* After a resume the EC needs a moment (ayaneo-platform waits 100 ms). */
@@ -233,33 +278,50 @@ static int rgb_apply(struct suiplay_rgb *r, enum rgb_mode mode, u8 want[RINGS][Z
 			return ret;
 		r->hw = HW_ON;
 	}
+	/* A ring that changed is written whole and closed by 3/0/0 (ayaneo-platform's order). */
+	valid = r->hw_valid;
 	for (ring = 0; ring < RINGS; ring++) {
+		u8 v[ZONES][3];
+		bool dirty = !valid;
+		int n = 0;
+
 		for (zone = 0; zone < ZONES; zone++) {
 			for (ch = 0; ch < 3; ch++) {
-				u8 v = rgb_scale(want[ring][zone][ch]);
+				v[zone][ch] = rgb_scale(want[ring][zone][ch]);
+				if (v[zone][ch] != r->shown[ring][zone][ch])
+					dirty = true;
+			}
+		}
+		if (!dirty)
+			continue;
+		r->hw_valid = false;
+		for (zone = 0; zone < ZONES; zone++) {
+			const struct zone_addr *a = &map[ring][zone];
 
-				if (r->hw_valid && r->shown[ring][zone][ch] == v)
-					continue;
-				ret = rgb_set(ring_group[ring], zone_pos[zone] + ch, v);
-				if (ret) {
-					r->hw_valid = false;
+			if (!a->pos)
+				continue;
+			for (ch = 0; ch < 3; ch++) {
+				ret = rgb_set(a->group, a->pos + ch, v[zone][ch]);
+				if (ret)
 					return ret;
-				}
-				r->shown[ring][zone][ch] = v;
 				n++;
 			}
 		}
+		if (n)
+			ret = rgb_set(GROUP_BOTH, 0, 0);
+		if (ret)
+			return ret;
+		memcpy(r->shown[ring], v, sizeof(v));
 	}
-	if (n)
-		ret = rgb_set(GROUP_BOTH, 0, 0);
-	r->hw_valid = !ret;
-	return ret;
+	r->hw_valid = true;
+	return 0;
 }
 
 static void rgb_work(struct work_struct *work)
 {
 	struct suiplay_rgb *r = container_of(work, struct suiplay_rgb, work);
 	u8 want[RINGS][ZONES][3];
+	struct zone_addr map[RINGS][ZONES];
 	enum rgb_mode mode;
 	int ret;
 
@@ -272,8 +334,9 @@ static void rgb_work(struct work_struct *work)
 	}
 	mode = r->want_mode;
 	memcpy(want, r->want, sizeof(want));
+	memcpy(map, r->map, sizeof(map));
 	mutex_unlock(&r->lock);
-	ret = rgb_apply(r, mode, want);
+	ret = rgb_apply(r, mode, want, map);
 	mutex_unlock(&r->hw_lock);
 	if (ret)
 		dev_warn_ratelimited(r->dev, "stick lights: EC write failed (%d)\n", ret);
@@ -408,9 +471,176 @@ static ssize_t rgb_zones_store(struct device *dev, struct device_attribute *attr
 }
 static DEVICE_ATTR_RW(rgb_zones);
 
+/* "G:P" words (or "-"), eight of them, separated by commas or white space. */
+static int map_parse(const char *buf, size_t count, struct zone_addr out[RINGS][ZONES])
+{
+	struct zone_addr m[RINGS * ZONES];
+	char *dup, *p, *tok;
+	int n = 0, ret = 0;
+
+	dup = kstrndup(buf, count, GFP_KERNEL);
+	if (!dup)
+		return -ENOMEM;
+	p = dup;
+	while ((tok = strsep(&p, ", \t\n"))) {
+		char *colon;
+		u8 g, pos;
+
+		if (!*tok)
+			continue;
+		if (n == RINGS * ZONES) {
+			ret = -EINVAL;
+			break;
+		}
+		if (!strcmp(tok, "-")) {
+			m[n].group = 0;
+			m[n++].pos = 0;
+			continue;
+		}
+		colon = strchr(tok, ':');
+		if (!colon) {
+			ret = -EINVAL;
+			break;
+		}
+		*colon = '\0';
+		/* Only the zone positions: 0..2 and 15.. are commands (enable, pattern, fade, ...). */
+		if (kstrtou8(tok, 0, &g) || kstrtou8(colon + 1, 0, &pos) || g < 1 || g > GROUP_MAX ||
+		    (pos != 3 && pos != 6 && pos != 9 && pos != 12)) {
+			ret = -EINVAL;
+			break;
+		}
+		m[n].group = g;
+		m[n++].pos = pos;
+	}
+	kfree(dup);
+	if (!ret && n != RINGS * ZONES)
+		ret = -EINVAL;
+	if (!ret)
+		memcpy(out, m, sizeof(m));
+	return ret;
+}
+
+static ssize_t rgb_map_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct suiplay_rgb *r = rgb_of(dev);
+	ssize_t len = 0;
+	int ring, zone;
+
+	mutex_lock(&r->lock);
+	for (ring = 0; ring < RINGS; ring++) {
+		for (zone = 0; zone < ZONES; zone++) {
+			const struct zone_addr *a = &r->map[ring][zone];
+			char sep = ring == RINGS - 1 && zone == ZONES - 1 ? '\n' : ',';
+
+			if (a->pos)
+				len += sysfs_emit_at(buf, len, "%u:%u%c", a->group, a->pos, sep);
+			else
+				len += sysfs_emit_at(buf, len, "-%c", sep);
+		}
+	}
+	mutex_unlock(&r->lock);
+	return len;
+}
+
+static ssize_t rgb_map_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct suiplay_rgb *r = rgb_of(dev);
+	struct zone_addr m[RINGS][ZONES];
+	int ret;
+
+	ret = map_parse(buf, count, m);
+	if (ret)
+		return ret;
+	mutex_lock(&r->lock);
+	memcpy(r->map, m, sizeof(m));
+	mutex_unlock(&r->lock);
+	/* The whole frame again, at the new places. */
+	mutex_lock(&r->hw_lock);
+	r->hw_valid = false;
+	mutex_unlock(&r->hw_lock);
+	rgb_kick(r);
+	return count;
+}
+static DEVICE_ATTR_RW(rgb_map);
+
+static ssize_t rgb_rings_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	struct suiplay_rgb *r = rgb_of(dev);
+
+	return sysfs_emit(buf, "%u\n", READ_ONCE(r->rings));
+}
+
+static ssize_t rgb_rings_store(struct device *dev, struct device_attribute *attr,
+			       const char *buf, size_t count)
+{
+	struct suiplay_rgb *r = rgb_of(dev);
+	unsigned int v;
+
+	if (kstrtouint(buf, 0, &v) || v < 1 || v > RINGS)
+		return -EINVAL;
+	WRITE_ONCE(r->rings, v);
+	return count;
+}
+static DEVICE_ATTR_RW(rgb_rings);
+
+/*
+ * "group position value" triples, written as they are (no scaling, no batch end: send 3 0 0
+ * yourself). For finding where the zones are (rare-lights-test). The next frame takes the
+ * LEDs again and writes everything, so whatever this left is drawn over.
+ */
+static ssize_t rgb_raw_store(struct device *dev, struct device_attribute *attr,
+			     const char *buf, size_t count)
+{
+	struct suiplay_rgb *r = rgb_of(dev);
+	u8 t[RAW_MAX][3];
+	char *dup, *p, *tok;
+	int n = 0, i, ret = 0;
+	bool stopped;
+
+	dup = kstrndup(buf, count, GFP_KERNEL);
+	if (!dup)
+		return -ENOMEM;
+	p = dup;
+	while ((tok = strsep(&p, ", \t\n"))) {
+		if (!*tok)
+			continue;
+		if (n == RAW_MAX * 3 || kstrtou8(tok, 0, &t[n / 3][n % 3])) {
+			ret = -EINVAL;
+			break;
+		}
+		n++;
+	}
+	kfree(dup);
+	if (!ret && (n == 0 || n % 3))
+		ret = -EINVAL;
+	for (i = 0; !ret && i < n / 3; i++)
+		if (t[i][0] < 1 || t[i][0] > GROUP_MAX)
+			ret = -EINVAL;
+	if (ret)
+		return ret;
+
+	mutex_lock(&r->lock);
+	stopped = r->stopped;
+	mutex_unlock(&r->lock);
+	if (stopped)
+		return -EBUSY;
+	mutex_lock(&r->hw_lock);
+	for (i = 0; !ret && i < n / 3; i++)
+		ret = rgb_set(t[i][0], t[i][1], t[i][2]);
+	r->hw = HW_UNKNOWN;
+	r->hw_valid = false;
+	mutex_unlock(&r->hw_lock);
+	return ret ? ret : count;
+}
+static DEVICE_ATTR_WO(rgb_raw);
+
 static struct attribute *rgb_attrs[] = {
 	&dev_attr_rgb_mode.attr,
 	&dev_attr_rgb_zones.attr,
+	&dev_attr_rgb_map.attr,
+	&dev_attr_rgb_rings.attr,
+	&dev_attr_rgb_raw.attr,
 	NULL
 };
 
@@ -465,6 +695,12 @@ int suiplay_rgb_probe(struct device *dev)
 	INIT_WORK(&r->work, rgb_work);
 	r->want_mode = MODE_OEM;
 	r->hw = HW_OEM;
+	if (map_parse(rgb_map, strlen(rgb_map), r->map)) {
+		dev_warn(dev, "stick lights: rgb_map \"%s\" is not eight group:position words; using %s\n",
+			 rgb_map, DEFAULT_MAP);
+		map_parse(DEFAULT_MAP, strlen(DEFAULT_MAP), r->map);
+	}
+	r->rings = clamp_val(rgb_rings, 1, RINGS);
 
 	r->subled[0].color_index = LED_COLOR_ID_RED;
 	r->subled[0].channel = 0;
@@ -493,7 +729,8 @@ int suiplay_rgb_probe(struct device *dev)
 		return 0;
 	}
 	the_rgb = r;
-	dev_info(dev, "stick lights at %s; the EC keeps them until written\n", r->mc.led_cdev.name);
+	dev_info(dev, "stick lights at %s (map %s, %u ring%s); the EC keeps them until written\n",
+		 r->mc.led_cdev.name, rgb_map, r->rings, r->rings == 1 ? "" : "s");
 	return 0;
 }
 

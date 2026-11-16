@@ -24,7 +24,8 @@ pub const PALETTE: [[u8; 3]; 9] = [
     [0x9b, 0x5c, 0xff],
 ];
 
-/// Which ring the color rows set: both, left, right. Not saved: Settings opens on both.
+/// Which ring the color rows set: both, left, right. Not saved: Settings opens on both. Only
+/// offered when the driver colors the rings apart (lights::rings() == 2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Ring {
     Both,
@@ -37,6 +38,9 @@ thread_local! {
 }
 
 fn ring() -> Ring {
+    if lights::rings() < 2 {
+        return Ring::Both;
+    }
     RING.with(|r| r.get())
 }
 
@@ -123,7 +127,9 @@ impl LightsSection {
                 Ring::Left => 1,
                 Ring::Right => 2,
             };
-            rows.choice(cx, nav, p2, "lights-ring", t.row_rings, Some(t.rings_body), &[t.rings_both, t.rings_left, t.rings_right], Some(ri), false);
+            if lights::rings() >= 2 {
+                rows.choice(cx, nav, p2, "lights-ring", t.row_rings, Some(t.rings_body), &[t.rings_both, t.rings_left, t.rings_right], Some(ri), false);
+            }
             // The swatches: a row of their own under the title, focusable one by one.
             let cur = edited(cfg);
             let row = setting_row(cx, p2, t.row_color, None, false);
@@ -236,6 +242,7 @@ mod tests {
     #[test]
     fn colors_follow_the_ring_being_set() {
         let mut c = Config::default();
+        lights::store_rings(2);
         RING.with(|r| r.set(Ring::Both));
         set_color(&mut c, PALETTE[6]);
         assert_eq!(c.lights_left.as_deref(), Some("ff2a2a"));
@@ -247,5 +254,13 @@ mod tests {
         assert_eq!(c.lights_right.as_deref(), Some("4da2ff"));
         RING.with(|r| r.set(Ring::Both));
         assert_eq!(edited(&c), None, "two colors: no swatch is both rings'");
+        // A driver that colors both rings together: Right still picked, but a color sets both.
+        RING.with(|r| r.set(Ring::Right));
+        lights::store_rings(1);
+        set_color(&mut c, PALETTE[3]);
+        assert_eq!(c.lights_left.as_deref(), Some("2bff88"));
+        assert_eq!(c.lights_right.as_deref(), Some("2bff88"));
+        lights::store_rings(2);
+        RING.with(|r| r.set(Ring::Both));
     }
 }

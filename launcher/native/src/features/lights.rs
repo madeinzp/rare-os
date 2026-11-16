@@ -121,6 +121,8 @@ pub fn spec(c: &Config) -> String {
 
 /// 0 not known yet, 1 the device has stick lights, 2 it has none.
 static AVAILABLE: AtomicU8 = AtomicU8::new(0);
+/// Rings the driver colors apart (rare-fand's Rings); 0 until it answered.
+static RINGS: AtomicU8 = AtomicU8::new(0);
 static PENDING: Mutex<Option<String>> = Mutex::new(None);
 static WAKE: Condvar = Condvar::new();
 static LAST: Mutex<Option<String>> = Mutex::new(None);
@@ -135,9 +137,27 @@ pub fn available() -> Option<bool> {
     }
 }
 
+/// 2 when Settings can set each ring, 1 when both rings take one color (the stick lights driver
+/// says so until a SuiPlay0X1 has shown two, image/kmod/ayaneo-ec-suiplay/suiplay-rgb.c). One
+/// until rare-fand answered, so Left and Right never show and then vanish.
+pub fn rings() -> u8 {
+    match RINGS.load(Ordering::Relaxed) {
+        0 => 1,
+        n => n,
+    }
+}
+
+#[cfg(test)]
+pub fn store_rings(n: u8) {
+    RINGS.store(n, Ordering::Relaxed);
+}
+
 /// Asks rare-fand; None when it isn't on the bus (yet).
 fn probe() -> Option<bool> {
     let a = rare_system::system::lights_available()?;
+    // A rare-fand without the property (0.1.3) drew two rings.
+    let rings = rare_system::system::lights_rings().unwrap_or(2).clamp(1, 2) as u8;
+    RINGS.store(rings, Ordering::Relaxed);
     AVAILABLE.store(if a { 1 } else { 2 }, Ordering::Relaxed);
     Some(a)
 }

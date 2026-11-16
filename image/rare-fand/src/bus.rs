@@ -21,7 +21,8 @@
 //! org.rare.Lights at /org/rare/Lights (polkit action org.rare.lights.set, same rule):
 //!   SetLights(s spec)              `mode=on effect=breathe left=4da2ff right=4da2ff brightness=80`
 //!                                  (lights.rs Spec); mode=default gives the rings back to the EC
-//! Properties (read-only, anyone): Available b (the LED is there), Lights s (the spec)
+//! Properties (read-only, anyone): Available b (the LED is there), Lights s (the spec),
+//!   Rings u (rings that take their own color: 2, or 1 when both show the left one; 0 no LED)
 
 use crate::curve::Preset;
 use crate::daemon::Daemon;
@@ -216,6 +217,11 @@ impl LightsIface {
     #[zbus(property)]
     fn lights(&self) -> String {
         self.lock().spec().encode()
+    }
+
+    #[zbus(property)]
+    fn rings(&self) -> u32 {
+        self.lock().rings() as u32
     }
 }
 

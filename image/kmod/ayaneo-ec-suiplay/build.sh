@@ -66,5 +66,6 @@ modinfo -F alias "$KO" | grep -q 'svn.*MystenLabs,Inc\..*pn.*SuiPlay0X1' || skip
 modinfo -F alias "$KO" | grep -q 'AYANEO' && skip "module would also match AYANEO boards"
 modinfo -F parm "$KO" | grep -q '^charge_control:' || skip "module has no charge_control parameter"
 modinfo -F parm "$KO" | grep -q '^rgb:' || skip "module has no rgb parameter (suiplay-rgb.c)"
+modinfo -F parm "$KO" | grep -q '^rgb_map:' || skip "module has no rgb_map parameter (suiplay-rgb.c)"
 install -Dm0644 "$KO" "$OUT/usr/lib/modules/${KVER}/extra/ayaneo-ec-suiplay.ko"
 modinfo "$OUT/usr/lib/modules/${KVER}/extra/ayaneo-ec-suiplay.ko"
