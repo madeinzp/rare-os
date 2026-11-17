@@ -9,6 +9,7 @@ pub mod catalog;
 pub mod controls;
 pub mod dat;
 pub mod defaults;
+pub mod homebrew;
 pub mod ident;
 pub mod install;
 pub mod md5;

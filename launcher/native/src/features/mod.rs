@@ -146,9 +146,10 @@ pub fn overlay_page(kind: &str) -> Option<Box<dyn Page>> {
         emulation::BIOS => Some(Box::new(emulation::BiosPage::default())),
         emulation::RA => Some(Box::new(emulation::RetroPage)),
         emu_add::ADD => Some(Box::new(emu_add::AddPage)),
+        emu_add::HOMEBREW => Some(Box::new(emu_add::HomebrewPage::default())),
         _ => None,
     }
 }
 
 /// Every overlay kind above, for the shell's layer and focus rules.
-pub const KINDS: [&str; 19] = ["firstrun", "saves", "trophies", "apisheet", webgame::CONNECT, uninstall::KIND, downloads::KIND, cloudsync::CONFLICT, cloudsync::VERSIONS, stats::STATS, stats::YEAR, wishlist_page::KIND, fancurve::KIND, android::TOUCH, emulation::SETUP, emulation::BIOS, emulation::RA, gamebuttons::KIND, emu_add::ADD];
+pub const KINDS: [&str; 20] = ["firstrun", "saves", "trophies", "apisheet", webgame::CONNECT, uninstall::KIND, downloads::KIND, cloudsync::CONFLICT, cloudsync::VERSIONS, stats::STATS, stats::YEAR, wishlist_page::KIND, fancurve::KIND, android::TOUCH, emulation::SETUP, emulation::BIOS, emulation::RA, gamebuttons::KIND, emu_add::ADD, emu_add::HOMEBREW];
